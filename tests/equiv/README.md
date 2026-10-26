@@ -43,6 +43,13 @@ Each of these at most once, anywhere in the file. `template`, `window` and `bars
 The order of application: the template, its key, the seed, the arranger, the density. The engine is
 `LiveEngine(project:)` of the result.
 
+One line more belongs to the runtime, not to the engine, and is used only by the `.midiscript`s (below): any number
+of times, the ticks never smaller than the previous `mute` line's.
+
+| Line | Meaning |
+| --- | --- |
+| `mute V TICK 0\|1` | `Transport.setMuted(V, true\|false)` for the windows that start at or after TICK (transport ticks), V a voice id as in the actions. The engine never sees it: the script mode and `equiv_test` ignore it; the midi mode applies it. |
+
 ### Actions
 
 `at TICK ACTION…`: one action per line. TICK is in transport ticks, 0 ≤ TICK < bars × 3840, and never smaller than the
@@ -162,6 +169,47 @@ One line per item, words separated by one space, every line ending in `\n`, no c
 
 All integers in decimal. Notes come before CC within a window, so the interleaving of `N` and `C` lines depends on the
 window size, and so do the `H` lines; each window size is its own script and its own `.ref`.
+
+## The MIDI reference
+
+`*.midiscript` are scripts (the language above, `mute` lines included) for the runtime: `tools/reference/make_refs.sh`
+writes each one's `.midiref` with `RefTool midi FILE` (their own suffix, so the script loop never rewrites them), and
+`tests/scenarios/play_midi.bln` plays `midi_full.midiscript` on the app (`selfscript`), logs what the transport sends
+(`dumpmidi`) and compares the log with `midi_full.midiref` line by line (`cmpmidi`).
+
+The midi mode plays the script as the script mode does (the same windows, actions and lines, which it does not
+print) and writes what Berlinan's `Transport` hands to CoreMIDI for it, through the runtime's own files compiled
+unchanged (`EventConversion.swift`, `MIDI1Event.swift`):
+
+1. MIDI Start at tick 0 (the transport plays on its own clock, INT, and sends the clock).
+2. Per window `[h, e)`, in this order: `NoteEventConverter.events(for: notes, channelMap:, muted:)` (each note an on
+   at `at` and an off at `at + gate`, a ratchet r > 1 as r hits `Ratchet.expand` makes, the notes of a muted voice
+   dropped), `NoteEventConverter.ccEvents(for: cc, channelMap:)` (never muted) and a clock at each tick of
+   `NoteEventConverter.clockTicks(in: h..<e)` (every multiple of 40). `notes` and `cc` are the window's `N` and `C`
+   items, in transport ticks; `channelMap` the running project's `voice id → channel`; `muted` the voices of the
+   `mute` lines with TICK ≤ h, applied in file order (`on` 1 adds the voice, 0 removes it).
+3. All of them in a stable sort by tick: the windows' lists one after the other, an event of an earlier window
+   first among those of a tick, as the queue of `app/runtime.c` keeps them and CoreMIDI sends the Mac's.
+
+A script with a `load`, or whose arranger reaches its ending, is refused: the transport's own steps there (the flush
+of a template switch, Stop and the flush at the ending) are `tests/scenarios/stop_flush.bln`'s.
+
+Each event is one line, `<tick> <status> <d1> <d2>`: the tick in decimal, then the bytes of the event's UMP word
+(`MIDI1Event.umpWord`: status, data 1, data 2) as two upper-case hex digits each; a clock and Start carry `00 00`.
+`app/host.c`'s `dumpmidi` writes the same for every message the app sends, in send order, with the tick it was
+queued for.
+
+| Line | Event |
+| --- | --- |
+| `<tick> FA 00 00` | Start |
+| `<tick> 9c nn vv` | note on: channel c (0-based, the voice's `channel`), note nn, velocity vv |
+| `<tick> 8c nn 00` | note off |
+| `<tick> Bc cc vv` | control change: controller cc, value vv |
+| `<tick> F8 00 00` | clock |
+
+| Scripts | What they play |
+| --- | --- |
+| `midi_full` | The full ensemble on its own seed, 64 bars in windows of 240 ticks (the app's), `transpose 3` on bar 8 and `transpose 5` on bar 16 (over the template's own schedule), bedPluck2 muted from bar 8 to bar 12 and the pad from bar 16 on. |
 
 ## The state hash
 

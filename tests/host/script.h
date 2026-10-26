@@ -25,6 +25,13 @@ typedef struct {
     uint64_t seed;
 } bl_sact_t;
 
+/* `mute V TICK 0|1`: the runtime's mute of voice V (a BL_VID_) for the windows that start at or after TICK. The engine
+ * never sees it: bl_script_play ignores it; the app's selfscript (app/host.c) and RefTool's midi mode apply it */
+typedef struct {
+    bl_tick_t tick;
+    uint8_t voice, on;
+} bl_smute_t;
+
 /* a parsed script: arranger -1 none, else 0 off, 1 classic, 2 slow, 3 ambient; density -1 none */
 typedef struct {
     int tpl, has_seed, arranger, density;
@@ -33,6 +40,8 @@ typedef struct {
     int32_t bars;
     int nact, cap;
     bl_sact_t *act;
+    int nmute, mcap;
+    bl_smute_t *mute;
 } bl_script_t;
 
 /* parse text; 0, or -1 with the reason in err ("line 3: ...") */

@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Jiří Píša
 # Regenerate the committed reference files with RefTool over the pinned Berlinan engine: every tests/equiv/*.script
-# into its .ref (script mode), then tests/equiv/<mode>.ref for each vector mode in VECTORS (templates, rng, gen,
-# mut, harmony, arrange, cc). The tests never run this; they read the committed files.
+# into its .ref (script mode), every tests/equiv/*.midiscript into its .midiref (midi mode), then
+# tests/equiv/<mode>.ref for each vector mode in VECTORS (templates, rng, gen, mut, harmony, arrange, cc). The tests
+# never run this; they read the committed files.
 #   tools/reference/make_refs.sh
 #   BERLINAN   Berlinan checkout, for fetch.sh (default: ~/Development/Claude/berlin_school_manual)
 set -e
@@ -18,6 +19,12 @@ BIN="$(swift build -c release --package-path tools/reference --show-bin-path)/Re
 for s in tests/equiv/*.script; do
     r="${s%.script}.ref"
     "$BIN" script "$s" > "$r.tmp"
+    mv "$r.tmp" "$r"
+    echo "  $r"
+done
+for s in tests/equiv/*.midiscript; do
+    r="${s%.midiscript}.midiref"
+    "$BIN" midi "$s" > "$r.tmp"
     mv "$r.tmp" "$r"
     echo "  $r"
 done

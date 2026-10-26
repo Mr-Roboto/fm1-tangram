@@ -67,6 +67,9 @@ struct Script {
     var window: Tick = 0
     var bars = 0
     var actions: [(tick: Tick, action: ScriptAction)] = []
+    /// `mute V TICK 0|1`: the runtime's mute (Transport.setMuted), for windows that start at or after TICK. The
+    /// engine never sees it: the script mode ignores it, the midi mode (Midi.swift) applies it.
+    var mutes: [(voice: String, tick: Tick, on: Bool)] = []
 
     /// The project the app holds before play: the template, then the script's seed, arranger and density.
     var initialProject: Project {
@@ -89,6 +92,7 @@ struct Script {
     init(text: String) throws {
         var seen = Set<String>()
         var lastTick: Tick = 0
+        var lastMute: Tick = 0
         for (index, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
             let line = index + 1
             let body = raw.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
@@ -107,6 +111,15 @@ struct Script {
                     throw fail("bad action '\(words.dropFirst(2).joined(separator: " "))'")
                 }
                 actions.append((tick: Tick(tick), action: action))
+                continue
+            }
+            if head == "mute" {
+                guard words.count == 4, let tick = Script.integer(words[2]), tick >= 0,
+                      words[3] == "0" || words[3] == "1" else { throw fail("expected 'mute V TICK 0|1'") }
+                guard Script.voiceIDs.contains(words[1]) else { throw fail("unknown voice '\(words[1])'") }
+                guard Tick(tick) >= lastMute else { throw fail("mute ticks must not decrease") }
+                lastMute = Tick(tick)
+                mutes.append((voice: words[1], tick: Tick(tick), on: words[3] == "1"))
                 continue
             }
             guard words.count == 2 else { throw fail("expected '\(head) VALUE'") }
@@ -200,13 +213,16 @@ struct Script {
     }
 }
 
-/// One play of a script. `emit` receives the reference lines; `onNote` every rendered note (transport ticks).
+/// One play of a script. `emit` receives the reference lines; `onNote` every rendered note (transport ticks);
+/// `onWindow` each window as the transport sends it on (transport ticks): its range, its notes and CC, and the project
+/// of the engine that rendered it (Transport.project, whose voices give the channel map).
 struct Run {
     private let script: Script
     /// AppServices.project: what the app holds; key, density, arranger, reseed and load change it.
     private var app: Project
     /// The running engine (Transport's scheduler loop) and where its tick 0 sits in transport ticks.
     private var engine: LiveEngine
+    private var running: Project
     private var origin: Tick = 0
     private var barTicks: Tick
     /// Transport.pendingProject and Transport.pendingActions: consumed at the next wake (the next window).
@@ -222,13 +238,15 @@ struct Run {
         self.script = script
         app = script.initialProject
         engine = LiveEngine(project: app)
+        running = app
         barTicks = app.meter.ticksPerBar
     }
 
     /// 16 bars of 4/4: an H line follows every window whose end crosses a multiple of this.
     static let hashPeriod = 16 * Script.barTicks
 
-    mutating func play(emit: (String) -> Void, onNote: (RenderedNote) -> Void = { _ in }) {
+    mutating func play(emit: (String) -> Void, onNote: (RenderedNote) -> Void = { _ in },
+                       onWindow: (Range<Tick>, [RenderedNote], [RenderedCC], Project) -> Void = { _, _, _, _ in }) {
         let total = Tick(script.bars) * Script.barTicks
         let actions = script.actions
         var next = 0
@@ -245,6 +263,7 @@ struct Run {
                 let boundary = origin + (head - origin + barTicks - 1) / barTicks * barTicks
                 if head == boundary {
                     engine = LiveEngine(project: project)
+                    running = project
                     origin = boundary
                     barTicks = project.meter.ticksPerBar
                     pendingProject = nil
@@ -260,13 +279,22 @@ struct Run {
             if next < actions.count { end = min(end, actions[next].tick) }
             if let boundary = projectBoundary { end = min(end, boundary) }
             let local = (head - origin)..<(end - origin)
+            var notes: [RenderedNote] = []
             for note in engine.render(range: local) {
                 emit(Dump.noteLine(note, origin: origin))
                 var shifted = note
                 shifted.at += origin
                 onNote(shifted)
+                notes.append(shifted)
             }
-            for cc in engine.renderCC(range: local) { emit(Dump.ccLine(cc, origin: origin)) }
+            var ccs: [RenderedCC] = []
+            for cc in engine.renderCC(range: local) {
+                emit(Dump.ccLine(cc, origin: origin))
+                var shifted = cc
+                shifted.at += origin
+                ccs.append(shifted)
+            }
+            onWindow(head..<end, notes, ccs, running)
             if !stopShown, let stop = engine.pendingStopTick {
                 emit(Dump.stopLine(stop + origin))
                 stopShown = true
