@@ -334,3 +334,61 @@ false (no template has a voice left out).
 
 The C schedule is bounded (`BL_MAX_EVENTS`, Swift's is not); its compaction is checked in `test_sched_compaction`
 against an unbounded schedule in the test itself, not against this file.
+
+## The arrangement
+
+`tests/equiv/arrange.ref` is `RefTool arrange` (`tools/reference/Sources/RefTool/Arrange.swift`): the arrangement state
+machine (`ArrangementSM`: `init(config:voices:seed:adoptingActive:ambientPeriodBars:)`, `tickBar(locked:)`,
+`advance(locked:)`, and `deriveBuildOrder(from:)`), for `app/engine/arrange.c`. Integers are decimal (seeds unsigned),
+booleans `0`/`1`, a `Double` the 16 lower-case hex digits of its bit pattern; `#` lines are comments.
+
+The configs: `classic` (`.classicArc`), `slow` (`.slowBuild`), `ambient` (`.ambientPlateau`) and `off`
+(`ArrangementConfig()`, the default: disabled, 8-16 bars). The voice lists: `demo`, `full` and `ambient`, the templates'
+`voices` (the SM reads only `id` and `role`), and `mix`, seven made-up voices `x` (aux), `l` (lead), `b1` (bass), `r`
+(rhythm), `b2` (bass), `p2` (bedPluck2), `d` (drone): the default rank `5 + offset`, a tie, the drone last. Each case
+has the seed LiveEngine gives the SM, `SeedStream.derive(master: k, "arrangement")`, and runs 400 bars: per bar 1…400,
+first any lock change, then `advance()` when the bar is one of 5, 37, 38, 90, 120, 120 (twice), 200, 255, 310, 377,
+then `tickBar()`, as LiveEngine runs a bar boundary. The cases, in this order:
+
+- the grid: `classic`, `slow`, `ambient` × `demo`, `full`, `ambient` × k = 0…29 × locked `{}`, `bass`,
+  `bedPluck1,pad` (a template without the voice: that one is not in the set); not adopting, ambient period 22;
+- adopting (enabled mid-play): the three presets × the three templates × k = 100…104 × the template's every voice,
+  `bass,pad` (of which a template may lack one) and the empty set;
+- the ambient period: `ambient` × the three templates × k = 200…202 × the periods -5, 0, 3, 7, 8, 9, 30 (below 8 the
+  SM takes 8);
+- every voice locked (`classic`), and `off` (tickBar does nothing, advance still works), the three templates × k =
+  300…304;
+- the locks changing: `classic` and `ambient` × the three templates × k = 500…504 × two schedules: everything locked,
+  from bar 60 nothing, from bar 130 everything; and nothing, from bar 40 everything, from 70 `bass`, from 100 nothing,
+  from 160 `bedPluck1,pad`;
+- `mix`: the four configs × k = 400…409 × unlocked, `b1,b2` locked, and adopting `x,l,b2,d`.
+
+A set is its ids in project order joined by commas, `{}` when empty; `-` is nil (not adopting). A state is
+`<phase> <barsInPhase> <barsUntilChange> <activeVoices>`: the phase's raw value, the active voices in their order
+(the list is ordered: build order, then in the order the voices joined), `-` when none. Directives are words after
+the state, in order: `activate:<id>`, `deactivate:<id>`, `nudge:<id>` (`nudgeMutation`), `accent:<id>`
+(`accentMove`), `blank:<id>` (`blankCycle`), `density:<bits>` (`setDensity`), `bpart` (`fireBPart`), `thin:<id>`
+(`thinToRoots`), `stop` (`requestStop`).
+
+| Line | Content |
+| --- | --- |
+| `preset <name> <enabled> <ambientMode> <reprise> <minPeriodBars> <maxPeriodBars>` | a config (`reprise` nil is 0) |
+| `voices <list> (<id> <role>)…` | a voice list in project order, `role` its raw value |
+| `order <list> <id>…` | `deriveBuildOrder(from:)` of that list |
+| `case <list> <config> <k> <seed> <ambientPeriodBars> <adopt> <locked>` | a new SM: `ArrangementSM(config:voices:seed:adoptingActive: adopt, ambientPeriodBars:)`, locked the set its calls get |
+| `init <state>` | the SM after `init` |
+| `lock <bar> <locked>` | from this bar on (before its advance), the calls get this locked set |
+| `a <bar> <state> <directive>…` | `advance(locked:)` at the bar: the state after it and its directives |
+| `t <bar> <state> <directive>…` | `tickBar(locked:)` at the bar, when it is not part of a run |
+| `q <n>` | n bars of `tickBar` with no directive and only the clock moving: barsInPhase one up, barsUntilChange one down |
+| `z <n>` | n bars of `tickBar` that change nothing (`off`, or after the stop) |
+
+Only the SM's public fields are written (`phase`, `barsInPhase`, `activeVoices`, `barsUntilChange`); the private ones
+are seen through the directives: `buildOrder` (also in `order`), `density` (each `density:` value: the payoff's 1, the
+subtract's `max(0.3, density * 0.85)`), `eventsInPhase` (the dwell: when a phase moves on), `roundRobin` (which voice
+each nudge, accent or blank names), `stopRequested` (the `stop`, then `z` runs and empty advances), `rng` and
+`ambientPeriodBars` (the periods, in `barsUntilChange`). Three branches of the Swift code no case reaches, as nothing
+the SM's calls can do reaches them: the variation's `density < 0.4` (only the subtract lowers the density, and the
+ending follows it), the payoff's re-activation of missing voices (the build has activated every voice before the
+payoff) and the 0.3 floor (`0.85^6 > 0.3`: seven voices give at most six subtractions). The C test runs the `q` and
+`z` bars one at a time, and checks every field of the C SM there against the bar before.

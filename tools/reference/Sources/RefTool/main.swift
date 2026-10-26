@@ -9,6 +9,7 @@
 //   RefTool gen                    the generators' patterns and the pattern ops, for pattern.c and gen.c
 //   RefTool mut                    the lifecycle and the mutations, for legit.c
 //   RefTool harmony                the transposition schedule, the note pipeline and the velocity policy, for harmony.c
+//   RefTool arrange                the arrangement state machine, for arrange.c
 //   RefTool selftest               the tool checked against the engine's own offline renderer
 
 import BerlinanEngine
@@ -21,6 +22,7 @@ let modes: [(name: String, usage: String, run: ([String]) throws -> Int32)] = [
     ("gen", "gen", genMode),
     ("mut", "mut", mutMode),
     ("harmony", "harmony", harmonyMode),
+    ("arrange", "arrange", arrangeMode),
     ("selftest", "selftest", selftestMode),
 ]
 

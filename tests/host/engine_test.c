@@ -16,6 +16,7 @@
 #include "gen.h"
 #include "harmony.h"
 #include "legit.h"
+#include "arrange.h"
 
 static double dbl(uint64_t b)
 {
@@ -1082,6 +1083,221 @@ static void test_sched_compaction(void)
     check_domain(&s, ref, nref, 200, 500, "out of order");
 }
 
+/* ---------------------------------------------------------- arrangement --- */
+/* tests/equiv/arrange.ref: each case run again by arrange.c, bar by bar: the state after every tickBar and advance
+ * (in the q and z runs too, there the whole SM against the bar before) and the directives against the file's */
+static const char *const DIR_NAME[] = {"activate", "deactivate", "nudge", "accent", "blank", "density", "bpart", "thin",
+                                       "stop"};
+
+typedef struct {
+    char name[16];
+    int n;
+    char id[BL_MAX_VOICES][16];
+    uint8_t role[BL_MAX_VOICES];
+} arr_list_t;
+
+static int arr_line;
+static const char *arr_what;
+
+static int arr_voice(const arr_list_t *list, const char *id)
+{
+    for (int i = 0; i < list->n; i++)
+        if (!strcmp(list->id[i], id)) return i;
+    return -1;
+}
+
+/* a comma-joined set of ids, `{}` empty, as a mask */
+static uint32_t arr_mask(const arr_list_t *list, char *w)
+{
+    uint32_t m = 0;
+    if (!strcmp(w, "{}")) return 0;
+    for (char *id = strtok(w, ","); id; id = strtok(NULL, ",")) {
+        int v = arr_voice(list, id);
+        CHECK(v >= 0, "arrange.ref:%d: unknown voice %s", arr_line, id);
+        if (v >= 0) m |= 1u << v;
+    }
+    return m;
+}
+
+/* the SM's state as the file writes it: phase, barsInPhase, barsUntilChange, activeVoices */
+static void arr_state(const arr_list_t *list, const bl_arr_t *a, char *buf, size_t size)
+{
+    int k = snprintf(buf, size, "%s %d %d ", BL_PHASE_RAW[a->phase], a->bars_in_phase, a->bars_until_change);
+    if (!a->nactive) snprintf(buf + k, size - (size_t)k, "-");
+    for (int i = 0; i < a->nactive; i++)
+        k += snprintf(buf + k, size - (size_t)k, "%s%s", i ? "," : "", list->id[a->active[i]]);
+}
+
+/* every field of the SM (a struct copy need not copy the padding, so no memcmp) */
+static int arr_same(const bl_arr_t *x, const bl_arr_t *y)
+{
+    int same = x->cfg.enabled == y->cfg.enabled && x->cfg.ambient == y->cfg.ambient &&
+               x->cfg.reprise == y->cfg.reprise && x->cfg.min_bars == y->cfg.min_bars &&
+               x->cfg.max_bars == y->cfg.max_bars && x->phase == y->phase && x->bars_in_phase == y->bars_in_phase &&
+               x->nactive == y->nactive && x->norder == y->norder && x->ambient_period == y->ambient_period &&
+               x->density.bits == y->density.bits && x->rng.state == y->rng.state &&
+               x->bars_until_change == y->bars_until_change && x->events_in_phase == y->events_in_phase &&
+               x->round_robin == y->round_robin && x->stop_requested == y->stop_requested;
+    for (int i = 0; same && i < x->nactive; i++) same = x->active[i] == y->active[i];
+    for (int i = 0; same && i < x->norder; i++) same = x->order[i] == y->order[i];
+    return same;
+}
+
+/* one tickBar (advance 0) or advance, against the line's state and directives */
+static void arr_step(const arr_list_t *list, bl_arr_t *a, uint32_t locked, int advance, char **p)
+{
+    bl_dir_t out[BL_ARR_MAX_DIRS], one[2];
+    bl_arr_t copy = *a;
+    int n = advance ? bl_arr_advance(a, locked, out, BL_ARR_MAX_DIRS) : bl_arr_tick_bar(a, locked, out, BL_ARR_MAX_DIRS);
+    char got[160], want[160];
+    arr_state(list, a, got, sizeof got);
+    const char *ph = next_word(p), *bip = next_word(p), *buc = next_word(p), *act = next_word(p);
+    snprintf(want, sizeof want, "%s %s %s %s", ph, bip, buc, act);
+    CHECK(!strcmp(got, want), "arrange.ref:%d %s: state %s, want %s", arr_line, arr_what, got, want);
+    int i = 0;
+    for (char *w = next_word(p); *w; w = next_word(p), i++) {
+        char *arg = strchr(w, ':');
+        if (arg) *arg++ = 0;
+        int kind = name_index(DIR_NAME, 9, w);
+        int same = i < n && out[i].kind == kind;
+        if (same && kind == BL_DIR_DENSITY) same = out[i].value.bits == strtoull(arg, NULL, 16);
+        else if (same && arg) same = !strcmp(list->id[out[i].voice], arg);
+        CHECK(same, "arrange.ref:%d %s: directive %d: %d %d %016llx, want %s %s", arr_line, arr_what, i,
+              i < n ? out[i].kind : -1, i < n ? out[i].voice : -1,
+              i < n ? (unsigned long long)out[i].value.bits : 0ull, w, arg ? arg : "");
+    }
+    CHECK(n == i, "arrange.ref:%d %s: %d directives, want %d", arr_line, arr_what, n, i);
+    /* the buffer contract: a short buffer gets the first directive and the whole count, nothing past it, and the
+     * same state */
+    if (n >= 2) {
+        one[1].kind = 0xFF;
+        int m = advance ? bl_arr_advance(&copy, locked, one, 1) : bl_arr_tick_bar(&copy, locked, one, 1);
+        CHECK(m == n && one[0].kind == out[0].kind && one[0].voice == out[0].voice && one[1].kind == 0xFF &&
+                  arr_same(&copy, a),
+              "arrange.ref:%d %s: into one directive: %d", arr_line, arr_what, m);
+    }
+}
+
+static void test_arrange_vectors(void)
+{
+    char *text = read_file("tests/equiv/arrange.ref");
+    CHECK(text != NULL, "tests/equiv/arrange.ref: cannot read");
+    if (!text) return;
+    static arr_list_t lists[4];
+    static bl_arrcfg_t presets[4];
+    static char preset_name[4][16];
+    static bl_arr_t a;
+    const arr_list_t *list = &lists[0];
+    uint32_t locked = 0;
+    int nlists = 0, npresets = 0, cases = 0, steps = 0, advances = 0, bar = 400, stops = 0, relocks = 0;
+    char *save = text, what[160] = "";
+    arr_what = what;
+    arr_line = 0;
+    for (char *l = text; l; l = save) {
+        char *nl = strchr(l, '\n');
+        save = nl ? nl + 1 : NULL;
+        if (nl) *nl = 0;
+        arr_line++;
+        if (!*l || *l == '#') continue;
+        char *p = l, *word = next_word(&p);
+        if (!strcmp(word, "preset")) {
+            bl_arrcfg_t *c = &presets[npresets];
+            snprintf(preset_name[npresets++], 16, "%s", next_word(&p));
+            c->enabled = (uint8_t)next_int(&p);
+            c->ambient = (uint8_t)next_int(&p);
+            c->reprise = (uint8_t)next_int(&p);
+            c->min_bars = (int16_t)next_int(&p);
+            c->max_bars = (int16_t)next_int(&p);
+        } else if (!strcmp(word, "voices")) {
+            arr_list_t *v = &lists[nlists++];
+            snprintf(v->name, sizeof v->name, "%s", next_word(&p));
+            for (v->n = 0; *p; v->n++) {
+                snprintf(v->id[v->n], sizeof v->id[0], "%s", next_word(&p));
+                v->role[v->n] = (uint8_t)name_index(ROLE_NAME, 8, next_word(&p));
+            }
+        } else if (!strcmp(word, "order")) {
+            next_word(&p);
+            const arr_list_t *v = &lists[nlists - 1];
+            uint8_t order[BL_MAX_VOICES];
+            int n = bl_build_order(v->role, v->n, order), i = 0;
+            for (char *w = next_word(&p); *w; w = next_word(&p), i++)
+                CHECK(i < n && !strcmp(v->id[order[i]], w), "arrange.ref:%d: build order of %s: %d is %s, want %s",
+                      arr_line, v->name, i, i < n ? v->id[order[i]] : "-", w);
+            CHECK(n == i && n == v->n, "arrange.ref:%d: build order of %s: %d voices, want %d", arr_line, v->name, n,
+                  i);
+        } else if (!strcmp(word, "case")) {
+            CHECK(bar == 400, "arrange.ref:%d %s: %d bars, want 400", arr_line, what, bar);
+            const char *ln = next_word(&p), *pn = next_word(&p);
+            for (int i = 0; i < nlists; i++)
+                if (!strcmp(lists[i].name, ln)) list = &lists[i];
+            int preset = -1;
+            for (int i = 0; i < npresets; i++)
+                if (!strcmp(preset_name[i], pn)) preset = i;
+            uint64_t master = strtoull(next_word(&p), NULL, 10), seed = strtoull(next_word(&p), NULL, 10);
+            int period = (int)next_int(&p);
+            char *adopt = next_word(&p);
+            int adopting = strcmp(adopt, "-") != 0;
+            snprintf(what, sizeof what, "%s %s %llu period %d adopt %s", ln, pn, (unsigned long long)master, period,
+                     adopt);
+            uint32_t active = adopting ? arr_mask(list, adopt) : 0;
+            locked = arr_mask(list, next_word(&p));
+            CHECK(!strcmp(list->name, ln) && preset >= 0, "arrange.ref:%d: unknown list or preset", arr_line);
+            CHECK(bl_seed_derive(master, "arrangement", (const char *)NULL) == seed,
+                  "arrange.ref:%d %s: the seed", arr_line, what);
+            bl_arr_init(&a, &presets[preset], list->role, list->n, seed, adopting, active, period);
+            bar = 0;
+            cases++;
+        } else if (!strcmp(word, "init")) {
+            char got[160], want[160];
+            arr_state(list, &a, got, sizeof got);
+            snprintf(want, sizeof want, "%s", p);
+            CHECK(!strcmp(got, want), "arrange.ref:%d %s: init %s, want %s", arr_line, what, got, want);
+        } else if (!strcmp(word, "lock")) {
+            int at = (int)next_int(&p);
+            CHECK(at == bar + 1, "arrange.ref:%d %s: lock at bar %d, want %d", arr_line, what, bar + 1, at);
+            locked = arr_mask(list, next_word(&p));
+            relocks++;
+        } else if (!strcmp(word, "q") || !strcmp(word, "z")) {
+            /* k bars without directives: the clock alone moves (q), or nothing does (z) */
+            int k = (int)next_int(&p), d = *word == 'q';
+            for (int i = 0; i < k; i++, bar++, steps++) {
+                bl_dir_t out[BL_ARR_MAX_DIRS];
+                bl_arr_t before = a;
+                int n = bl_arr_tick_bar(&a, locked, out, BL_ARR_MAX_DIRS);
+                before.bars_in_phase += d;
+                before.bars_until_change -= d;
+                CHECK(n == 0 && arr_same(&before, &a), "arrange.ref:%d %s: bar %d: %d directives or not %s",
+                      arr_line, what, bar + 1, n, d ? "the clock alone" : "still");
+            }
+        } else if (!strcmp(word, "t") || !strcmp(word, "a")) {
+            int at = (int)next_int(&p), adv = *word == 'a';
+            if (!adv) bar++;
+            CHECK(at == bar + adv, "arrange.ref:%d %s: at bar %d, want %d", arr_line, what, bar + adv, at);
+            if (strstr(p, " stop")) stops++;
+            arr_step(list, &a, locked, adv, &p);
+            if (adv) advances++;
+            else steps++;
+        } else {
+            CHECK(0, "arrange.ref:%d: unknown line %s", arr_line, word);
+        }
+    }
+    CHECK(bar == 400, "arrange.ref:%d %s: %d bars, want 400", arr_line, what, bar);
+    CHECK(npresets == 4 && nlists == 4 && cases == 1218 && steps == 1218 * 400 && advances == 1218 * 10 &&
+              relocks == 180 && stops > 1000,
+          "arrange.ref: %d presets, %d voice lists, %d cases, %d bars, %d advances, %d lock changes, %d stops",
+          npresets, nlists, cases, steps, advances, relocks, stops);
+    /* the file's presets are classicArc, slowBuild, ambientPlateau, then the default */
+    const bl_arrcfg_t *const ours[] = {&bl_arr_classic, &bl_arr_slow, &bl_arr_ambient};
+    for (int i = 0; i < npresets && i < 3; i++)
+        CHECK(ours[i]->enabled == presets[i].enabled && ours[i]->ambient == presets[i].ambient &&
+                  ours[i]->reprise == presets[i].reprise && ours[i]->min_bars == presets[i].min_bars &&
+                  ours[i]->max_bars == presets[i].max_bars,
+              "arrange.ref: the preset %s", preset_name[i]);
+    printf("arrange: %d cases, %d bars, %d advances, %d lock changes, %d stops\n", cases, steps, advances, relocks,
+           stops);
+    free(text);
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -1095,6 +1311,7 @@ int main(void)
     test_legit_lifecycle();
     test_harmony_vectors();
     test_sched_compaction();
+    test_arrange_vectors();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }
