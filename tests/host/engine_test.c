@@ -258,7 +258,7 @@ static void test_rng_vectors(void)
     char *text = read_file("tests/equiv/rng.ref");
     CHECK(text != NULL, "tests/equiv/rng.ref: cannot read");
     if (!text) return;
-    int lines = 0, values = 0;
+    int lines = 0, values = 0, redraws = 0;
     for (char *line = strtok(text, "\n"); line; line = strtok(NULL, "\n")) {
         char *p = line, *end;
         if (*line == '#') continue;
@@ -313,6 +313,7 @@ static void test_rng_vectors(void)
                       (unsigned long long)got, (unsigned long long)want);
             } else {
                 int64_t want = strtoll(p, &end, 10), got = -1;
+                uint64_t before = r.state;
                 if (!strcmp(word, "in")) got = bl_rand_in(&r, lo, hi);
                 else if (!strcmp(word, "upto")) got = bl_rand_upto(&r, lo, hi);
                 else if (!strcmp(word, "bool")) got = bl_rand_bool(&r);
@@ -321,6 +322,9 @@ static void test_rng_vectors(void)
                     CHECK(0, "rng.ref: unknown line %s", word);
                     break;
                 }
+                /* a draw that moved the state by more than one step took Lemire's rejection branch */
+                if ((!strcmp(word, "in") || !strcmp(word, "upto")) && r.state - before != UINT64_C(0x9E3779B97F4A7C15))
+                    redraws++;
                 CHECK(got == want, "%s %llu #%d: %lld, want %lld", word, (unsigned long long)seed, i, (long long)got,
                       (long long)want);
             }
@@ -329,6 +333,8 @@ static void test_rng_vectors(void)
         }
     }
     CHECK(lines >= 100 && values > 30000, "rng.ref: only %d lines, %d values", lines, values);
+    CHECK(redraws > 1000, "rng.ref: only %d draws took the rejection branch", redraws);
+    printf("rng: %d lines, %d values, %d draws with a rejection\n", lines, values, redraws);
     free(text);
 
     /* String(Int) */

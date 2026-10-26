@@ -69,6 +69,22 @@ func rngMode(_ args: [String]) throws -> Int32 {
         out.line("upto \(seeds[2 + (k - 1) % 6]) \(r.lowerBound) \(r.upperBound) "
                  + (0..<2000).map { _ in String(Int.random(in: r, using: &g)) }.joined(separator: " "))
     }
+    // huge ranges, where Lemire's rejection is common (the bound near or above 2^63)
+    let hugeClosed: [ClosedRange<Int>] = [0...(Int.max - 3), -(1 << 62)...(1 << 62), Int.min / 2...Int.max / 2,
+                                          Int.min / 2...Int.max]
+    let hugeOpen: [Range<Int>] = [0..<(3 << 61), Int.min / 2..<Int.max]
+    for seed in [seeds[2], seeds[1], seeds[6]] {
+        for r in hugeClosed {
+            var g = SplitMix64(seed: seed)
+            out.line("in \(seed) \(r.lowerBound) \(r.upperBound) "
+                     + (0..<2000).map { _ in String(Int.random(in: r, using: &g)) }.joined(separator: " "))
+        }
+        for r in hugeOpen {
+            var g = SplitMix64(seed: seed)
+            out.line("upto \(seed) \(r.lowerBound) \(r.upperBound) "
+                     + (0..<2000).map { _ in String(Int.random(in: r, using: &g)) }.joined(separator: " "))
+        }
+    }
     for seed in [seeds[2], seeds[0], seeds[6]] {
         var g = SplitMix64(seed: seed)
         out.line("bool \(seed) " + (0..<2000).map { _ in Bool.random(using: &g) ? "1" : "0" }.joined(separator: " "))

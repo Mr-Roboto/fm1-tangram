@@ -20,6 +20,7 @@ uint64_t bl_seed_derive(uint64_t master, ...);
 /* String(v), the digits of a label such as "12" or "-240" */
 void bl_dec(int64_t v, char buf[24]);
 
+/* bl_rand_in does not support the whole Int64 range: its bound would wrap to 0 (the engine never asks) */
 uint64_t bl_rand_below(bl_rng_t *r, uint64_t bound);              /* 0 <= x < bound, bound > 0 */
 int64_t bl_rand_in(bl_rng_t *r, int64_t lo, int64_t hi);          /* Int.random(in: lo...hi), lo <= hi */
 int64_t bl_rand_upto(bl_rng_t *r, int64_t lo, int64_t hi);        /* Int.random(in: lo..<hi), lo < hi */
