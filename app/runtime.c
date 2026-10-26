@@ -6,38 +6,44 @@
  * master: clock, Start and Stop out) or EXT (it follows F8 from USB, the TRS jack or both). Part of the unity build.
  *
  * Two contexts share it. The main loop (app_loop) renders and takes the controls (rt_play ... rt_set_ext_port); the
- * tick (app_tick, the timer interrupt) reads MIDI in, moves the clock and sends what is due. What both touch is under
- * plat_lock: the queue, the clock, the registry, playing. The engine is the main loop's alone.
+ * tick (app_tick, the timer interrupt) reads MIDI in, moves the clock and sends: first what is to go out at once
+ * (Stop, a flush), then what is due, RT_SEND_MS packets a ms at most (the device's USB-MIDI out ring holds 64 and drops
+ * silently; the rest waits for the next ms). What both touch is under plat_lock: the queues, the clock, the registry,
+ * playing. The engine is the main loop's alone.
  *
  * As on the Mac:
- * - Play: a fresh engine of the project from tick 0, which sounds RT_PREROLL_MS after the press (INT; EXT: on the
- *   first pulse); MIDI Start at tick 0 and a clock pulse every 40 ticks (24 PPQ) when INT.
+ * - Play: a fresh engine of the project from tick 0, which sounds RT_PREROLL_MS after the press (INT; EXT: at the
+ *   press or the FA, at the tempo in store until the pulses lead); MIDI Start at tick 0 and a clock pulse every 40
+ *   ticks (24 PPQ) when INT.
  * - Windows [head, end) follow one another; the actions bind at the head (rt_action); a tempo change (INT) and a
  *   loaded project bind at the head's next bar line, the window ending there: the project's engine takes over with
- *   its tick 0 on that bar (origin), the mutes cleared, the channels its own, its tempo adopted (INT).
+ *   its tick 0 on that bar (origin), the mutes cleared, the channels its own, its tempo adopted (INT; a tempo
+ *   change pending there still wins). What the old engine has queued (its notes' offs) still goes out.
  * - A window's MIDI: NoteEventConverter.events of its notes (muted voices dropped, ratchets expanded: slice 240 /
  *   ratchet, sub-gate max(1, min(slice * 9 / 10, gate)); the off at at + gate), ccEvents of its CC (a mute never
  *   drops CC), clockTicks of its range (INT), in that order into the queue, which keeps them by tick, a stable
  *   order: what goes out is the stable sort by tick of every window's list, as CoreMIDI sends the Mac's.
  * - Stop: MIDI Stop (INT), then the registry's flush: a note-off for every note sounding, by (channel, note), then
  *   CC 123 (All Notes Off) on each channel that had one. Mute flushes the voice's channel; a channel change the old
- *   one; the arranger's ending stops at its tick.
+ *   one; the arranger's ending stops at its tick. The registry holds what was handed to plat_midi_send.
  * Where it is the FM-1's own:
  * - The windows are those of the reference's `window 240` (tests/equiv/README.md): to the next multiple of 240, the
  *   bar line of a pending change, rendered while the head is less than RT_LOOKAHEAD_MS ahead of the sounding tick
  *   (the Mac renders to now + 150 ms, its windows as long as its wakes). Same windows, same order on the wire.
- * - The queue is the FM-1's, so a flush also takes out what it holds of the voice (mute, channel) or everything
- *   (stop) instead of sending the offs twice as the Mac does past CoreMIDI's. A template switch flushes too, at its
- *   bar line: nothing of the old piece rings into the new one (the Mac lets the old notes end at their own offs).
+ * - The queue is the FM-1's, so a flush also takes out what it holds of the voice on the flushed channel (mute,
+ *   channel) or everything (stop) instead of sending the offs twice as the Mac does past CoreMIDI's.
  * - EXT: each pulse is 40 ticks. Between pulses the clock runs at the rate of the last beat's pulses (24 intervals),
  *   never past the next pulse; after RT_FREEWHEEL_MS without one it runs on at that rate (the router unplugged, the
- *   DAW paused), and the next pulse takes up from the tick reached, never back. FA / FB start, FC stops.
+ *   DAW paused), and the next pulse takes up from the tick reached, never back. FA / FB start, FC stops. The tempo
+ *   (rt_bpm) is the followed one.
  * - The registry knows what went out on the wire (the tick sends it), not what was scheduled. */
 
 #define RT_WINDOW 240                    /* the windows' grid, in ticks: the longest window */
 #define RT_LOOKAHEAD_MS 100
 #define RT_PREROLL_MS 100                /* Transport's prerollNanos */
 #define RT_QUEUE 1024                    /* timed events (a power of two) */
+#define RT_NOW 256                       /* events to send at once: Stop, a flush (a power of two) */
+#define RT_SEND_MS 16                    /* packets sent a ms at most */
 #define RT_NOTES 128                     /* a window's notes and CC (240 ticks of the templates: at most 9 and 8) */
 #define RT_CC 128
 #define RT_PULSE 40                      /* ticks per MIDI clock: 960 / 24 */
@@ -46,12 +52,10 @@
 #define RT_RING 25                       /* the pulse times the EXT rate is measured over: one beat */
 #define RT_NONE 0xFFu                    /* the channel of a voice the running project lacks */
 
-enum { RT_EV_MIDI, RT_EV_SWAP };         /* a message; a template switch's flush, on its bar line */
-
 typedef struct {
     bl_tick_t tick;
     uint32_t pkt;                        /* a USB-MIDI packet (plat.h) */
-    uint8_t kind, vid, gen;              /* vid: the voice's BL_VID_ (BL_VID_NONE: the clock); gen: its engine's */
+    uint8_t vid;                         /* the voice's BL_VID_ (BL_VID_NONE: the clock, a flush) */
 } rt_ev_t;
 
 static bl_live_t rt_eng PLAT_POOL;       /* the running engine */
@@ -60,22 +64,23 @@ static bl_project_t rt_next PLAT_POOL;   /* pendingProject: takes over at the he
 static bl_note_t rt_note[RT_NOTES] PLAT_POOL;
 static bl_cc_t rt_cc[RT_CC] PLAT_POOL;
 static rt_ev_t rt_q[RT_QUEUE] PLAT_POOL;
+static rt_ev_t rt_nq[RT_NOW] PLAT_POOL;  /* to send at once, before the queue */
 #define RT_Q(i) rt_q[(rt.qr + (i)) & (RT_QUEUE - 1u)]
 
 static struct {
     /* the main loop's */
     bl_tick_t head, origin;              /* the render head; where the running engine's tick 0 sits */
-    uint8_t has_next, stop_queued, gen, ext, clock_out;
+    uint8_t has_next, stop_queued, ext, clock_out;
     uint8_t muted;                       /* mutedVoices: a bit per BL_VID_ */
     uint8_t chan[BL_NVIDS];              /* channelMap by BL_VID_, RT_NONE: none */
     uint8_t vid[BL_MAX_VOICES];          /* the running engine's voices' BL_VID_ */
-    int32_t bpm, pend_bpm;               /* liveBPM; pendingBPM, -1 none */
+    int32_t bpm, pend_bpm;               /* liveBPM (EXT: the tick's, the followed tempo); pendingBPM, -1 none */
     uint32_t dropped, over;              /* events the full queue refused; notes or CC past a window's buffer */
     /* shared with the tick, under plat_lock */
     volatile uint8_t playing, start_req; /* start_req: an FA / FB the main loop is to play */
     uint8_t started, ext_run, pulsed, ext_ports, npm;
     uint16_t pre;                        /* INT: ms to tick 0 */
-    uint16_t qr, qn;                     /* the queue: its first event, how many */
+    uint16_t qr, qn, nr, nn;             /* the queue, the at-once one: its first event, how many */
     bl_tick_t tick;                      /* the sounding tick (started), and its thousandths */
     int32_t frac, rate;                  /* rate: thousandths of a tick per ms (INT: bpm * 16) */
     bl_tick_t swap_tick, tempo_tick;     /* a tempo's clock segment from swap_tick (-1 none); where the last began */
@@ -104,7 +109,7 @@ static bl_tick_t rt_next_bar(bl_tick_t t)
     return r ? t + BL_TICKS_PER_BAR - r : t;
 }
 
-/* ---- the wire (the tick's, or the main loop's under the lock) */
+/* ---- the wire (the tick's) */
 static void rt_send(bl_tick_t tick, uint32_t pkt)
 {
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu, b = 1u << (n & 31u);
@@ -120,30 +125,43 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
 #endif
 }
 
-/* NoteRegistry.flushEvents (one channel, or ch -1 all): the offs by (channel, note), then CC 123 per channel */
+/* to send at once, ahead of the queue (under the lock): it carries the sounding tick */
+static void rt_now(uint32_t pkt)
+{
+    rt_ev_t *e;
+    if (rt.nn == RT_NOW) {
+        rt.dropped++;
+        return;
+    }
+    e = &rt_nq[(rt.nr + rt.nn++) & (RT_NOW - 1u)];
+    e->tick = rt.started ? rt.tick : 0;
+    e->pkt = pkt;
+    e->vid = BL_VID_NONE;
+}
+
+/* NoteRegistry.flushEvents (one channel, or ch -1 all), locked: the offs by (channel, note), then CC 123 per channel
+ * that had one; the registry lets the notes go as their offs go out */
 static void rt_flush(int ch)
 {
-    bl_tick_t t = rt.started ? rt.tick : 0;
     uint32_t touched = 0, c, n;
     for (c = 0; c < 16u; c++) {
         if (ch >= 0 && c != (uint32_t)ch)
             continue;
         for (n = 0; n < 128u; n++)
             if (rt.snd[c][n >> 5] >> (n & 31u) & 1u) {
-                rt_send(t, rt_pkt(0x80u | c, n, 0));
+                rt_now(rt_pkt(0x80u | c, n, 0));
                 touched |= 1u << c;
             }
-        rt.snd[c][0] = rt.snd[c][1] = rt.snd[c][2] = rt.snd[c][3] = 0;
     }
     for (c = 0; c < 16u; c++)
         if (touched >> c & 1u)
-            rt_send(t, rt_pkt(0xB0u | c, 123, 0));
+            rt_now(rt_pkt(0xB0u | c, 123, 0));
 }
 
 /* ---- the queue (under the lock) */
 static int rt_room(uint32_t n) { return rt.qn + n <= RT_QUEUE; }
 
-static void rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t kind, uint8_t vid)   /* after those of its tick */
+static void rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after those of its tick */
 {
     uint32_t j = rt.qn;
     rt_ev_t *e;
@@ -154,27 +172,19 @@ static void rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t kind, uint8_t vid)  
     e = &RT_Q(j);
     e->tick = tick;
     e->pkt = pkt;
-    e->kind = kind;
     e->vid = vid;
-    e->gen = rt.gen;
     rt.qn++;
 }
 
-static int rt_is_note(const rt_ev_t *e)
-{
-    uint32_t st = (e->pkt >> 8) & 0xF0u;
-    return e->kind == RT_EV_MIDI && (st == 0x80u || st == 0x90u);
-}
-
-/* out of the queue: the voice's notes (vid), or the note-offs of every engine but gen's (vid BL_VID_NONE) */
-static void rt_purge(uint8_t vid, uint8_t gen)
+/* out of the queue: the voice's notes on channel ch, which its flush silences (elsewhere they go on: an old
+ * engine's offs on the voice's former channel) */
+static void rt_purge(uint8_t vid, uint32_t ch)
 {
     uint32_t i, w = 0;
     for (i = 0; i < rt.qn; i++) {
         rt_ev_t *e = &RT_Q(i);
-        int out = vid != BL_VID_NONE ? rt_is_note(e) && e->vid == vid
-                                     : rt_is_note(e) && ((e->pkt >> 8) & 0xF0u) == 0x80u && e->gen != gen;
-        if (!out)
+        uint32_t st = (e->pkt >> 8) & 0xFFu;
+        if (e->vid != vid || (st & 15u) != ch || ((st & 0xF0u) != 0x80u && (st & 0xF0u) != 0x90u))
             RT_Q(w++) = *e;
     }
     rt.qn = (uint16_t)w;
@@ -188,7 +198,7 @@ static void rt_halt(void)
     rt.ext_run = 0;
     rt.qn = 0;
     if (rt.clock_out)
-        rt_send(rt.started ? rt.tick : 0, rt_pkt(0xFCu, 0, 0));
+        rt_now(rt_pkt(0xFCu, 0, 0));
     rt_flush(-1);
 }
 
@@ -214,7 +224,7 @@ static void rt_clock(uint32_t now)       /* the sounding tick, one ms on */
         rt.tempo_tick = rt.swap_tick;
         rt.swap_tick = -1;
     }
-    if (rt.ext && now - rt.last_pulse <= RT_FREEWHEEL_MS && rt.tick >= rt.pulse_tick + RT_PULSE) {
+    if (rt.ext && rt.pulsed && now - rt.last_pulse <= RT_FREEWHEEL_MS && rt.tick >= rt.pulse_tick + RT_PULSE) {
         rt.tick = rt.pulse_tick + RT_PULSE - 1;   /* never past the next pulse */
         rt.frac = 999;
     }
@@ -232,13 +242,14 @@ static void rt_pulse(uint32_t now)       /* EXT: an F8 from the chosen ports */
         rt.npm--;
     }
     rt.pulse_ms[rt.npm++] = now;
-    if (rt.npm > 1 && now != rt.pulse_ms[0])
+    if (rt.npm > 1 && now != rt.pulse_ms[0]) {
         rt.rate = (int32_t)(RT_PULSE * 1000u * (rt.npm - 1u) / (now - rt.pulse_ms[0]));
+        rt.bpm = (rt.rate + 8) / 16;     /* the followed tempo (Transport's liveBPM = the estimate) */
+    }
     if (rt.ext_run) {
-        if (!rt.pulsed) {                /* the first pulse after Start: tick 0 */
-            rt.pulse_tick = rt.tick = 0;
-            rt.frac = 0;
-            rt.pulsed = rt.started = 1;
+        if (!rt.pulsed) {                /* the first pulse after the start: tick 0 (passed already: on from there) */
+            rt.pulse_tick = 0;
+            rt.pulsed = 1;
         } else if (now - rt.last_pulse > RT_FREEWHEEL_MS) {   /* back after a freewheel: on from the tick reached */
             bl_tick_t r = rt.tick % RT_PULSE;
             rt.pulse_tick = r ? rt.tick + RT_PULSE - r : rt.tick;
@@ -253,6 +264,15 @@ static void rt_pulse(uint32_t now)       /* EXT: an F8 from the chosen ports */
     rt.last_pulse = now;
 }
 
+static void rt_ext_start(void)           /* EXT: tick 0 now, at the tempo in store until the pulses lead (locked) */
+{
+    rt.pre = 0;
+    rt.ext_run = rt.started = 1;
+    rt.pulsed = 0;
+    rt.tick = 0;
+    rt.frac = 0;
+}
+
 static void rt_midi_in(uint32_t now)     /* clock, Start, Continue, Stop (EXT, from the chosen ports); the rest: none */
 {
     uint32_t pkt, st;
@@ -265,11 +285,7 @@ static void rt_midi_in(uint32_t now)     /* clock, Start, Continue, Stop (EXT, f
             rt_pulse(now);
         } else if ((st == 0xFAu || st == 0xFBu) && !rt.playing && !rt.start_req) {   /* (playing: none, as the Mac) */
             rt.start_req = 1;            /* the main loop makes the engine (app_loop) */
-            rt.pre = 0;
-            rt.ext_run = 1;
-            rt.pulsed = rt.started = 0;
-            rt.tick = 0;
-            rt.frac = 0;
+            rt_ext_start();
         } else if (st == 0xFCu) {
             if (rt.playing)
                 rt_halt();
@@ -280,24 +296,25 @@ static void rt_midi_in(uint32_t now)     /* clock, Start, Continue, Stop (EXT, f
 
 void app_tick(void)
 {
-    uint32_t now = plat_ms();
+    uint32_t now = plat_ms(), room = RT_SEND_MS;
     rt_clock(now);
     rt_midi_in(now);
+    for (; room && rt.nn; room--) {      /* what goes out at once, first */
+        rt_ev_t *e = &rt_nq[rt.nr];
+        rt_send(e->tick, e->pkt);
+        rt.nr = (uint16_t)((rt.nr + 1u) & (RT_NOW - 1u));
+        rt.nn--;
+    }
     if (!rt.playing || !rt.started)
         return;
-    while (rt.qn && rt_q[rt.qr].tick <= rt.tick && (rt.stop_at < 0 || rt_q[rt.qr].tick <= rt.stop_at)) {   /* due */
-        rt_ev_t e = rt_q[rt.qr];
+    for (; room && rt.qn && rt_q[rt.qr].tick <= rt.tick && (rt.stop_at < 0 || rt_q[rt.qr].tick <= rt.stop_at);
+         room--) {                       /* then what is due */
+        rt_send(rt_q[rt.qr].tick, rt_q[rt.qr].pkt);
         rt.qr = (uint16_t)((rt.qr + 1u) & (RT_QUEUE - 1u));
         rt.qn--;
-        if (e.kind == RT_EV_MIDI) {
-            rt_send(e.tick, e.pkt);
-        } else {                         /* the new piece's bar line: the old one silenced */
-            rt_purge(BL_VID_NONE, e.gen);
-            rt_flush(-1);
-        }
     }
-    if (rt.stop_at >= 0 && rt.tick >= rt.stop_at)   /* the arranger's ending, once all of its tick is out */
-        rt_halt();
+    if (rt.stop_at >= 0 && rt.tick >= rt.stop_at && (!rt.qn || rt_q[rt.qr].tick > rt.stop_at))
+        rt_halt();                       /* the arranger's ending, once all of its tick is out */
 }
 
 /* ---- the main loop */
@@ -313,24 +330,21 @@ static void rt_channels(const bl_project_t *p)   /* channelMap from a project */
     }
 }
 
-static void rt_engine_new(void)          /* LiveEngine(project:) of rt_proj, a generation of its own */
+static void rt_engine_new(void)          /* LiveEngine(project:) of rt_proj */
 {
     int i;
     bl_live_init(&rt_eng, &rt_proj);
     for (i = 0; i < rt_eng.project.nvoices; i++)
         rt.vid[i] = (uint8_t)bl_vid(rt_eng.project.voice[i].id);
-    rt.gen++;
     rt.stop_queued = 0;
 }
 
 static void rt_put(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* one event into the queue */
 {
     uint32_t f = plat_lock();
-    if (!rt.playing)
-        ;
-    else if (rt_room(1))
-        rt_insert(tick, pkt, RT_EV_MIDI, vid);
-    else
+    if (rt.playing && rt_room(1))
+        rt_insert(tick, pkt, vid);
+    else if (rt.playing)
         rt.dropped++;
     plat_unlock(f);
 }
@@ -338,12 +352,10 @@ static void rt_put(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* one event int
 static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q, uint8_t vid)   /* on, then off */
 {
     uint32_t f = plat_lock();
-    if (!rt.playing)
-        ;
-    else if (rt_room(2)) {
-        rt_insert(at, rt_pkt(0x90u | ch, q->midi & 0x7Fu, q->velocity & 0x7Fu), RT_EV_MIDI, vid);
-        rt_insert(at + gate, rt_pkt(0x80u | ch, q->midi & 0x7Fu, 0), RT_EV_MIDI, vid);
-    } else {
+    if (rt.playing && rt_room(2)) {
+        rt_insert(at, rt_pkt(0x90u | ch, q->midi & 0x7Fu, q->velocity & 0x7Fu), vid);
+        rt_insert(at + gate, rt_pkt(0x80u | ch, q->midi & 0x7Fu, 0), vid);
+    } else if (rt.playing) {
         rt.dropped += 2;
     }
     plat_unlock(f);
@@ -394,11 +406,11 @@ static void rt_window(bl_tick_t lo, bl_tick_t hi)
     }
 }
 
-/* the wake's first step: a loaded project takes over when the head is on its bar line */
+/* the wake's first step: a loaded project takes over when the head is on its bar line (what the old engine has
+ * queued still goes out) */
 static void rt_take_over(void)
 {
     uint32_t f;
-    int adopt;
     if (!rt.has_next || rt.head != rt_next_bar(rt.head))
         return;
     rt_proj = rt_next;
@@ -407,18 +419,13 @@ static void rt_take_over(void)
     rt_engine_new();
     rt_channels(&rt_proj);
     rt.muted = 0;
-    adopt = !rt.ext && rt_proj.bpm != rt.bpm;   /* the template's tempo, from its bar line */
-    f = plat_lock();
-    if (rt.playing && rt_room(1))
-        rt_insert(rt.head, 0, RT_EV_SWAP, BL_VID_NONE);   /* the flush on the bar line, before the new piece */
-    if (adopt) {
+    if (!rt.ext && rt_proj.bpm != rt.bpm) {   /* the template's tempo, from its bar line (a pending one binds there
+                                               * next, and wins: the Mac's wake has read it already) */
+        f = plat_lock();
         rt.swap_tick = rt.head;
         rt.swap_rate = rt_proj.bpm * 16;
-    }
-    plat_unlock(f);
-    if (adopt) {
+        plat_unlock(f);
         rt.bpm = rt_proj.bpm;
-        rt.pend_bpm = -1;
     }
 }
 
@@ -498,17 +505,13 @@ void rt_play(void)                       /* Transport.play: always from tick 0, 
         rt.frac = 0;
         rt.pre = RT_PREROLL_MS;
         rt.started = 0;
-    } else if (!rt.start_req) {          /* PLAY in EXT: from the next pulse (an FA has set this up already) */
-        rt.pre = 0;
-        rt.ext_run = 1;
-        rt.pulsed = rt.started = 0;
-        rt.tick = 0;
-        rt.frac = 0;
+    } else if (!rt.start_req) {          /* PLAY in EXT: tick 0 now (an FA has started the clock already) */
+        rt_ext_start();
     }
     rt.start_req = 0;
     rt.playing = 1;
     if (rt.clock_out)
-        rt_insert(0, rt_pkt(0xFAu, 0, 0), RT_EV_MIDI, BL_VID_NONE);   /* Start, at tick 0 */
+        rt_insert(0, rt_pkt(0xFAu, 0, 0), BL_VID_NONE);   /* Start, at tick 0 */
     plat_unlock(f);
     rt_render();
 }
@@ -554,11 +557,17 @@ int rt_action(const bl_action_t *a)
 
 void rt_set_tempo(int32_t bpm)           /* Transport.setTempo: playing, from the head's next bar line (INT) */
 {
+    uint32_t f;
     bpm = clamp(bpm, 40, 220);
-    if (rt.playing)
+    if (rt.playing) {
         rt.pend_bpm = bpm;
-    else
-        rt.bpm = bpm;
+        return;
+    }
+    f = plat_lock();
+    rt.bpm = bpm;                        /* stopped: the next Play's (EXT: until the pulses lead) */
+    if (rt.ext && !rt.ext_run)
+        rt.rate = bpm * 16;
+    plat_unlock(f);
 }
 
 /* playing: Transport.loadProject (from the head's next bar line); stopped: the project the next Play makes (the Mac
@@ -587,10 +596,11 @@ void rt_set_mute(int vid, int on)
     rt.muted = (uint8_t)(on ? rt.muted | 1u << vid : rt.muted & ~(1u << vid));
     if (!on)
         return;
+    if (rt.chan[vid] == RT_NONE)         /* (no channel: nothing of it to silence; an old engine's offs go on) */
+        return;
     f = plat_lock();
-    rt_purge((uint8_t)vid, 0);
-    if (rt.chan[vid] != RT_NONE)
-        rt_flush(rt.chan[vid]);
+    rt_purge((uint8_t)vid, rt.chan[vid]);
+    rt_flush(rt.chan[vid]);
     plat_unlock(f);
 }
 
@@ -616,7 +626,7 @@ void rt_set_channel(int vid, uint8_t ch)
     if (!rt.playing)
         return;
     f = plat_lock();
-    rt_purge((uint8_t)vid, 0);
+    rt_purge((uint8_t)vid, old);
     rt_flush(old);
     plat_unlock(f);
 }

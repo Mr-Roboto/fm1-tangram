@@ -34,3 +34,11 @@ expect tempo_tick 15360
 expect tick_rate 960
 expect bpm 60
 expect clocks_out 385
+# a template loaded and a tempo set in the same bar: on the bar line (bar 5, 19200) Ambient drift takes over, and the
+# tempo set wins over the template's 72 BPM (the Mac's wake binds both there, the pending one last)
+rt load ambient
+rt tempo 110
+wait 4100
+expect tempo_tick 19200
+expect tick_rate 1760
+expect bpm 110

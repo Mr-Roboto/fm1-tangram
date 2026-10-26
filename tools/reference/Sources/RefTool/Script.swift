@@ -214,8 +214,9 @@ struct Script {
 }
 
 /// One play of a script. `emit` receives the reference lines; `onNote` every rendered note (transport ticks);
-/// `onWindow` each window as the transport sends it on (transport ticks): its range, its notes and CC, and the project
-/// of the engine that rendered it (Transport.project, whose voices give the channel map).
+/// `onWindow` each window as the transport sends it on (transport ticks): its range, its notes and CC, the project of
+/// the engine that rendered it (Transport.project, whose voices give the channel map) and how many loaded projects
+/// have taken over so far.
 struct Run {
     private let script: Script
     /// AppServices.project: what the app holds; key, density, arranger, reseed and load change it.
@@ -223,6 +224,7 @@ struct Run {
     /// The running engine (Transport's scheduler loop) and where its tick 0 sits in transport ticks.
     private var engine: LiveEngine
     private var running: Project
+    private var takeOvers = 0
     private var origin: Tick = 0
     private var barTicks: Tick
     /// Transport.pendingProject and Transport.pendingActions: consumed at the next wake (the next window).
@@ -246,7 +248,8 @@ struct Run {
     static let hashPeriod = 16 * Script.barTicks
 
     mutating func play(emit: (String) -> Void, onNote: (RenderedNote) -> Void = { _ in },
-                       onWindow: (Range<Tick>, [RenderedNote], [RenderedCC], Project) -> Void = { _, _, _, _ in }) {
+                       onWindow: (Range<Tick>, [RenderedNote], [RenderedCC], Project, Int) -> Void
+                           = { _, _, _, _, _ in }) {
         let total = Tick(script.bars) * Script.barTicks
         let actions = script.actions
         var next = 0
@@ -264,6 +267,7 @@ struct Run {
                 if head == boundary {
                     engine = LiveEngine(project: project)
                     running = project
+                    takeOvers += 1
                     origin = boundary
                     barTicks = project.meter.ticksPerBar
                     pendingProject = nil
@@ -294,7 +298,7 @@ struct Run {
                 shifted.at += origin
                 ccs.append(shifted)
             }
-            onWindow(head..<end, notes, ccs, running)
+            onWindow(head..<end, notes, ccs, running, takeOvers)
             if !stopShown, let stop = engine.pendingStopTick {
                 emit(Dump.stopLine(stop + origin))
                 stopShown = true

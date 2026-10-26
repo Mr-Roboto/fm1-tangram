@@ -1,17 +1,31 @@
-# Following an external clock (EXT): MIDI Start (FA) from the TRS jack starts the piece, each clock pulse (F8) is 40
-# ticks, the clock runs between pulses at the last beat's rate (24 pulses 20 ms apart: 2 ticks per ms, 125 BPM) and
-# never past the next pulse. The pulses stop (a router unplugged): after 500 ms the clock runs on at the same rate,
-# playing; MIDI Stop (FC) stops it. Clock from USB is not followed while the input is TRS alone, and nothing of the
-# clock goes out (the FM-1 never sends a clock it follows).
+# Following an external clock (EXT). PLAY starts the piece at once, at the tempo in store (Transport.swift: tick 0
+# at the press, until the pulses lead). MIDI Start (FA) from the TRS jack starts it the same way; then each clock
+# pulse (F8) is 40 ticks, the clock runs between pulses at the last beat's rate (24 pulses 20 ms apart: 2 ticks a
+# ms, 125 BPM, the tempo it reports) and never past the next pulse. The pulses stop (a router unplugged): after
+# 500 ms the clock runs on at the same rate, playing; MIDI Stop (FC) stops it. Clock from USB is not followed while
+# the input is TRS alone, before the start or while running, and nothing of the clock goes out (the FM-1 never
+# sends a clock it follows).
 rt sync ext
 rt port TRS
+# PLAY with no clock coming: the Full ensemble's 96 BPM (1.536 ticks a ms) from the press (ms 1)
+tap PLAY
+wait 920
+expect playing 1
+expect tick 1534
+expect bpm 96
+expect tick_rate 1536
+expect midi_out >10
+tap PLAY
+expect playing 0
+# Start from the jack (clock from USB around it, not followed)
 midi USB F8
 wait 10
 midi USB F8
 wait 10
 midi TRS FA
 expect playing 1
-expect tick 0
+expect tick 1
+# (the first pulse, at tick 30 or so: tick 0 passed already, held at 39 to the next)
 wait 18
 midi TRS F8
 wait 18
@@ -92,45 +106,85 @@ wait 18
 midi TRS F8
 wait 18
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
-wait 18
+midi USB F8
+midi USB F8
+wait 14
 midi TRS F8
 wait 18
 midi TRS F8
@@ -205,10 +259,11 @@ midi TRS F8
 wait 18
 midi TRS F8
 wait 18
-# the notes went out on the followed clock
+# the notes went out on the followed clock; the 96th pulse is tick 3800, 19 ms ago (a "midi" line runs 2 ms): 38
+# ticks on, then held short of the next
 expect midi_out >20
-# the 96th pulse is tick 3800, 19 ms ago (a "midi" line runs 2 ms): 38 ticks on, then held short of the next
 expect tick_rate 2000
+expect bpm 125
 expect tick 3838
 wait 10
 expect tick 3839
@@ -216,6 +271,7 @@ expect tick 3839
 wait 2000
 expect playing 1
 expect tick_rate 2000
+expect bpm 125
 expect tick 6897
 expect clocks_out 0
 # the pulses again: on from the tick reached (6899: the pulse is 6920, the next multiple of 40), never back
@@ -227,5 +283,6 @@ midi TRS F8
 expect tick 6962
 midi TRS FC
 expect playing 0
+wait 1
 expect sounding 0
 expect clocks_out 0

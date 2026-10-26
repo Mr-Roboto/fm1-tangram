@@ -1,9 +1,31 @@
-# Nothing is left sounding (NoteRegistry.flushEvents): a stop, a mute, a template switch and the arranger's ending,
-# each while Ambient drift's drone holds its two notes (E3 52 0x34 and A3 57 0x39 on channel 1, 0 on the wire, each
-# struck every 8 bars for 8 bars): a note-off for each, then All Notes Off (CC 123) on the channel. 72 BPM: a bar
-# is 3333 ms; tick 0 sounds 100 ms after PLAY is seen (the press's first ms); bar N is tick N x 3840.
+# Nothing is left sounding (NoteRegistry.flushEvents): a stop sends MIDI Stop, then a note-off for each note sounding,
+# by (channel, note), then All Notes Off (CC 123) on each channel that had one (sent from the next ms: the tick sends
+# everything); a mute silences the voice's channel, a channel change the old one; the arranger's ending stops on
+# its tick. A template switch does not flush (as Transport.swift): what the old piece queued still goes out at its
+# own ticks. Tick 0 sounds 100 ms after PLAY is seen (the press's first ms); bar N is tick N x 3840. The dumps go
+# to app/build/scenarios/stop_flush/.
+#
+# the flush's order: the Full ensemble (96 BPM) stopped at tick 1505, the bass (channel 3, 2 on the wire) and the
+# pad's chord (channel 4, 3) sounding
+dumpmidi app/build/scenarios/stop_flush/stop.txt
+tap PLAY
+wait 1000
+tap PLAY
+dumpis 1 B3 7B 00
+dumpis 2 B2 7B 00
+dumpis 3 83 48 00
+dumpis 4 83 45 00
+dumpis 5 83 40 00
+dumpis 6 82 2D 00
+dumpis 7 FC 00 00
+dumpcount B0 7B 00
+expect dumpcount 0
+expect sounding 0
+#
+# Ambient drift (72 BPM, a bar 3333 ms): its drone holds E3 (52, 0x34) and A3 (57, 0x39) on channel 1 (0 on the
+# wire), struck every 8 bars for 8 bars
 rt load ambient
-# stop at bar 20 (the drone struck on bar 16): MIDI Stop, the offs, CC 123
+# stop in bar 20 (the drone struck on bar 16)
 tap PLAY
 wait 66800
 expect playing 1
@@ -26,45 +48,82 @@ expect tick 15412
 expect sounding0 2
 out
 rt mute drone 1
+wait 1
 expect_out USB 80 34 00
 expect_out USB 80 39 00
 expect_out USB B0 7B 00
 expect sounding0 0
 wait 30000
-expect tick 49972
+expect tick 49973
 expect sounding0 0
 rt mute drone 0
 wait 20000
-expect tick 73012
+expect tick 73013
 expect sounding0 2
-# a template switch in bar 20 (tick 78772): on the next bar line (bar 21, tick 80640) the Full ensemble takes over,
-# the drone's notes silenced there, its tempo (96 BPM) from that line on
+# a template switch in bar 20 (tick 78773): on the next bar line (bar 21, tick 80640) the Full ensemble takes over
+# with its tempo (96 BPM); the drone (struck on bar 16, not in the new piece) is not silenced there, and muting it
+# then (no channel of its own any more) leaves its queued offs alone: they go out on bar 24's line (92160)
 wait 5000
-expect tick 78772
-out
+expect tick 78773
+dumpmidi app/build/scenarios/stop_flush/switch.txt
 rt load full
 wait 1000
 expect tempo_tick -1
-expect sounding0 2
 wait 1000
-expect tick 81222
+expect tick 81223
 expect tempo_tick 80640
 expect tick_rate 1536
 expect bpm 96
+expect sounding0.52 1
+expect sounding0.57 1
+rt mute drone 1
+expect sounding0.52 1
+wait 7600
+expect tick 92897
+dumpcount 80 34 00 92160
+expect dumpcount 1
+dumpcount 80 39 00 92160
+expect dumpcount 1
+dumpcount B0 7B 00
+expect dumpcount 0
+expect sounding0.52 0
+expect sounding0.57 0
+expect playing 1
+tap PLAY
+# a channel change in bar 4: the drone's old channel silenced at once, its next notes (bar 8) on the new one
+rt load ambient
+tap PLAY
+wait 13400
+expect sounding0 2
+out
+rt channel drone 5
+wait 1
 expect_out USB 80 34 00
 expect_out USB 80 39 00
 expect_out USB B0 7B 00
-expect playing 1
+expect sounding0 0
+wait 13400
+expect tick 30850
+expect sounding0 0
+expect sounding5 2
 tap PLAY
 # the arranger's ending: Ambient drift's ambient plateau ends on bar 288 (tick 1105920, 960 s from tick 0); the
-# transport stops there by itself, MIDI Stop and the flush
+# transport stops there by itself once that tick is out (the drone's last off is on it: nothing left to flush)
 rt load ambient
+dumpmidi app/build/scenarios/stop_flush/ending.txt
 tap PLAY
 wait 959000
 expect playing 1
-out
 wait 2000
 expect playing 0
-expect_out USB FC 00 00
+dumpis 1 FC 00 00
+dumpis 2 F8 00 00
+dumpcount 80 39 00 1105920
+expect dumpcount 1
+dumpcount FC 00 00 1105920
+expect dumpcount 1
+dumpcount B0 7B 00
+expect dumpcount 0
 expect sounding 0
 expect queued 0
+expect dumpbad 0

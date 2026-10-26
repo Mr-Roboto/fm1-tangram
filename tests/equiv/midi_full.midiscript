@@ -1,13 +1,18 @@
 # The MIDI the transport sends (RefTool midi, tests/equiv/README.md "The MIDI reference"): the full ensemble on its
 # own seed, 64 bars in windows of 240 ticks, two transpositions on bar lines (bars 8 and 16, over the template's own
-# schedule), bedPluck2 muted from bar 8 to bar 12 and the pad from bar 16 on. tests/scenarios/play_midi.bln plays it
-# on the app (selfscript) and compares what went out with midi_full.midiref.
+# schedule), bedPluck2 muted from bar 8 to bar 12, the pad from bar 16 on and the drone (not in this template) from
+# about bar 31; Ambient drift loaded in bar 46: it takes over on bar 47's line, its channels its own, the mutes
+# cleared (its drone sounds), the full ensemble's last offs still sent; its drone muted again from bar 56. tests/scenarios/play_midi.bln plays it on the app (selfscript) and compares what went
+# out with midi_full.midiref.
 template full
 seed 0x93B12C05
 window 240
 bars 64
 at 30720 transpose 3
 at 61440 transpose 5
+at 180000 load ambient 0x0A3B11ED
 mute bedPluck2 30720 1
 mute bedPluck2 46080 0
 mute pad 61440 1
+mute drone 120000 1
+mute drone 215040 1

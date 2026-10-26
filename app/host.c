@@ -8,7 +8,10 @@
  *   tick_rate bpm tempo_tick the clock: thousandths of a tick per ms (INT: bpm x 16; EXT: as measured); the tempo
  *                            (Transport.currentBPM); where the last tempo segment began (-1: none yet)
  *   queued sounding dropped  the timed events waiting; the notes the registry holds sounding (soundingC: on channel
- *                            C, 0-15); events the full queue refused (and notes or CC past a window's buffer)
+ *                            C, 0-15; soundingC.N: note N there, 0 or 1); events a full queue refused (and notes or
+ *                            CC past a window's buffer)
+ *   per_ms                   the most messages the app sent in one ms
+ *   dumpcount dumpbad        the last dumpcount's lines; the dumpis lines that did not hold
  *   midicmp midilines        the last cmpmidi: 0 the same, else the first line that differs (-1: a file missing);
  *                            the lines that matched
  *   selfnotes selfhash_hi selfhash_lo   the last selfrender
@@ -19,15 +22,20 @@
  *                            tests/equiv/README.md, each with its "\n", the value tests/host/equiv_test.c prints
  *   selfscript FILE          (stopped) a .midiscript for the next Play: its project, its actions as rt_action at
  *                            their ticks (a window ends at each), its mutes as muteat, the render held at its end.
- *                            Only actions that are one engine action each (no reroll, save, recall, tension, scene,
- *                            reseed, load)
+ *                            Its actions: those that are one engine action each, and load (rt_load); not reroll,
+ *                            save, recall, tension, scene, reseed
  *   muteat VOICE TICK 0|1    a test's mute: for the windows that start at or after TICK, nothing flushed (the rule
  *                            of RefTool's midi mode)
  *   dumpmidi [FILE]          start (FILE) or stop logging "tick status d1 d2" (hex bytes) for every message the
  *                            transport sends, in send order; a flush's messages carry the sounding tick
  *   cmpmidi FILE             the dump so far against FILE (a .midiref), line by line: midicmp, midilines
+ *   dumpcount ST D1 D2 [TICK]   the dump's lines with these bytes (hex; at TICK, if given): expect dumpcount
+ *   dumpis K ST D1 D2        the dump's K-th line from its end (1 the last) has these bytes; else a FAIL line and
+ *                            dumpbad one more
  *   rt play | stop | tempo BPM | load TEMPLATE [SEED] | mute VOICE 0|1 | channel VOICE CH | sync int|ext |
- *      port USB|TRS|both     the transport's controls (VOICE a voice id, CH 0-15), until the panel has them all */
+ *      port USB|TRS|both     the transport's controls (VOICE a voice id, CH 0-15), until the panel has them all
+ *   rt burst N               (playing) N note-ons on channel 16 (notes 0..N-1, velocity 1) due now and their offs a
+ *                            tick later, into the queue: more than a ms may send */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,11 +110,11 @@ static int nmute_at;
 static bl_script_t ss;                   /* selfscript's */
 static int ss_on, ss_next;
 
-static int ss_supported(const bl_sact_t *a)   /* the actions that are one engine action each */
+static int ss_supported(const bl_sact_t *a)   /* the actions that are one engine action each, and load */
 {
     switch (a->kind) {
     case BL_SA_TRANSPOSE: case BL_SA_REGENERATE: case BL_SA_BLANK: case BL_SA_LOCK: case BL_SA_KEY:
-    case BL_SA_DENSITY: case BL_SA_BPART: case BL_SA_VOICE: case BL_SA_ARRANGER: case BL_SA_ADVANCE:
+    case BL_SA_DENSITY: case BL_SA_BPART: case BL_SA_VOICE: case BL_SA_ARRANGER: case BL_SA_ADVANCE: case BL_SA_LOAD:
         return 1;
     }
     return 0;
@@ -114,12 +122,19 @@ static int ss_supported(const bl_sact_t *a)   /* the actions that are one engine
 
 static void ss_apply(const bl_sact_t *s)  /* as script.c's scr_apply makes them */
 {
+    static bl_project_t p;
     static const uint8_t KIND[] = {
         [BL_SA_TRANSPOSE] = BL_A_TRANSPOSE, [BL_SA_REGENERATE] = BL_A_REGENERATE, [BL_SA_BLANK] = BL_A_BLANK,
         [BL_SA_LOCK] = BL_A_LOCK, [BL_SA_KEY] = BL_A_KEY, [BL_SA_DENSITY] = BL_A_DENSITY, [BL_SA_BPART] = BL_A_BPART,
         [BL_SA_VOICE] = BL_A_VOICE_ACTIVE, [BL_SA_ARRANGER] = BL_A_ARRANGER, [BL_SA_ADVANCE] = BL_A_ADVANCE,
     };
     bl_action_t a;
+    if (s->kind == BL_SA_LOAD) {         /* AppServices.applyTemplate: the template, the seed; from its bar line */
+        bl_template(s->tpl, &p);
+        p.seed = s->seed;
+        rt_load(&p);
+        return;
+    }
     memset(&a, 0, sizeof a);
     a.kind = KIND[s->kind];
     a.voice = s->voice;
@@ -228,10 +243,15 @@ static void selfscript(const char *path)
 /* ---- the MIDI dump */
 static FILE *dump;
 static char dump_path[256];
-static int midi_cmp = -1, midi_lines;
+static int midi_cmp = -1, midi_lines, dump_count, dump_bad, per_ms;
 
 static void host_sent(bl_tick_t tick, uint32_t pkt)
 {
+    static uint32_t ms, n;
+    if (plat_ms() != ms)
+        ms = plat_ms(), n = 0;
+    if (++n > (uint32_t)per_ms)
+        per_ms = (int)n;
     if (dump)
         fprintf(dump, "%lld %02X %02X %02X\n", (long long)tick, (unsigned)(pkt >> 8) & 0xFFu,
                 (unsigned)(pkt >> 16) & 0xFFu, (unsigned)(pkt >> 24));
@@ -275,6 +295,32 @@ static void cmpmidi(const char *path)
         fclose(b);
 }
 
+/* the dump's lines with st d1 d2 (at tick, unless it is -1): how many; the k-th from the end (k > 0) in *kth */
+static int dump_scan(uint32_t st, uint32_t d1, uint32_t d2, long long tick, int k, char *kth, int max)
+{
+    FILE *f;
+    char line[64];
+    static char ring[64][64];
+    int n = 0, total = 0;
+    long long t;
+    unsigned a, b, c;
+    if (dump)
+        fflush(dump);
+    f = dump_path[0] ? fopen(dump_path, "r") : NULL;
+    if (!f)
+        return -1;
+    while (fgets(line, sizeof line, f)) {
+        snprintf(ring[total++ % 64], 64, "%s", strtok(line, "\n") ? line : "");
+        if (sscanf(line, "%lld %x %x %x", &t, &a, &b, &c) == 4 && a == st && b == d1 && c == d2
+            && (tick < 0 || t == tick))
+            n++;
+    }
+    fclose(f);
+    if (k > 0)
+        snprintf(kth, (size_t)max, "%s", k <= total && k <= 64 ? ring[(total - k) % 64] : "(none)");
+    return n;
+}
+
 /* ---- the transport's controls */
 static int rt_cmd(const char *a, const char *b, const char *c)
 {
@@ -298,7 +344,15 @@ static int rt_cmd(const char *a, const char *b, const char *c)
         rt_set_sync(b[0] == 'e');
     else if (!strcmp(a, "port") && (!strcmp(b, "USB") || !strcmp(b, "TRS") || !strcmp(b, "both")))
         rt_set_ext_port(b[0] == 'U' ? 1 << PORT_USB : b[0] == 'T' ? 1 << PORT_TRS : 1 << PORT_USB | 1 << PORT_TRS);
-    else
+    else if (!strcmp(a, "burst") && rt_playing() && atoi(b) > 0 && atoi(b) <= 128) {
+        uint32_t f = plat_lock(), n;
+        bl_tick_t t = rt.started ? rt.tick : 0;
+        for (n = 0; n < (uint32_t)atoi(b); n++)
+            rt_insert(t, rt_pkt(0x9Fu, n, 1), BL_VID_NONE);
+        for (n = 0; n < (uint32_t)atoi(b); n++)
+            rt_insert(t + 1, rt_pkt(0x8Fu, n, 0), BL_VID_NONE);
+        plat_unlock(f);
+    } else
         return -1;
     return 0;
 }
@@ -321,10 +375,18 @@ int app_expect(const char *what, int *got)
         *got = (int)rt.tempo_tick;
     else if (!strcmp(what, "queued"))
         *got = rt.qn;
-    else if (!strncmp(what, "sounding", 8))   /* soundingC: channel C's alone (0-15) */
+    else if (!strncmp(what, "sounding", 8)) {   /* soundingC: channel C's alone (0-15); soundingC.N: its note N */
+        const char *dot = strchr(what, '.');
         for (*got = 0, c = 0; c < 16; c++)
             for (n = 0; n < 128; n++)
-                *got += (int)((!what[8] || c == atoi(what + 8)) && rt.snd[c][n >> 5] >> (n & 31) & 1u);
+                *got += (int)((!what[8] || c == atoi(what + 8)) && (!dot || n == atoi(dot + 1))
+                              && rt.snd[c][n >> 5] >> (n & 31) & 1u);
+    } else if (!strcmp(what, "per_ms"))
+        *got = per_ms;
+    else if (!strcmp(what, "dumpcount"))
+        *got = dump_count;
+    else if (!strcmp(what, "dumpbad"))
+        *got = dump_bad;
     else if (!strcmp(what, "dropped"))
         *got = (int)(rt.dropped + rt.over);
     else if (!strcmp(what, "midicmp"))
@@ -345,7 +407,6 @@ int app_expect(const char *what, int *got)
 
 int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d)
 {
-    (void)d;
     if (!strcmp(cmd, "selfrender"))
         selfrender(a, b);
     else if (!strcmp(cmd, "selfscript"))
@@ -362,6 +423,24 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
             printf("FAIL dumpmidi %s: cannot write it\n", a);
     } else if (!strcmp(cmd, "cmpmidi"))
         cmpmidi(a);
+    else if (!strcmp(cmd, "dumpcount")) {
+        dump_count = dump_scan((uint32_t)strtoul(a, 0, 16), (uint32_t)strtoul(b, 0, 16), (uint32_t)strtoul(c, 0, 16),
+                               d[0] ? strtoll(d, 0, 10) : -1, 0, NULL, 0);
+        printf("  dumpcount %s %s %s%s%s: %d\n", a, b, c, d[0] ? " at " : "", d, dump_count);
+    } else if (!strcmp(cmd, "dumpis")) {
+        char kth[64], want[16];
+        unsigned x, y, z;
+        long long t;
+        dump_scan(0, 0, 0, -1, atoi(a), kth, sizeof kth);
+        snprintf(want, sizeof want, "%s %s %s", b, c, d);
+        if (sscanf(kth, "%lld %x %x %x", &t, &x, &y, &z) == 4 && x == strtoul(b, 0, 16) && y == strtoul(c, 0, 16)
+            && z == strtoul(d, 0, 16))
+            printf("  ok dump[-%s] %s\n", a, kth);
+        else {
+            printf("FAIL dumpis %s %s: the line is %s\n", a, want, kth);
+            dump_bad++;
+        }
+    }
     else if (!strcmp(cmd, "rt")) {
         if (rt_cmd(a, b, c))
             printf("FAIL rt %s %s %s: no such control\n", a, b, c);

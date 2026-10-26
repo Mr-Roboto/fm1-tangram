@@ -1,0 +1,23 @@
+# The tick sends at most 16 MIDI packets a ms (the device's USB-MIDI out ring holds 64 and drops what does not fit,
+# with no way to ask for room): a burst waits its turn in the queue, in order, and the registry counts a note as
+# sounding only once its note-on has gone out. The burst: 64 note-ons on channel 16 (15 on the wire), due now, and
+# their offs a tick later, put in the queue of the playing Full ensemble.
+dumpmidi app/build/scenarios/send_rate/dump.txt
+tap PLAY
+wait 500
+rt burst 64
+wait 1
+expect sounding15 <17
+expect per_ms 16
+wait 1
+expect sounding15 <33
+wait 20
+expect sounding15 0
+expect per_ms 16
+dumpcount 9F 00 01
+expect dumpcount 1
+dumpcount 9F 3F 01
+expect dumpcount 1
+dumpcount 8F 3F 00
+expect dumpcount 1
+expect dropped 0

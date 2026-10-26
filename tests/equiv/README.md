@@ -187,12 +187,14 @@ unchanged (`EventConversion.swift`, `MIDI1Event.swift`):
    dropped), `NoteEventConverter.ccEvents(for: cc, channelMap:)` (never muted) and a clock at each tick of
    `NoteEventConverter.clockTicks(in: h..<e)` (every multiple of 40). `notes` and `cc` are the window's `N` and `C`
    items, in transport ticks; `channelMap` the running project's `voice id → channel`; `muted` the voices of the
-   `mute` lines with TICK ≤ h, applied in file order (`on` 1 adds the voice, 0 removes it).
+   `mute` lines with TICK ≤ h, applied in file order (`on` 1 adds the voice, 0 removes it). When a `load` takes
+   over (the window starts on its bar line), `muted` is emptied first (`mutedVoices.removeAll()`) and the channel
+   map is the new project's; what the old engine's windows gave (their notes' offs) stays in the list.
 3. All of them in a stable sort by tick: the windows' lists one after the other, an event of an earlier window
    first among those of a tick, as the queue of `app/runtime.c` keeps them and CoreMIDI sends the Mac's.
 
-A script with a `load`, or whose arranger reaches its ending, is refused: the transport's own steps there (the flush
-of a template switch, Stop and the flush at the ending) are `tests/scenarios/stop_flush.bln`'s.
+A script whose arranger reaches its ending is refused: the transport's own step there (Stop and the flush, on the
+stop tick) is `tests/scenarios/stop_flush.bln`'s.
 
 Each event is one line, `<tick> <status> <d1> <d2>`: the tick in decimal, then the bytes of the event's UMP word
 (`MIDI1Event.umpWord`: status, data 1, data 2) as two upper-case hex digits each; a clock and Start carry `00 00`.
@@ -209,7 +211,7 @@ queued for.
 
 | Scripts | What they play |
 | --- | --- |
-| `midi_full` | The full ensemble on its own seed, 64 bars in windows of 240 ticks (the app's), `transpose 3` on bar 8 and `transpose 5` on bar 16 (over the template's own schedule), bedPluck2 muted from bar 8 to bar 12 and the pad from bar 16 on. |
+| `midi_full` | The full ensemble on its own seed, 64 bars in windows of 240 ticks (the app's), `transpose 3` on bar 8 and `transpose 5` on bar 16 (over the template's own schedule), bedPluck2 muted from bar 8 to bar 12, the pad from bar 16 on and the drone (not in the template) from tick 120000; `load ambient 0x0A3B11ED` at tick 180000 (in bar 46: Ambient drift takes over on bar 47's line, the mutes cleared, so its drone sounds), the drone muted again from bar 56. |
 
 ## The state hash
 
