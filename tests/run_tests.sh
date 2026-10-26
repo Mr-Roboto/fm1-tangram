@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Jiří Píša
-# Berlinan's tests: the engine (tests/host/engine_test.c: f64 against the host's IEEE binary64, the sine), the
+# Berlinan's tests: the engine (tests/host/engine_test.c: f64 against the host's IEEE binary64, the sine, and the
+# parts against RefTool's vectors), the live engine against Berlinan's on every script (tests/host/equiv_test.c), the
 # firmware free of float and double, the whole app in fm1-base's simulator (tests/scenarios/*.bln: the panel, the
 # clock, the saved state), with screenshots in app/build/scenarios/. fm1-base's own tests: base/tests/run_tests.sh.
 #   tests/run_tests.sh
@@ -24,6 +25,9 @@ run() {
 }
 run engine sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Iapp/engine -Iapp/engine/softfloat \
     -o $OUT/engine_test tests/host/engine_test.c app/engine/*.c app/engine/softfloat/*.c -lm && $OUT/engine_test"
+run equiv sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Iapp/engine -Iapp/engine/softfloat \
+    -Itests/host -o $OUT/equiv_test tests/host/equiv_test.c tests/host/script.c app/engine/*.c \
+    app/engine/softfloat/*.c -lm && $OUT/equiv_test"
 # comments included ("IEEE binary64" in prose); the vendored SoftFloat (app/engine/softfloat/, but for platform.h, which is
 # ours) keeps its upstream comments
 # (grep's status 1 is "no match"; 2 is an error, such as a glob matching no file, and must not pass)

@@ -3,6 +3,7 @@
 /* The engine on the host, one test function per part: f64 against the host's own IEEE binary64 (`double`, here
  * only: the firmware has none), and bl_sin where the CC lanes use it. Compiled with -ffp-contract=off, so the host's
  * expressions round after every operation, as Swift's do. */
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,8 @@
 #include "legit.h"
 #include "arrange.h"
 #include "cc.h"
+#include "project.h"
+#include "live.h"
 
 static double dbl(uint64_t b)
 {
@@ -1557,6 +1560,252 @@ static void test_cc_vectors(void)
     free(text);
 }
 
+/* ----------------------------------------------------------- templates --- */
+/* tests/equiv/templates.ref (RefTool templates): bl_template() written in the same form. Fields the port does not
+ * have are written as the Mac's templates have them (nil: "-"; the meter 4/4; preStrikeTicks 10), and the C fields
+ * whose nil reads as a value are written "-" at that value: density 1, reprise 0, phase_steps 0, anchor none */
+static const char *const ROLE_RAW[] = {"bedPluck1", "bedPluck2", "bass", "pad", "lead", "drone", "rhythm", "aux"};
+static const char *const ANCHOR_RAW[] = {"-", "beat1", "beats1and3"};
+
+static int tpl_put(char *buf, int n, int size, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int k = vsnprintf(buf + n, (size_t)(size - n), fmt, ap);
+    va_end(ap);
+    return n + k < size ? n + k : size - 1;
+}
+
+static int tpl_dump(const bl_project_t *p, const char *name, char *buf, int size)
+{
+    int n = 0;
+    n = tpl_put(buf, n, size, "# template %s\nseed %llu\nbpm %016llx\nkey %d", name, (unsigned long long)p->seed,
+                (unsigned long long)f64_from_i64(p->bpm).bits, p->key.root);
+    for (int i = 0; i < p->key.scale.count; i++) n = tpl_put(buf, n, size, " %d", p->key.scale.off[i]);
+    n = tpl_put(buf, n, size, "\nmeter 4 4\n");
+    for (int i = 0; i < p->transposition.n; i++)
+        n = tpl_put(buf, n, size, "event %d %d\n", p->transposition.ev[i].bar, p->transposition.ev[i].offset);
+    if (p->has_arr)
+        n = tpl_put(buf, n, size, "arrangement %d %d %d %d %s -\n", p->arr.enabled, p->arr.min_bars, p->arr.max_bars,
+                    p->arr.ambient, p->arr.reprise ? "1" : "-");
+    else
+        n = tpl_put(buf, n, size, "arrangement -\n");
+    if (p->density.bits == 0x3FF0000000000000u) n = tpl_put(buf, n, size, "density -\n");
+    else n = tpl_put(buf, n, size, "density %016llx\n", (unsigned long long)p->density.bits);
+    n = tpl_put(buf, n, size, "bpart -\ntension -\nlegitimization -\nvelocity -\nslides -\nunported - - -\n");
+    for (int i = 0; i < p->nvoices; i++) {
+        const bl_vcfg_t *v = &p->voice[i];
+        char steps[8] = "-";
+        if (v->phase_steps) snprintf(steps, sizeof steps, "%d", v->phase_steps);
+        n = tpl_put(buf, n, size, "voice %s %s %d %d %d %d %s %s -\ngenerator %s", v->id, ROLE_RAW[v->role],
+                    v->reg_low, v->reg_high, v->ref_c, v->channel, steps, ANCHOR_RAW[v->anchor], GEN_NAME[v->gen.kind]);
+        switch (v->gen.kind) {
+        case BL_GEN_SEED_PROCEDURE: n = tpl_put(buf, n, size, " %d %d\n", v->gen.a, v->gen.b); break;
+        case BL_GEN_HEARTBEAT: n = tpl_put(buf, n, size, "\n"); break;
+        default: n = tpl_put(buf, n, size, " %d\n", v->gen.a); break;
+        }
+        for (int l = 0; l < v->nlanes; l++) {
+            const bl_cclane_t *c = &v->lane[l];
+            n = tpl_put(buf, n, size, "lane %s sine %016llx %016llx %016llx %016llx 10\n",
+                        c->target < v->ncc ? v->cc_name[c->target] : "?", (unsigned long long)c->cycle_bars.bits,
+                        (unsigned long long)c->depth.bits, (unsigned long long)c->center.bits,
+                        (unsigned long long)c->phase.bits);
+        }
+        int order[2] = {0, 1};                          /* the CC map by target */
+        if (v->ncc == 2 && strcmp(v->cc_name[0], v->cc_name[1]) > 0) order[0] = 1, order[1] = 0;
+        for (int k = 0; k < v->ncc; k++)
+            n = tpl_put(buf, n, size, "ccmap %s %d\n", v->cc_name[order[k]], v->cc_num[order[k]]);
+        n = tpl_put(buf, n, size, "unported - - - -\n");
+    }
+    for (int k = 0; k < p->nscenes; k++) {
+        const bl_scene_t *sc = &p->scene[k];
+        int idx[BL_MAX_VOICES];                         /* by voice id, then target */
+        for (int i = 0; i < sc->n; i++) {
+            int j = i;
+            for (; j > 0; j--) {
+                const bl_vcfg_t *a = &p->voice[sc->voice[i]], *b = &p->voice[sc->voice[idx[j - 1]]];
+                int c = strcmp(a->id, b->id);
+                if (!c) c = strcmp(a->cc_name[sc->target[i]], b->cc_name[sc->target[idx[j - 1]]]);
+                if (c >= 0) break;
+                idx[j] = idx[j - 1];
+            }
+            idx[j] = i;
+        }
+        n = tpl_put(buf, n, size, "scene %s\n", sc->name);
+        for (int i = 0; i < sc->n; i++) {
+            const bl_vcfg_t *v = &p->voice[sc->voice[idx[i]]];
+            n = tpl_put(buf, n, size, "value %s %s %016llx\n", v->id, v->cc_name[sc->target[idx[i]]],
+                        (unsigned long long)sc->value[idx[i]].bits);
+        }
+    }
+    int ph[7], np = 0;                                  /* sceneByPhase by phase name */
+    for (int i = 0; i < 7; i++) {
+        if (p->scene_by_phase[i] < 0) continue;
+        int j = np++;
+        for (; j > 0 && strcmp(BL_PHASE_RAW[i], BL_PHASE_RAW[ph[j - 1]]) < 0; j--) ph[j] = ph[j - 1];
+        ph[j] = i;
+    }
+    for (int i = 0; i < np; i++)
+        n = tpl_put(buf, n, size, "phase %s %s\n", BL_PHASE_RAW[ph[i]], p->scene[p->scene_by_phase[ph[i]]].name);
+    return n;
+}
+
+static void test_templates(void)
+{
+    char *want = read_file("tests/equiv/templates.ref");
+    CHECK(want != NULL, "tests/equiv/templates.ref: cannot read");
+    if (!want) return;
+    static char got[16384];
+    int n = 0;
+    for (int t = 0; t < BL_NTPL; t++) {
+        bl_project_t p;
+        bl_template(t, &p);
+        n += tpl_dump(&p, BL_TPL_NAME[t], got + n, (int)sizeof got - n);
+        CHECK(p.nvoices >= 1 && p.nvoices <= BL_MAX_VOICES, "template %s: %d voices", BL_TPL_NAME[t], p.nvoices);
+        for (int i = 0; i < p.nvoices; i++)
+            CHECK(bl_vid(p.voice[i].id) != BL_VID_NONE, "template %s: voice %s has no id code", BL_TPL_NAME[t],
+                  p.voice[i].id);
+        for (int k = 0; k < p.nscenes; k++)
+            CHECK(bl_scn(p.scene[k].name) != BL_SCN_NONE, "template %s: scene %s has no code", BL_TPL_NAME[t],
+                  p.scene[k].name);
+    }
+    int line = 1;
+    const char *g = got, *w = want;
+    for (; *g && *w && *g == *w; g++, w++) line += *g == '\n';
+    CHECK(!*g && !*w, "templates.ref:%d differs: got \"%.60s\", want \"%.60s\"", line, g, w);
+    printf("templates: %d bytes as templates.ref\n", n);
+    free(want);
+}
+
+/* ---------------------------------------------------------------- live --- */
+/* two engines rendered on in windows of 240 to bars: every note and CC the same, and the state hash if state */
+static int live_same(bl_live_t *a, bl_live_t *b, bl_tick_t from, int32_t bars, int state, const char *what)
+{
+    static bl_note_t na[2048], nb[2048];
+    static bl_cc_t ca[2048], cb[2048];
+    long notes = 0;
+    for (bl_tick_t t = from; t < (bl_tick_t)bars * BL_TICKS_PER_BAR; t += 240) {
+        int n = bl_live_render(a, t, t + 240, na, 2048), m = bl_live_render(b, t, t + 240, nb, 2048);
+        int same = n == m && n <= 2048, k = n;
+        for (int i = 0; same && i < n; i++)
+            same = na[i].at == nb[i].at && na[i].voice == nb[i].voice && na[i].midi == nb[i].midi &&
+                   na[i].velocity == nb[i].velocity && na[i].gate == nb[i].gate && na[i].accent == nb[i].accent &&
+                   na[i].ratchet == nb[i].ratchet;
+        n = bl_live_render_cc(a, t, t + 240, ca, 2048);
+        m = bl_live_render_cc(b, t, t + 240, cb, 2048);
+        same = same && n == m && n <= 2048;
+        for (int i = 0; same && i < n; i++)
+            same = ca[i].at == cb[i].at && ca[i].voice == cb[i].voice && ca[i].controller == cb[i].controller &&
+                   ca[i].value == cb[i].value;
+        CHECK(same, "%s: the window at %lld differs", what, (long long)t);
+        if (!same) return -1;
+        notes += k;
+    }
+    CHECK(!state || bl_live_hash(a) == bl_live_hash(b), "%s: the states differ", what);
+    return (int)notes;
+}
+
+/* the queues' bounds: 40 density changes in one bar take the first 32 (the rest -1) and play as the first 32
+ * alone; a third pending recall, a ninth on/off and a ninth advance are refused and change nothing */
+static void test_pending_overflow(void)
+{
+    static bl_live_t a, b;
+    static bl_note_t out[2048];
+    static bl_state_t st;
+    bl_project_t p;
+    bl_template(BL_TPL_FULL, &p);
+    bl_live_init(&a, &p);
+    bl_live_init(&b, &p);
+    for (bl_tick_t t = 0; t < BL_TICKS_PER_BAR; t += 240) {
+        bl_live_render(&a, t, t + 240, out, 2048);
+        bl_live_render(&b, t, t + 240, out, 2048);
+    }
+    int took = 0;
+    for (int i = 0; i < 40; i++) {
+        bl_action_t act = {BL_A_DENSITY, 0, 0, f64_div(f64_from_i64(i + 1), F64(0x4049000000000000)), {0, {0}}, NULL,
+                           0};                          /* (i + 1) / 50 */
+        int r = bl_live_enqueue(&a, &act, 4000 + i);
+        CHECK(r == (i < BL_MAX_PENDING ? 0 : -1), "density change %d: %d", i, r);
+        took += r == 0;
+        if (i < BL_MAX_PENDING) CHECK(bl_live_enqueue(&b, &act, 4000 + i) == 0, "density change %d on b", i);
+    }
+    CHECK(took == 32 && a.nchange == 32, "%d changes taken, %d pending", took, a.nchange);
+    CHECK(live_same(&a, &b, BL_TICKS_PER_BAR, 64, 1, "40 density changes") > 0, "no notes");
+    CHECK(f64_eq(a.density, f64_div(f64_from_i64(32), F64(0x4049000000000000))), "the last density taken binds");
+
+    bl_live_init(&a, &p);
+    bl_live_init(&b, &p);
+    bl_live_capture(&a, &st);
+    bl_action_t recall = {BL_A_RECALL, 0, 0, {0}, {0, {0}}, &st, 0}, on = {BL_A_ARRANGER, 0, 1, {0}, {0, {0}}, NULL, 0},
+                adv = {BL_A_ADVANCE, 0, 0, {0}, {0, {0}}, NULL, 0};
+    for (int i = 0; i < 3; i++) {
+        int r = bl_live_enqueue(&a, &recall, 100);
+        CHECK(r == (i < BL_MAX_RECALLS ? 0 : -1), "recall %d: %d", i, r);
+        if (i < BL_MAX_RECALLS) bl_live_enqueue(&b, &recall, 100);
+    }
+    for (int i = 0; i < 9; i++) {
+        int r = bl_live_enqueue(&a, &on, 100 + i), s = bl_live_enqueue(&a, &adv, 100 + i);
+        CHECK(r == (i < BL_MAX_ENABLES ? 0 : -1) && s == (i < BL_MAX_ADVANCES ? 0 : -1), "on/off, advance %d: %d %d",
+              i, r, s);
+        if (i < BL_MAX_ENABLES) bl_live_enqueue(&b, &on, 100 + i);
+        if (i < BL_MAX_ADVANCES) bl_live_enqueue(&b, &adv, 100 + i);
+    }
+    CHECK(live_same(&a, &b, 0, 64, 1, "recalls, on/offs and advances") > 0, "no notes");
+    printf("pending overflow: %d of 40 density changes taken; sizeof(bl_live_t) %zu, sizeof(bl_state_t) %zu\n", took,
+           sizeof(bl_live_t), sizeof(bl_state_t));
+    CHECK(sizeof(bl_live_t) < 100 * 1024, "bl_live_t is %zu bytes", sizeof(bl_live_t));
+}
+
+/* ids the running engine lacks (tests/equiv/README.md): on the demo trio, a tension for the pad spends a unit and
+ * sounds nothing, voice pad on and the scene closed change nothing; all three show as upcoming until they bind */
+static void test_live_unknown_ids(void)
+{
+    static bl_live_t a, b;
+    static bl_status_t st;
+    static bl_note_t out[2048];
+    bl_project_t p;
+    bl_template(BL_TPL_DEMO, &p);
+    bl_live_init(&a, &p);
+    bl_live_init(&b, &p);
+    bl_live_render(&a, 0, 100, out, 2048);
+    bl_live_render(&b, 0, 100, out, 2048);
+    bl_action_t tension = {BL_A_TENSION, BL_VID_PAD, 0, {0}, {0, {0}}, NULL, 0},
+                on = {BL_A_VOICE_ACTIVE, BL_VID_PAD, 1, {0}, {0, {0}}, NULL, 0},
+                scene = {BL_A_SCENE, 0, 8, {0}, {0, {0}}, NULL, BL_SCN_CLOSED};
+    CHECK(!bl_live_enqueue(&a, &tension, 100) && !bl_live_enqueue(&a, &on, 100) && !bl_live_enqueue(&a, &scene, 100),
+          "enqueue");
+    bl_live_status(&a, &st);
+    CHECK(st.nup == 3 && st.up[0].kind == BL_UP_TENSION && st.up[0].voice == BL_VID_PAD && st.up[0].tick == 3840 &&
+          st.up[1].kind == BL_UP_VOICE_ACTIVE && st.up[1].voice == BL_VID_PAD && st.up[2].kind == BL_UP_SCENE &&
+          st.up[2].scene == BL_SCN_CLOSED, "upcoming: %d", st.nup);
+    CHECK(live_same(&a, &b, 100, 8, 0, "unknown ids") > 0, "no notes");
+    bl_live_status(&a, &st);
+    CHECK(st.nup == 0 && st.tension == 1 && a.ntension == 0 && a.nmorph == 0, "after binding: %d upcoming, tension %d",
+          st.nup, st.tension);
+}
+
+/* a request behind the render head binds at the head's next bar line, never in a bar already rendered
+ * (barBindTick and the transposition's max(requestTick, renderedUpTo)); a request on a bar line binds there */
+static void test_live_bind(void)
+{
+    static bl_live_t e;
+    static bl_status_t st;
+    static bl_note_t out[2048];
+    bl_project_t p;
+    bl_template(BL_TPL_DEMO, &p);
+    bl_live_init(&e, &p);
+    bl_live_render(&e, 0, 2 * BL_TICKS_PER_BAR + 100, out, 2048);
+    bl_action_t key = {BL_A_KEY, 0, 0, {0}, p.key, NULL, 0}, up = {BL_A_TRANSPOSE, 0, 3, {0}, {0, {0}}, NULL, 0},
+                adv = {BL_A_ADVANCE, 0, 0, {0}, {0, {0}}, NULL, 0};
+    CHECK(!bl_live_enqueue(&e, &key, 0) && !bl_live_enqueue(&e, &adv, 50) && !bl_live_enqueue(&e, &up, 0) &&
+          !bl_live_enqueue(&e, &key, 5 * BL_TICKS_PER_BAR), "enqueue");
+    bl_live_status(&e, &st);
+    CHECK(st.nup == 3 && st.up[0].tick == 3 * BL_TICKS_PER_BAR && st.up[1].tick == 3 * BL_TICKS_PER_BAR &&
+          st.up[1].kind == BL_UP_ADVANCE && st.up[2].tick == 5 * BL_TICKS_PER_BAR, "bind ticks: %d upcoming", st.nup);
+    CHECK(bl_live_offset(&e, 2) == 0 && bl_live_offset(&e, 3) == 3, "the transposition binds at bar 3: %d %d",
+          bl_live_offset(&e, 2), bl_live_offset(&e, 3));
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -1572,6 +1821,10 @@ int main(void)
     test_sched_compaction();
     test_arrange_vectors();
     test_cc_vectors();
+    test_templates();
+    test_pending_overflow();
+    test_live_unknown_ids();
+    test_live_bind();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

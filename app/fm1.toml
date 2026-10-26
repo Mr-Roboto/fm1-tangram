@@ -8,7 +8,7 @@ usb_audio_in = false           # the FM-1 makes no sound
 usb_audio_out = false
 words = "words.tsv"
 include = ["engine"]
-o2 = []                        # the engine's units, at -O2, as they are added
+o2 = ["engine/*.c", "engine/softfloat/*.c"]   # the engine, each file its own unit at -O2
 # the site
 tagline = "A Berlin School MIDI sequencer for the FM-1"
 licence = "GPL-2.0-or-later"
