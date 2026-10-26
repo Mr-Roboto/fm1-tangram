@@ -13,8 +13,8 @@
  *
  * As on the Mac:
  * - Play: a fresh engine of the project from tick 0, which sounds RT_PREROLL_MS after the press (INT; EXT: at the
- *   press or the FA, at the tempo in store until the pulses lead); MIDI Start at tick 0 and a clock pulse every 40
- *   ticks (24 PPQ) when INT.
+ *   press or the FA, at the tempo in store until the pulses lead, after an FA short of its first pulse, tick 0);
+ *   MIDI Start at tick 0 and a clock pulse every 40 ticks (24 PPQ) when INT.
  * - Windows [head, end) follow one another; the actions bind at the head (rt_action); a tempo change (INT) and a
  *   loaded project bind at the head's next bar line, the window ending there: the project's engine takes over with
  *   its tick 0 on that bar (origin), the mutes cleared, the channels its own, its tempo adopted (INT; a tempo
@@ -78,7 +78,7 @@ static struct {
     uint32_t dropped, over;              /* events the full queue refused; notes or CC past a window's buffer */
     /* shared with the tick, under plat_lock */
     volatile uint8_t playing, start_req; /* start_req: an FA / FB the main loop is to play */
-    uint8_t started, ext_run, pulsed, ext_ports, npm;
+    uint8_t started, ext_run, pulsed, fa, ext_ports, npm;   /* fa: started by an FA, its first pulse to come */
     uint16_t pre;                        /* INT: ms to tick 0 */
     uint16_t qr, qn, nr, nn;             /* the queue, the at-once one: its first event, how many */
     bl_tick_t tick;                      /* the sounding tick (started), and its thousandths */
@@ -87,7 +87,7 @@ static struct {
     bl_tick_t stop_at;                   /* the arranger's ending: the transport stops there (-1 none) */
     int32_t swap_rate;
     bl_tick_t pulse_tick;                /* EXT: the last pulse's tick */
-    uint32_t last_pulse, pulse_ms[RT_RING];   /* its ms; the latest pulses' ms (npm of them) */
+    uint32_t last_pulse, fa_ms, pulse_ms[RT_RING];   /* its ms; the FA's; the latest pulses' ms (npm of them) */
     uint32_t snd[16][4];                 /* NoteRegistry: a bit per (channel, note) sounding */
 } rt;
 
@@ -224,7 +224,8 @@ static void rt_clock(uint32_t now)       /* the sounding tick, one ms on */
         rt.tempo_tick = rt.swap_tick;
         rt.swap_tick = -1;
     }
-    if (rt.ext && rt.pulsed && now - rt.last_pulse <= RT_FREEWHEEL_MS && rt.tick >= rt.pulse_tick + RT_PULSE) {
+    if (rt.ext && (rt.pulsed || rt.fa) && now - (rt.pulsed ? rt.last_pulse : rt.fa_ms) <= RT_FREEWHEEL_MS
+        && rt.tick >= rt.pulse_tick + RT_PULSE) {
         rt.tick = rt.pulse_tick + RT_PULSE - 1;   /* never past the next pulse */
         rt.frac = 999;
     }
@@ -252,8 +253,9 @@ static void rt_pulse(uint32_t now)       /* EXT: an F8 from the chosen ports */
         else
             rt.pulse_tick += RT_PULSE;
         rt.pulsed = 1;
-        if (rt.pulse_tick < rt.tick) {   /* ... or, the clock past it (it ran free), the next multiple of 40 from
-                                          * the tick reached: never back */
+        rt.fa = 0;
+        if (rt.tick >= rt.pulse_tick + RT_PULSE) {   /* ... or, the clock past its window (it ran free), the next
+                                                      * multiple of 40 from the tick reached: never back */
             bl_tick_t r = rt.tick % RT_PULSE;
             rt.pulse_tick = r ? rt.tick + RT_PULSE - r : rt.tick;
         }
@@ -265,11 +267,16 @@ static void rt_pulse(uint32_t now)       /* EXT: an F8 from the chosen ports */
     rt.last_pulse = now;
 }
 
-static void rt_ext_start(void)           /* EXT: tick 0 now, at the tempo in store until the pulses lead (locked) */
+/* EXT: tick 0 now, at the tempo in store until the pulses lead (locked). After an FA its first pulse is tick 0 (MIDI's
+ * rule): the clock waits for it short of tick 40, RT_FREEWHEEL_MS at most, never ahead of the master */
+static void rt_ext_start(int fa, uint32_t now)
 {
     rt.pre = 0;
     rt.ext_run = rt.started = 1;
     rt.pulsed = 0;
+    rt.fa = (uint8_t)fa;
+    rt.fa_ms = now;
+    rt.pulse_tick = 0;
     rt.tick = 0;
     rt.frac = 0;
 }
@@ -286,7 +293,7 @@ static void rt_midi_in(uint32_t now)     /* clock, Start, Continue, Stop (EXT, f
             rt_pulse(now);
         } else if ((st == 0xFAu || st == 0xFBu) && !rt.playing && !rt.start_req) {   /* (playing: none, as the Mac) */
             rt.start_req = 1;            /* the main loop makes the engine (app_loop) */
-            rt_ext_start();
+            rt_ext_start(1, now);
         } else if (st == 0xFCu) {
             if (rt.playing)
                 rt_halt();
@@ -507,7 +514,7 @@ void rt_play(void)                       /* Transport.play: always from tick 0, 
         rt.pre = RT_PREROLL_MS;
         rt.started = 0;
     } else if (!rt.start_req) {          /* PLAY in EXT: tick 0 now (an FA has started the clock already) */
-        rt_ext_start();
+        rt_ext_start(0, plat_ms());
     }
     rt.start_req = 0;
     rt.playing = 1;
