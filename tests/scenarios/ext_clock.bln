@@ -15,17 +15,124 @@ expect tick 1534
 expect bpm 96
 expect tick_rate 1536
 expect midi_out >10
+# then a clock from the jack (a DAW started after the FM-1): its first pulse comes long after tick 0, so the clock
+# takes up from the next multiple of 40 and never steps back; the notes keep going out
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+expect tick 2038
+expect midi_out >29
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+expect tick 2518
+expect midi_out >37
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+expect tick 2998
+expect midi_out >41
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+expect tick 3478
+expect midi_out >49
 tap PLAY
 expect playing 0
-# Start from the jack (clock from USB around it, not followed)
+# Start from the jack (clock from USB around it, not followed), at the tempo in store: the one followed last (2 ticks
+# a ms)
 midi USB F8
 wait 10
 midi USB F8
 wait 10
 midi TRS FA
 expect playing 1
-expect tick 1
-# (the first pulse, at tick 30 or so: tick 0 passed already, held at 39 to the next)
+expect tick 2
+# (the first pulse comes at tick 30 or so: tick 0 passed already, so it is tick 40, and the clock goes on from there)
 wait 18
 midi TRS F8
 wait 18
@@ -259,28 +366,28 @@ midi TRS F8
 wait 18
 midi TRS F8
 wait 18
-# the notes went out on the followed clock; the 96th pulse is tick 3800, 19 ms ago (a "midi" line runs 2 ms): 38
+# the notes went out on the followed clock; the 96th pulse is tick 3840, 19 ms ago (a "midi" line runs 2 ms): 38
 # ticks on, then held short of the next
 expect midi_out >20
 expect tick_rate 2000
 expect bpm 125
-expect tick 3838
+expect tick 3878
 wait 10
-expect tick 3839
-# no pulse: held on 3839 to 500 ms after the last, then on at 2 ticks per ms (1529 ms of the 2 s: 3839 + 3058)
+expect tick 3879
+# no pulse: held on 3879 to 500 ms after the last, then on at 2 ticks per ms (1529 ms of the 2 s: 3879 + 3058)
 wait 2000
 expect playing 1
 expect tick_rate 2000
 expect bpm 125
-expect tick 6897
+expect tick 6937
 expect clocks_out 0
-# the pulses again: on from the tick reached (6899: the pulse is 6920, the next multiple of 40), never back
+# the pulses again: on from the tick reached (6939: the pulse is 6960, the next multiple of 40), never back
 midi TRS F8
-expect tick 6922
+expect tick 6962
 expect tick_rate 2000
 wait 18
 midi TRS F8
-expect tick 6962
+expect tick 7002
 midi TRS FC
 expect playing 0
 wait 1

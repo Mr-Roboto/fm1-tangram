@@ -247,14 +247,15 @@ static void rt_pulse(uint32_t now)       /* EXT: an F8 from the chosen ports */
         rt.bpm = (rt.rate + 8) / 16;     /* the followed tempo (Transport's liveBPM = the estimate) */
     }
     if (rt.ext_run) {
-        if (!rt.pulsed) {                /* the first pulse after the start: tick 0 (passed already: on from there) */
-            rt.pulse_tick = 0;
-            rt.pulsed = 1;
-        } else if (now - rt.last_pulse > RT_FREEWHEEL_MS) {   /* back after a freewheel: on from the tick reached */
+        if (!rt.pulsed || now - rt.last_pulse > RT_FREEWHEEL_MS)
+            rt.pulse_tick = 0;           /* the first pulse after the start, or after a freewheel: tick 0 ... */
+        else
+            rt.pulse_tick += RT_PULSE;
+        rt.pulsed = 1;
+        if (rt.pulse_tick < rt.tick) {   /* ... or, the clock past it (it ran free), the next multiple of 40 from
+                                          * the tick reached: never back */
             bl_tick_t r = rt.tick % RT_PULSE;
             rt.pulse_tick = r ? rt.tick + RT_PULSE - r : rt.tick;
-        } else {
-            rt.pulse_tick += RT_PULSE;
         }
         if (rt.tick < rt.pulse_tick) {
             rt.tick = rt.pulse_tick;
