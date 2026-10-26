@@ -11,6 +11,5 @@ include = ["engine"]
 o2 = []                        # the engine's units, at -O2, as they are added
 # the site
 tagline = "A Berlin School MIDI sequencer for the FM-1"
-repo = "https://github.com/jpisa/fm1-berlinan"
 licence = "GPL-2.0-or-later"
 credits = "Built on fm1-base and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments)."

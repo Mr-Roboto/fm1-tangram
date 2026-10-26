@@ -31,6 +31,10 @@ void app_say(const char *a, const char *b);
 void app_tick(void);
 void app_loop(void);
 
-/* the host simulator's part (app/host.c): Berlinan's checks for "expect" */
+/* the host simulator's part (app/host.c): Berlinan's checks, its commands, a reboot */
 #define APP_HOST_EXPECT
 int app_expect(const char *what, int *got);
+#define APP_HOST_CMD
+int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d);   /* 1 = handled */
+#define APP_HOST_REBOOT
+void app_host_reboot(void);              /* the project forgotten, as RAM is at a restart */
