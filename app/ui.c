@@ -70,7 +70,12 @@ static const char *const FORM_NAME[] = {"", "CLASSIC ARC", "SLOW BUILD", "AMBIEN
 
 /* a hold: a button's card, a voice key's select without a tap */
 #define HELP_HOLD 1000u
-#define DENSITY_HOLD 150u                /* MASTER: the ms a step is held before it is sent */
+#define DENSITY_HOLD 150u                /* MASTER: the ms a move is held before it is sent */
+#define POT_STEP 41u                     /* MASTER's counts in one step (4096 / 100) */
+#define POT_MOVE 60u                     /* a move: a step and a half from the place taken */
+#define POT_SETTLE_MS 30u                /* at boot: the reading held within a step this long (two frames) is the
+                                          * pot's place; the device's smoothing converges within a few ms */
+enum { POT_BOOT, POT_REST, POT_MOVING };
 
 static struct {
     uint8_t view, sel;                   /* the page; the selected voice (its key) */
@@ -82,8 +87,8 @@ static struct {
     uint8_t combo[NB];                   /* the voice key held when the button went down, plus one */
     uint32_t turn_t;                     /* the last knob turn */
     uint8_t help;                        /* a button's card is up: the button + 1 */
-    uint8_t pot, pot_sent, pot_settled;  /* MASTER: the step it is on (since pot_t), the step last sent (or its first
-                                          * settled place), that place taken */
+    uint8_t pot_state, pot_sent;         /* MASTER: a POT_; the step last sent (or of the place taken at boot) */
+    uint16_t pot_ref, pot_cand;          /* the reading where the pot was last taken; where it is going (since pot_t) */
     uint32_t pot_t;
     char msg[2][24];
     uint32_t msg_until;
@@ -556,9 +561,10 @@ static void button(int b)                /* a button's job, on its release (PLAY
         saved(v);
         break;
     case B_OCTDN:
-        if (!undo_depth())
+        v = undo_pop();
+        if (v == UNDO_NONE)
             warn("UNDO", "NOTHING TO UNDO");
-        else if (undo_pop())
+        else if (v == UNDO_FULL)
             warn("UNDO", "QUEUE FULL");
         else
             say("UNDO", rt_playing() ? "NEXT BAR" : 0);
@@ -598,36 +604,56 @@ static void help_tick(uint32_t btn, uint32_t keys)
         }
 }
 
-/* MASTER's place as a density step, 0-100 %, rounded: an end zone at each end (0-20: 0 %; from 4076: 100 %), as the
- * device's smoothed pot tops out at about 4092 (Ruling AB) */
-static uint32_t pot_step(void)
+/* MASTER's reading (0..4096) as a density step, 0-100 %, rounded: an end zone at each end (0-20: 0 %; from 4076:
+ * 100 %), as the device's smoothed pot tops out at about 4092 (Ruling AB) */
+static uint32_t pot_step(uint32_t m)
 {
-    uint32_t s = (plat_master() * 100u + 2048u) / 4096u;
+    uint32_t s = (m * 100u + 2048u) / 4096u;
     return s > 100u ? 100u : s;
 }
 
-/* MASTER: density in steps of 1 %, sent when the pot has held a new step DENSITY_HOLD ms (setDensity: playing, at
- * the next bar). At boot the saved density wins (Ruling AD): the platform reports the pot's middle until its
- * smoothing has caught up, so the first step held DENSITY_HOLD ms is taken as the pot's place, not sent; the pot
- * takes over once it moves from there */
+static uint32_t pot_dist(uint32_t a, uint32_t b) { return a > b ? a - b : b - a; }
+
+/* MASTER: density in steps of 1 %, with hysteresis on the reading itself: the place the pot was last taken at
+ * (pot_ref) is left only by a move of POT_MOVE counts or more, or into an end step (0 %, 100 %: always reachable), so
+ * a pot resting on a step's edge never flips the density. A move is sent once the reading has held within a step of
+ * where it went DENSITY_HOLD ms (setDensity: playing, at the next bar). At boot the saved density wins (Ruling AD):
+ * the platform reports the pot's middle until its smoothing has caught up, so the first reading that holds within a
+ * step for POT_SETTLE_MS is taken as the pot's place, not sent; a move from there on is the pot's */
 static void pot(void)
 {
-    uint32_t s = pot_step();
+    uint32_t m = plat_master(), now = plat_ms(), s = pot_step(m);
     char t[8];
-    if (s != ui.pot) {
-        ui.pot = (uint8_t)s;
-        ui.pot_t = plat_ms();
+    if (ui.pot_state == POT_BOOT) {      /* still converging: wait until it holds, then take the place */
+        if (pot_dist(m, ui.pot_cand) > POT_STEP) {
+            ui.pot_cand = (uint16_t)m;
+            ui.pot_t = now;
+        } else if (now - ui.pot_t >= POT_SETTLE_MS) {
+            ui.pot_state = POT_REST;
+            ui.pot_ref = (uint16_t)m;
+            ui.pot_sent = (uint8_t)s;
+        }
         return;
     }
-    if (plat_ms() - ui.pot_t < DENSITY_HOLD)
-        return;
-    if (!ui.pot_settled) {               /* the pot's first settled place: nothing sent */
-        ui.pot_settled = 1;
-        ui.pot_sent = (uint8_t)s;
+    if (ui.pot_state == POT_REST) {      /* a move away from the place taken: from here */
+        if (s == ui.pot_sent || (pot_dist(m, ui.pot_ref) < POT_MOVE && s != 0u && s != 100u))
+            return;
+        ui.pot_state = POT_MOVING;
+        ui.pot_cand = (uint16_t)m;
+        ui.pot_t = now;
         return;
     }
+    if (pot_dist(m, ui.pot_cand) > POT_STEP) {   /* still moving */
+        ui.pot_cand = (uint16_t)m;
+        ui.pot_t = now;
+        return;
+    }
+    if (now - ui.pot_t < DENSITY_HOLD)
+        return;
+    ui.pot_state = POT_REST;             /* it holds: the new place */
+    ui.pot_ref = (uint16_t)m;
     if (s == ui.pot_sent)
-        return;
+        return;                          /* (back where it was) */
     ui.pot_sent = (uint8_t)s;
     itoa_u(s, t);
     if (proj_set_density((int)s))
@@ -848,7 +874,8 @@ static void draw_main(void)
 void ui_init(void)
 {
     memset(&ui, 0, sizeof ui);
-    ui.pot = (uint8_t)pot_step();        /* (not settled yet: pot() takes its place once it holds a step) */
+    ui.pot_state = POT_BOOT;             /* (pot() takes its place once the reading holds) */
+    ui.pot_cand = (uint16_t)plat_master();
     ui.pot_t = plat_ms();
     sel_fix();
     lcd_fill(0, 0, 240, 240, K_BG);

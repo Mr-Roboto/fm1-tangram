@@ -1,8 +1,10 @@
 # The encoders and the pot (spec, Controls: Encoders and the pot), one expect a row:
 #   MASTER     density 0-100 % in steps of 1 % ((plat_master() * 100 + 2048) / 4096: 0 % up to 20, 100 % from
-#              4076, the device's pot tops out at about 4092), sent when the step changes and the pot has held it
-#              150 ms; playing, at the next bar. At boot the saved density wins: the pot's first settled place is
-#              taken, not sent, and it takes over once it moves from there (Ruling AD)
+#              4076, the device's pot tops out at about 4092), with hysteresis on the reading: the place last taken
+#              is left only by a move of 60 counts (a step and a half) or into an end step; a move is sent once it
+#              has held (within a step) 150 ms; playing, at the next bar. At boot the saved density wins: the first
+#              reading that holds within a step for 30 ms is the pot's place, taken, not sent; it takes over once it
+#              moves from there (Rulings AB, AD)
 #   SELECT     the selected voice (the template's, in key order); HOME held: the tempo (HOME then no page)
 #   ALGORITHM  the scale mode (the key's root kept), round
 #   PRESETS    the template (a fresh seed), round; while playing it takes over at the next bar
@@ -19,7 +21,7 @@ expect density_pct 100
 wait 150
 expect density_pct 25
 expect has_density 1
-# a pot that does not settle on a step sends nothing until it does
+# a pot still moving sends nothing until it holds
 master 2000
 wait 100
 master 2100
@@ -27,19 +29,82 @@ wait 100
 expect density_pct 25
 wait 60
 expect density_pct 51
-# the top and the bottom of the device's travel reach 100 % and 0 %
+# a pot resting on a step's edge (2100 is 51 %, 2110 52 %: a few counts of noise), for 2 s: nothing new
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+master 2110
+master 2100
+wait 200
+expect density_pct 51
+# less than a step and a half is no move (2140: 52 %); more is (2170: 53 %)
+master 2140
+wait 200
+expect density_pct 51
+master 2170
+wait 200
+expect density_pct 53
+# the ends of the travel: 100 % and 0 %, reached by a small last move into them too
+master 4040
+wait 200
+expect density_pct 99
 master 4092
 wait 200
 expect density_pct 100
 master 4060
 wait 200
-expect density_pct 99
-master 8
-wait 200
-expect density_pct 0
-master 30
+expect density_pct 100
+master 60
 wait 200
 expect density_pct 1
+master 10
+wait 200
+expect density_pct 0
 master 2048
 wait 200
 expect density_pct 50
@@ -134,8 +199,8 @@ wait 200
 expect density_pct 75
 tap PLAY
 # ---- at boot the saved density wins (Ruling AD): 35 % saved; at the restart the platform reports the pot's middle
-# (2048, as the device's before its smoothing catches up), then its place (3000, 73 %) 40 ms on; the project's 35 %
-# stays until the pot moves from where it settled
+# (2048, as the device's before its smoothing catches up), then its place (3000, 73 %); the pot then rests on a
+# step's edge (3000 73 %, 3020 74 %) for 2 s: the project's 35 % stays
 wait 100
 master 1434
 wait 200
@@ -144,11 +209,67 @@ tap SAVE
 master 2048
 reboot
 master 3000
-wait 1000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+master 3020
+master 3000
+wait 500
 expect density_pct 35
-master 3010
+# a real move from where it settled is the pot's
+master 1000
 wait 200
+expect density_pct 24
+# a move right after the restart (40 ms on, before the pot has been still long) is the pot's too
+master 2048
+reboot
 expect density_pct 35
+master 3000
 master 1000
 wait 200
 expect density_pct 24

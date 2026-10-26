@@ -519,15 +519,15 @@ int undo_pop(void)                      /* the point kept when the engine's queu
 {
     uint32_t at;
     if (!undo_n)
-        return -1;
+        return UNDO_NONE;
     at = undo_last();
     if (state_unpack(undo_mem + at + 2, (int)undo_len(at), &proj_st)) {
-        undo_n--;                        /* (a point that does not unpack: gone) */
+        undo_n--;                        /* (a point that does not unpack: gone, as if there were none) */
         undo_used = (uint16_t)at;
-        return -1;
+        return UNDO_NONE;
     }
     if (proj_recall(&proj_st))
-        return -1;
+        return UNDO_FULL;
     undo_n--;
     undo_used = (uint16_t)at;
     return 0;

@@ -715,10 +715,13 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         if (a[0] == 's' ? slot_store(atoi(b)) : slot_recall(atoi(b)))
             printf("  slot %s %s: refused (no such slot, an empty one, or the engine's queue full)\n", a, b);
     } else if (!strcmp(cmd, "undo") && (!strcmp(a, "push") || !strcmp(a, "pop"))) {
-        if (a[1] == 'u')
-            undo_push();
-        else if (undo_pop())
-            printf("  undo pop: nothing to undo (or the engine's queue full)\n");
+        int r = a[1] == 'u' ? undo_push() : undo_pop();
+        if (a[1] == 'u' && r)
+            printf("  undo push: the state too big for a point\n");
+        else if (r == UNDO_NONE)
+            printf("  undo pop: nothing to undo\n");
+        else if (r == UNDO_FULL)
+            printf("  undo pop: the engine's queue full (the point kept)\n");
     } else if (!strcmp(cmd, "save")) {
         int r = proj_save();
         if (r < 0)

@@ -81,8 +81,9 @@ int undo_push(void);                     /* the undo point before every destruct
                                           * recall, Dice), 20 deep, the oldest dropped; -1: none taken (a state the
                                           * format cannot hold) */
 int undo_refused(void);                  /* the last undo point was not taken (the pushes inside recall and Dice) */
-int undo_pop(void);                      /* the last undo point recalled at the next bar; -1: none, or the engine's
-                                          * queue full (the point kept) */
+enum { UNDO_NONE = -1, UNDO_FULL = -2 };
+int undo_pop(void);                      /* the last undo point recalled at the next bar: 0; UNDO_NONE nothing to
+                                          * undo; UNDO_FULL the engine's queue full (the point kept) */
 int undo_depth(void);                    /* the undo points held (UIState.canUndo: more than none) */
 
 /* the panel and the screen (ui.c) */
