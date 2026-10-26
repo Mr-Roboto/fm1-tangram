@@ -1,0 +1,16 @@
+# Berlinan's build settings (fm1-base's tools/build.py: ./build.sh)
+name = "BERLINAN"              # the build's files: berlinan.fwsc, berlinan-X.Y.fwsc
+id_prefix = "FM-1_8"           # package identity: dev FM-1_800, releases FM-1_8XXYYZZ
+usb_manufacturer = "Berlinan"
+usb_product = "Berlinan FM-1"
+ble = false                    # MIDI goes out over USB only
+usb_audio_in = false           # the FM-1 makes no sound
+usb_audio_out = false
+words = "words.tsv"
+include = ["engine"]
+o2 = []                        # the engine's units, at -O2, as they are added
+# the site
+tagline = "A Berlin School MIDI sequencer for the FM-1"
+repo = "https://github.com/jpisa/fm1-berlinan"
+licence = "GPL-2.0-or-later"
+credits = "Built on fm1-base and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments)."

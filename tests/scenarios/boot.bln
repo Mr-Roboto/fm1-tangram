@@ -1,0 +1,4 @@
+# The app boots: the screen comes up, nothing plays.
+wait 500
+shot boot.png
+expect playing 0
