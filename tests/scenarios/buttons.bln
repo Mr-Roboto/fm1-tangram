@@ -1,0 +1,87 @@
+# The buttons (spec, Controls: Buttons), one expect a row, each through the Mac's way (UIState):
+#   PLAY    play / stop, on the press
+#   REC     the B part (fireBPart): its walk [5, 3, 0] from the next bar, degree 6 first
+#   EDIT    re-roll every unlocked voice (rerollAllUnlocked: an undo point, then regenerate each one the mirror shows
+#           unlocked, in voice order)
+#   SEL     on the Voice page: the selected voice locked / unlocked (elsewhere, alone: nothing)
+#   SAVE    the project to flash (stopped: at once)
+#   OCT-    undo (the last undo point recalled at the next bar); none: said
+#   OCT+    Dice (newSeed: an undo point, a fresh seed; playing, its state at the next bar)
+#   OCT- with OCT+: neither (fm1-base's update mode, after 5 s)
+#   HOME ENV ARP LFO SEQ FX GLO   the pages 0-6, the page's button lit
+# The buttons act on their release (PLAY on its press), as AMB-1's; a voice key held at the press makes the combo.
+proj template demo 0x5EED1234
+# ---- the pages
+tap ENV
+expect view 1
+tap ARP
+expect view 2
+tap LFO
+expect view 3
+tap SEQ
+expect view 4
+tap FX
+expect view 5
+tap GLO
+expect view 6
+tap HOME
+expect view 0
+# ---- SAVE stopped: written at once
+expect store_writes 0
+tap SAVE
+expect store_writes 1
+# ---- PLAY
+tap PLAY
+expect playing 1
+wait 500
+# ---- REC: the B part, from the next bar
+expect degree 1
+tap REC
+wait 2700
+expect degree 6
+# ---- EDIT: Pluck 2 locked (on the Voice page with SEL), then every other voice re-rolled
+tap ENV
+turn SELECT 1
+expect voice_sel 1
+tap SEL
+expect locked1 1
+tap HOME
+tap SEL
+expect locked1 1
+expect undo_depth 0
+expect pat_hash_hi 0xabd25f74
+tap EDIT
+expect undo_depth 1
+expect req0 2
+expect req1 0
+expect req2 2
+wait 6000
+expect gen0 2
+expect gen1 1
+expect gen2 2
+# ---- OCT-: the re-roll undone at the next bar (the patterns as they were at EDIT)
+expect pat_hash_hi 0x2e692ff0
+tap OCT-
+expect undo_depth 0
+wait 2700
+expect pat_hash_hi 0xabd25f74
+# nothing left: said
+expect warns 0
+tap OCT-
+expect warns 1
+# ---- OCT+: Dice, an undo point, a fresh seed (from the clock and the pot: the simulator's are the test's)
+expect seed_lo 0x5EED1234
+tap OCT+
+expect undo_depth 1
+expect seed_lo 0xe815d91a
+# ---- OCT- with OCT+: neither undoes nor dices
+press OCT-
+press OCT+
+wait 300
+release OCT+
+release OCT-
+expect undo_depth 1
+expect seed_lo 0xe815d91a
+# ---- PLAY again: stopped
+tap PLAY
+expect playing 0

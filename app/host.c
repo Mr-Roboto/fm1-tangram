@@ -27,6 +27,17 @@
  *                            only, as text: per voice "ID LENGTH N\n", then per note "POSITION GATE DEGREE OCTAVE
  *                            ACCIDENTAL VELOCITY ACCENT RATCHET\n"
  *   slot_patK_hi slot_patK_lo   the same over slot K's state
+ *   view voice_sel help warns   the panel (ui.c): the page (0 Perform ... 6 Setup); the selected voice (its key);
+ *                            the button whose card is up, plus one (0 none); what was refused and said
+ *   degree pending_degree    the degree in force at the render head's bar (1 + the offset); the next bar's when it
+ *                            differs, else 0 (stopped: 1, 0)
+ *   mutedV activeV lockedV genV reqV blankV   voice key V (0-6: Pluck 1, Pluck 2, Bass, Pad, Lead, Drone,
+ *                            Heartbeat) in the transport and the mirror (the running engine's snapshot): muted; 1
+ *                            playing, 0 held back (WAITS), -1 not in the running engine (stopped: 1 in the template);
+ *                            locked; its generation, its pending request (0 none, 1 blank, 2 regenerate) and its
+ *                            blank cycle (-1 for each: not there)
+ *   tension_left arr_phase   the tension left (stopped: the budget, 2); the arranger's phase (-1 none, stopped)
+ *   key_ledK                 key K's light as last set: 0 off, 1 dim, 2 lit
  * Its commands:
  *   selfrender TEMPLATE BARS (stopped) the template on its own seed, rendered by the app's engine for BARS bars in
  *                            windows of 240 ticks, from tick 0 to the end or the arranger's ending; selfnotes its
@@ -523,9 +534,9 @@ static int proj_expect(const char *what, int *got)
     else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])
         *got = slot_used(what[9] - '0');
     else if (!strncmp(what, "slot_lit", 8) && what[8] >= '0' && what[8] < '0' + PROJ_SLOTS && !what[9])
-        *got = (int)(led_keys >> (SLOT_KEY0 + what[8] - '0') & 1u);
+        *got = (int)(ui.led_k >> (SLOT_KEY0 + what[8] - '0') & 1u);
     else if (!strcmp(what, "save_lit"))
-        *got = (int)(led_buttons >> B_SAVE & 1u);
+        *got = (int)(ui.led_b >> B_SAVE & 1u);
     else if (!strcmp(what, "undo_depth"))
         *got = undo_n;
     else if (!strcmp(what, "stale"))
@@ -535,10 +546,65 @@ static int proj_expect(const char *what, int *got)
     return 1;
 }
 
+/* a check of voice key V (0-6, role order) or key K (0-26): its number in *n, else 0 */
+static int indexed(const char *what, const char *name, int max, int *n)
+{
+    size_t l = strlen(name);
+    char *end;
+    long v;
+    if (strncmp(what, name, l) || what[l] < '0' || what[l] > '9')
+        return 0;
+    v = strtol(what + l, &end, 10);
+    if (*end || v >= max)
+        return 0;
+    *n = (int)v;
+    return 1;
+}
+
+static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mirror refreshed */
+{
+    int v;
+    mirror();
+    if (!strcmp(what, "view"))
+        *got = ui.view;
+    else if (!strcmp(what, "voice_sel"))
+        *got = ui.sel;
+    else if (!strcmp(what, "degree"))
+        *got = degree_now();
+    else if (!strcmp(what, "pending_degree"))
+        *got = degree_pending();
+    else if (!strcmp(what, "tension_left"))
+        *got = tension_left();
+    else if (!strcmp(what, "arr_phase"))
+        *got = ui.st_ok && ui_st.has_arr ? ui_st.phase : -1;
+    else if (!strcmp(what, "warns"))
+        *got = (int)ui.warns;
+    else if (!strcmp(what, "help"))
+        *got = ui.help;
+    else if (indexed(what, "muted", NVKEYS, &v))
+        *got = key_vid(v) != BL_VID_NONE && rt_muted(key_vid(v));
+    else if (indexed(what, "active", NVKEYS, &v))
+        *got = v_active(v);
+    else if (indexed(what, "locked", NVKEYS, &v))
+        *got = v_locked(v);
+    else if (indexed(what, "gen", NVKEYS, &v))
+        *got = vstat(v) < 0 ? -1 : (int)ui_st.voice[vstat(v)].generation;
+    else if (indexed(what, "req", NVKEYS, &v))
+        *got = vstat(v) < 0 ? -1 : ui_st.voice[vstat(v)].pending;
+    else if (indexed(what, "blank", NVKEYS, &v))
+        *got = vstat(v) < 0 ? -1 : ui_st.voice[vstat(v)].blank;
+    else if (indexed(what, "key_led", NKEYS, &v))
+        *got = ui.led_k >> v & 1u ? 2 : (int)(ui.dim_k >> v & 1u);
+    else
+        return 0;
+    return 1;
+}
+
 static int rt_expect(const char *what, int *got);
 int app_expect(const char *what, int *got)
 {
-    return proj_expect(what, got) || rt_expect(what, got);   /* (the project: the main loop's, no lock) */
+    return ui_expect(what, got) || proj_expect(what, got) || rt_expect(what, got);   /* (the project: the main
+                                                                                       * loop's, no lock) */
 }
 
 static int rt_expect(const char *what, int *got)   /* the transport's, under the lock */

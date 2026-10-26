@@ -76,9 +76,18 @@ int proj_dice(void);                     /* UIState.newSeed: an undo point, then
 int slot_store(int k);                   /* saveSnapshot: the state at the render head; 0, -1 */
 int slot_recall(int k);                  /* recallSnapshot: an undo point, the state at the next bar; 0, -1 */
 int slot_used(int k);
-void undo_push(void);                    /* the undo point before every destructive action (regenerate, reroll,
-                                          * recall, Dice), 20 deep, the oldest dropped */
+int undo_push(void);                     /* the undo point before every destructive action (regenerate, reroll,
+                                          * recall, Dice), 20 deep, the oldest dropped; -1: none taken (a state the
+                                          * format cannot hold) */
+int undo_refused(void);                  /* the last undo point was not taken (the pushes inside recall and Dice) */
 int undo_pop(void);                      /* the last undo point recalled at the next bar; -1: none (or dropped) */
+int undo_depth(void);                    /* the undo points held (UIState.canUndo: more than none) */
+
+/* the panel and the screen (ui.c) */
+void ui_init(void);
+void ui_frame(void);
+void ui_input_only(void);
+void ui_say(const char *a, const char *b);
 
 /* the contract: the platform calls these */
 void app_init(void);                     /* boot: the saved project (or the defaults) */

@@ -1,0 +1,126 @@
+# The encoders and the pot (spec, Controls: Encoders and the pot), one expect a row:
+#   MASTER     density 0-100 % in steps of 1 % (plat_master() * 100 / 4096), sent when the step changes and the pot
+#              has held it 150 ms (at boot its place is taken as it is: nothing sent); playing, at the next bar
+#   SELECT     the selected voice (the template's, in key order); HOME held: the tempo (HOME then no page)
+#   ALGORITHM  the scale mode (the key's root kept), round
+#   PRESETS    the template (a fresh seed), round; while playing it takes over at the next bar
+#   KNOB 1-4   the page's four values the Mac can change: Perform tempo, AUTO, form, ambient (form and ambient
+#              stopped only); Voice the selected voice's channel; Setup root, sync (stopped only), EXT input,
+#              lights. The rest are shown, their knobs do nothing.
+proj template demo 0x5EED1234
+# ---- MASTER: the pot at 2048 from the start sends nothing
+wait 300
+expect density_pct 100
+expect has_density 0
+master 1024
+expect density_pct 100
+wait 150
+expect density_pct 25
+expect has_density 1
+# a pot that does not settle on a step sends nothing until it does
+master 2000
+wait 100
+master 2100
+wait 100
+expect density_pct 25
+wait 60
+expect density_pct 51
+master 4096
+wait 200
+expect density_pct 100
+master 0
+wait 200
+expect density_pct 0
+master 2048
+wait 200
+expect density_pct 50
+# ---- SELECT: the voices the Demo trio has, in key order, kept within them
+expect voice_sel 0
+turn SELECT 1
+expect voice_sel 1
+turn SELECT 5
+expect voice_sel 2
+turn SELECT -1
+expect voice_sel 1
+# HOME + SELECT: the tempo (from the Voice page: HOME's release then shows no page)
+tap ENV
+press HOME
+turn SELECT 3
+release HOME
+expect bpm_proj 93
+expect bpm 93
+expect view 1
+expect voice_sel 1
+# ---- ALGORITHM: the mode, A kept, round
+expect mode 0
+turn ALGO 1
+expect mode 1
+expect root 9
+turn ALGO -2
+expect mode 9
+# ---- KNOB 1 on the Voice page: Pluck 2's channel (the selected voice)
+expect chan1 1
+turn K1 2
+expect chan1 3
+# its loop length (KNOB 2): shown, not editable
+turn K2 3
+expect chan1 3
+# ---- Perform: AUTO on, the form, ambient mode (stopped)
+tap HOME
+expect arr_on 0
+turn K2 1
+expect arr_on 1
+expect form 0
+turn K3 1
+expect form 1
+turn K3 1
+expect form 2
+expect arr_on 1
+turn K4 1
+expect arr_ambient 1
+# ---- Setup: root, sync, the EXT input, lights
+tap GLO
+turn K1 -2
+expect root 7
+turn K2 1
+expect sync 1
+turn K2 -1
+expect sync 0
+expect ext_ports 5
+turn K3 -1
+expect ext_ports 4
+turn K3 -1
+expect ext_ports 1
+turn K4 1
+expect lights 2
+turn K4 -2
+expect lights 0
+turn K4 1
+expect lights 1
+# ---- PRESETS stopped: the template at once (Full ensemble: its Pad on the fourth key)
+turn PRESET 1
+expect tpl 1
+expect key_led3 2
+turn PRESET -2
+expect tpl 2
+turn PRESET 1
+expect tpl 0
+# while playing: the project's at once, the running engine's at the next bar (the Pad comes in there)
+tap PLAY
+wait 500
+expect active3 -1
+turn PRESET 1
+expect tpl 1
+expect active3 -1
+wait 2700
+expect active3 1
+# the form while playing: stopped only, said
+tap HOME
+expect warns 0
+turn K3 1
+expect warns 1
+# the density while playing: the project's at once
+master 3072
+wait 200
+expect density_pct 75
+tap PLAY

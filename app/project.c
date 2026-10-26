@@ -50,6 +50,7 @@ static uint8_t undo_mem[UNDO_BYTES] PLAT_POOL;   /* the undo points, the oldest 
                                                   * bytes */
 static uint16_t undo_used;               /* bytes */
 static uint8_t undo_n;
+static uint8_t undo_lost;                /* the last push took no point (undo_refused) */
 static uint8_t proj_stale;               /* transportStale */
 static uint8_t proj_unseeded;            /* the defaults: their seed is drawn at the first Play */
 static uint8_t proj_saving;              /* a SAVE made while playing, written at the stop */
@@ -471,14 +472,19 @@ static uint32_t undo_len(uint32_t at)   /* the length of the point at at */
     return n;
 }
 
-void undo_push(void)
+int undo_refused(void) { return undo_lost; }
+int undo_depth(void) { return undo_n; }
+
+int undo_push(void)
 {
     uint16_t n16;
     uint32_t drop;
     int n;
     rt_capture(&proj_st);
+    undo_lost = 1;
     if ((n = state_pack(&proj_st, proj_buf, STATE_MAX)) < 0)
-        return;                          /* (a state the format cannot hold: no point) */
+        return -1;                       /* (a state the format cannot hold: no point) */
+    undo_lost = 0;
     while (undo_n && (undo_n == PROJ_UNDO || undo_used + 2u + (uint32_t)n > UNDO_BYTES)) {   /* the oldest dropped */
         drop = 2u + undo_len(0);
         memmove(undo_mem, undo_mem + drop, undo_used - drop);
@@ -490,6 +496,7 @@ void undo_push(void)
     memcpy(undo_mem + undo_used + 2, proj_buf, (uint32_t)n);
     undo_used = (uint16_t)(undo_used + 2u + (uint32_t)n);
     undo_n++;
+    return 0;
 }
 
 int undo_pop(void)

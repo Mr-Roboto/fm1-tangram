@@ -1,0 +1,178 @@
+# The keys (spec, Controls: Keys, three zones), one expect a row, each through the Mac's way (UIState):
+# - F3..B3, the voices in role order Pluck 1, Pluck 2, Bass, Pad, Lead, Drone, Heartbeat: a tap mutes and unmutes
+#   (the transport's mute), brings in a voice the arranger holds back (WAITS: setVoiceActive on, at the next bar);
+#   held, the voice is selected, and with EDIT / REC / SEL it is regenerated (an undo point first) / blanked for a
+#   cycle / locked. A role the template lacks: its key dark, inert.
+# - C4..B4 white, the degrees 1-7: transpose(degreeOffset: n - 1) at the next bar (pending, then current).
+# - C#4 D#4 F#4 G#4 A#4, the template's CC scenes in its order (Ambient drift's two: closed, open), over 8 bars from
+#   the next bar; past them, and on a template without any, nothing.
+# - C5..F5, the slots 1-6: a tap recalls at the next bar (an undo point first); SAVE + a slot stores (SAVE then does
+#   not save); an empty one says so; a third recall in one bar finds the engine's queue full and says so.
+# - F#5: >> (advancePhase, at the next bar). G5: one unit of tension (on the pad, else the first voice), lit while
+#   some is left.
+# Expect names: mutedV activeV (1 playing, 0 WAITS, -1 not in the running engine) lockedV genV reqV (0 none, 1
+# blank, 2 regenerate) blankV for voice key V (0-6); key_ledK (key K: 0 off, 1 dim, 2 lit); warns (what was
+# refused, said).
+#
+# The Demo trio (Pluck 1, Pluck 2, Bass) on a seed of the test's, 90 BPM: a bar is 2667 ms, tick 0 100 ms after PLAY.
+proj template demo 0x5EED1234
+wait 50
+expect key_led0 2
+expect key_led2 2
+expect key_led3 0
+expect key_led6 0
+tap PLAY
+wait 500
+expect playing 1
+# ---- voices: a tap mutes, again unmutes; the key dark while muted
+tapkey 2
+expect muted2 1
+expect key_led2 0
+tapkey 2
+expect muted2 0
+expect key_led2 2
+# a role the Demo trio lacks: nothing (Pad, Lead, Drone, Heartbeat)
+tapkey 3
+tapkey 4
+tapkey 5
+tapkey 6
+expect muted3 0
+expect muted6 0
+expect warns 0
+# held a second: selected, not muted
+key 1 down
+expect voice_sel 1
+wait 1100
+key 1 up
+expect voice_sel 1
+expect muted1 0
+# held + SEL: locked; again: unlocked (the key not tapped)
+key 2 down
+tap SEL
+key 2 up
+expect locked2 1
+expect muted2 0
+key 2 down
+tap SEL
+key 2 up
+expect locked2 0
+# held + EDIT: the bass regenerated at its loop boundary, an undo point first
+expect gen2 1
+expect undo_depth 0
+key 2 down
+tap EDIT
+key 2 up
+expect undo_depth 1
+expect req2 2
+expect muted2 0
+wait 3000
+expect req2 0
+expect gen2 2
+# held + REC: a blank cycle for Pluck 1 at its loop boundary (no undo point)
+key 0 down
+tap REC
+key 0 up
+expect req0 1
+expect undo_depth 1
+wait 3000
+expect req0 0
+expect blank0 1
+# ---- the degrees: D4 (degree 2) pending until the next bar, then current
+expect degree 1
+expect pending_degree 0
+tapkey w5
+expect pending_degree 2
+expect degree 1
+wait 2700
+expect degree 2
+expect pending_degree 0
+expect key_led9 2
+expect key_led7 0
+tapkey w4
+wait 2700
+expect degree 1
+# ---- the scenes: the Demo trio has none, the keys do nothing
+tapkey b3
+tapkey b7
+expect key_led8 0
+expect warns 0
+# ---- the slots: SAVE + C#5 stores slot 2 (no save), lit
+press SAVE
+tapkey 20
+release SAVE
+expect slot_used1 1
+expect store_writes 0
+expect key_led20 2
+expect key_led19 0
+expect slot_pat1_hi 0xd5447eaa
+expect slot_pat1_lo 0x0c3f13f6
+# the patterns change (Pluck 2 regenerated), then slot 2 recalled at the next bar: its patterns back
+key 1 down
+tap EDIT
+key 1 up
+wait 6000
+expect undo_depth 2
+expect pat_hash_hi 0xbf0a5ab0
+tapkey 20
+expect undo_depth 3
+wait 2700
+expect pat_hash_hi 0xd5447eaa
+expect pat_hash_lo 0x0c3f13f6
+# an empty slot: said, nothing else
+tapkey 21
+expect warns 1
+expect undo_depth 3
+# three recalls in one bar: the engine holds two, the third is refused and said
+wait 1500
+tapkey 20
+tapkey 20
+tapkey 20
+expect warns 2
+# ---- G5: tension, on Pluck 1 here (the Demo trio has no pad), lit while some is left
+expect tension_left 2
+expect key_led26 2
+tapkey 26
+wait 2700
+expect tension_left 1
+tapkey 26
+wait 2700
+expect tension_left 0
+expect key_led26 0
+tap PLAY
+# ---- Ambient drift (72 BPM: a bar is 3333 ms): the arranger holds voices back (WAITS), its two scenes, >>
+proj template ambient 0x0A3B11ED
+wait 50
+expect key_led8 1
+expect key_led10 1
+expect key_led13 0
+tap PLAY
+wait 500
+expect arr_phase 0
+expect active5 1
+expect active3 0
+tapkey 3
+expect muted3 0
+wait 3400
+expect active3 1
+# C#4: toward the closed scene from the next bar, its key lit; A#4 (a fifth scene): nothing
+tapkey b3
+tapkey b7
+wait 3400
+expect key_led8 2
+expect key_led10 1
+# >>: the arranger's next change at the next bar, long before its own (its period is 8 bars at least): in the
+# build, the next voice of its order joins, Pluck 1, then Pluck 2
+expect active0 0
+expect active1 0
+tapkey 25
+wait 3400
+expect arr_phase 0
+expect active0 1
+expect active1 0
+tapkey 25
+wait 3400
+expect active1 1
+# WAITS blinks, a voice in plays lit: Pluck 2 is in now, the Bass not in the template
+expect key_led1 2
+expect key_led2 0
+tap PLAY

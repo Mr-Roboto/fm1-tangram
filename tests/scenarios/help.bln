@@ -1,0 +1,60 @@
+# Help cards (AMB-1's way): a button held alone for a second shows its card, in the page's place, and its release
+# then does nothing; a key, a turn or another button puts the card away. PLAY acts on its press: no card. A tap is
+# never a card. help: the button whose card is up, plus one (B_* order: FX 1, SEL 2, ENV 3, LFO 4, EDIT 5, GLO 6,
+# HOME 7, SAVE 8, ARP 9, SEQ 10, PLAY 11, REC 12, OCT- 13, OCT+ 14), 0 none.
+proj template demo 0x5EED1234
+wait 200
+# EDIT held: its card after a second, the re-roll not done
+tap PLAY
+wait 300
+press EDIT
+wait 800
+expect help 0
+wait 300
+expect help 5
+shot help_edit.png
+release EDIT
+expect help 0
+expect undo_depth 0
+# SAVE held: its card, no save at the release
+press SAVE
+wait 1100
+expect help 8
+shot help_save.png
+release SAVE
+wait 500
+expect save_pending 0
+# a key puts the card away; the key still acts
+press REC
+wait 1100
+expect help 12
+tapkey 2
+expect help 0
+expect muted2 1
+release REC
+expect degree 1
+# a page button's card; the page not changed at the release
+tap ENV
+press SEQ
+wait 1100
+expect help 10
+shot help_seq.png
+release SEQ
+expect view 1
+# a turn puts it away
+press GLO
+wait 1100
+expect help 6
+turn K1 1
+expect help 0
+release GLO
+expect view 1
+# PLAY held: no card
+press PLAY
+wait 1200
+expect help 0
+release PLAY
+expect playing 0
+# a tap: none
+tap SEL
+expect help 0
