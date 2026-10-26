@@ -1,0 +1,6 @@
+# The smallest script: the demo trio on its own seed, 32 bars in windows of 960 ticks, a transposition at bar 4.
+template demo
+seed 0xBE1271A9
+window 960
+bars 32
+at 15360 transpose 4
