@@ -11,6 +11,7 @@
 #include "test.h"
 #include "f64.h"
 #include "rng.h"
+#include "music.h"
 
 static double dbl(uint64_t b)
 {
@@ -353,12 +354,60 @@ static void test_rng_vectors(void)
               bl_seed_derive(0xBE1271A9u, "voice", "bass", "mut", "12", (const char *)NULL), "dec label");
 }
 
+/* scales, keys, degree pitch: the expectations are worked through Key.quantize by hand and agree with the Swift
+ * (see the task report) */
+static void test_music(void)
+{
+    static const int8_t OFF[BL_NMODES][7] = {
+        {0, 2, 3, 5, 7, 8, 10}, {0, 2, 3, 5, 7, 9, 10}, {0, 1, 3, 5, 7, 8, 10}, {0, 2, 4, 5, 7, 9, 10},
+        {0, 2, 4, 6, 7, 9, 11}, {0, 2, 4, 6, 7, 9, 10}, {0, 2, 3, 5, 7, 8, 11}, {0, 3, 5, 7, 10},
+        {0, 1, 3, 5, 6, 8, 10}, {0, 2, 4, 5, 7, 9, 11}};
+    for (int m = 0; m < BL_NMODES; m++) {
+        bl_scale_t s;
+        bl_scale_preset(m, &s);
+        int n = m == BL_MODE_MINOR_PENTATONIC ? 5 : 7;
+        CHECK(s.mode == m && s.count == n, "preset %d: mode %d count %d", m, s.mode, s.count);
+        for (int i = 0; i < n; i++) CHECK(s.off[i] == OFF[m][i], "preset %d offset %d = %d", m, i, s.off[i]);
+    }
+    CHECK(!strcmp(BL_MODE_RAW[BL_MODE_NATURAL_MINOR], "naturalMinor") && !strcmp(BL_MODE_RAW[BL_MODE_MAJOR], "major"),
+          "mode raw values");
+
+    bl_key_t a = {9, {0}};
+    bl_scale_preset(BL_MODE_NATURAL_MINOR, &a.scale);
+    static const int32_t RD[4] = {0, 7, -1, 9};
+    static const int32_t R60[4] = {69, 81, 67, 84}, R36[4] = {45, 57, 43, 60};
+    for (int i = 0; i < 4; i++) {
+        bl_pitch_t p = {RD[i], 0, 0};
+        CHECK(bl_resolve(&a, p, 60) == R60[i], "resolve degree %d at 60 = %d", RD[i], bl_resolve(&a, p, 60));
+        CHECK(bl_resolve(&a, p, 36) == R36[i], "resolve degree %d at 36 = %d", RD[i], bl_resolve(&a, p, 36));
+    }
+    bl_pitch_t up = {0, 1, 0}, down = {0, -1, 0}, acc = {0, 0, 1};
+    CHECK(bl_resolve(&a, up, 60) == 81 && bl_resolve(&a, down, 60) == 57 && bl_resolve(&a, acc, 60) == 70,
+          "resolve octave and accidental");
+
+    /* A natural minor, refC 60: tones ... 57 59 60 62 64 65 67 | 69 71 72 ...; ties (61 63 66 68 70) go down */
+    static const int32_t Q[13][2] = {{2, -1}, {2, -1}, {3, -1}, {3, -1}, {4, -1}, {5, -1}, {5, -1},
+                                     {6, -1}, {6, -1}, {0, 0},  {0, 0},  {1, 0},  {2, 0}};
+    for (int i = 0; i < 13; i++) {
+        bl_pitch_t p = bl_quantize(&a, 60 + i, 60);
+        CHECK(p.degree == Q[i][0] && p.octave == Q[i][1] && p.accidental == 0, "quantize %d = (%d, %d, %d), want (%d, %d)",
+              60 + i, p.degree, p.octave, p.accidental, Q[i][0], Q[i][1]);
+    }
+
+    CHECK(bl_fold(24, 48, 60) == 48 && bl_fold(55, 79, 40) == 64 && bl_fold(24, 48, 30) == 30 && bl_fold(24, 48, -5) == 31,
+          "fold");
+    CHECK(bl_floor_mod(-1, 7) == 6 && bl_floor_div(-1, 7) == -1 && bl_floor_mod(8, 7) == 1 && bl_floor_div(-7, 7) == -1 &&
+              bl_floor_mod(-7, 7) == 0,
+          "floor div/mod");
+}
+
 int main(void)
 {
     test_f64_ops();
     test_sin_cc_level();
     test_sin_range();
     test_rng_vectors();
+    test_music();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }
