@@ -17,6 +17,7 @@
 #include "harmony.h"
 #include "legit.h"
 #include "arrange.h"
+#include "cc.h"
 
 static double dbl(uint64_t b)
 {
@@ -1298,6 +1299,264 @@ static void test_arrange_vectors(void)
     free(text);
 }
 
+/* ------------------------------------------------------ CC lanes, scene morphs --- */
+/* tests/equiv/cc.ref: each lane rendered again by cc.c in windows of each size over its bars, the windows' events
+ * one stream against the file's (a size marked `same` against the lane's first stream); each morph run replayed:
+ * its scene requests made into morphs as startSceneMorph makes them, bound before the first window that ends after
+ * the bind tick (as render binds them before renderCC reads the morphs), and each window's morphs emitted in key
+ * order against the file's c lines */
+#define CC_BUF 128                  /* a window of 3840 ticks has 96 grid points */
+#define CC_VOICE 3                  /* the lanes' events: any voice, the file's controller */
+#define CC_MAX_REQ 16
+#define CC_MAX_KEYS 8
+#define CC_MAX_WANT 4096
+
+static int cc_line;
+
+/* the first max events and the whole count, nothing past them: the call again into one */
+static void cc_short(int n, const bl_cc_t *out, const bl_cc_t *one, int m, const char *what, bl_tick_t lo)
+{
+    CHECK(m == n && one[0].at == out[0].at && one[0].value == out[0].value && one[1].at == -1,
+          "cc.ref:%d %s window %lld: into one event: %d of %d", cc_line, what, (long long)lo, m, n);
+}
+
+/* a lane's windows of one size over 0..<total against the stream (at, value); returns the events checked */
+static long cc_lane_run(const bl_cclane_t *lane, uint8_t ctl, const char *name, bl_tick_t size, bl_tick_t total,
+                        const int64_t *want_at, const uint8_t *want_v, int nwant)
+{
+    bl_cc_t out[CC_BUF], one[2];
+    int k = 0, bad = 0;
+    for (bl_tick_t lo = 0; lo < total; lo += size) {
+        bl_tick_t hi = lo + size < total ? lo + size : total;
+        int n = bl_cc_lane(lane, ctl, CC_VOICE, lo, hi, out, CC_BUF);
+        CHECK(n <= CC_BUF, "cc.ref:%d lane %s window %lld: %d events", cc_line, name, (long long)lo, n);
+        for (int i = 0; i < n && i < CC_BUF; i++, k++) {
+            int ok = k < nwant && out[i].at == want_at[k] && out[i].value == want_v[k] && out[i].voice == CC_VOICE &&
+                     out[i].controller == ctl && out[i].at >= lo && out[i].at < hi;
+            if (!ok && bad++ < 5)
+                CHECK(0, "cc.ref:%d lane %s, windows of %lld: event %d: at %lld value %d, want at %lld value %d",
+                      cc_line, name, (long long)size, k, (long long)out[i].at, out[i].value,
+                      k < nwant ? (long long)want_at[k] : -1ll, k < nwant ? want_v[k] : -1);
+        }
+        if (n >= 2) {
+            one[1].at = -1;
+            cc_short(n, out, one, bl_cc_lane(lane, ctl, CC_VOICE, lo, hi, one, 1), name, lo);
+        }
+    }
+    CHECK(k == nwant, "cc.ref:%d lane %s, windows of %lld: %d events, want %d", cc_line, name, (long long)size, k,
+          nwant);
+    return k;
+}
+
+typedef struct {
+    bl_tick_t head, bind;
+    int bars, n;
+    uint8_t voice[CC_MAX_KEYS];
+    char target[CC_MAX_KEYS][16];
+    f64 dest[CC_MAX_KEYS];
+} cc_req_t;
+
+typedef struct {
+    char key[40];                   /* "voiceID|target" */
+    uint8_t voice;
+    bl_morph_t m;
+} cc_key_t;
+
+/* one morph run: windows of size over 0..<total; returns the morphs made */
+static int cc_morph_run(char ids[][16], const char *name, bl_tick_t size, bl_tick_t total,
+                        const cc_req_t *req, int nreq, const bl_cc_t *want, int nwant)
+{
+    static cc_key_t keys[CC_MAX_KEYS];
+    bl_cc_t out[CC_BUF], one[2];
+    int nkeys = 0, applied = 0, k = 0, bad = 0, morphs = 0;
+    for (bl_tick_t lo = 0; lo < total; lo += size) {
+        bl_tick_t hi = lo + size < total ? lo + size : total;
+        /* the changes bound before this window's end, in their order: startSceneMorph */
+        for (; applied < nreq && req[applied].bind < hi; applied++) {
+            const cc_req_t *r = &req[applied];
+            CHECK(r->head <= lo && r->bind == (bl_tick_t)bl_quantized_bar(r->head) * BL_TICKS_PER_BAR,
+                  "cc.ref %s/%lld: request at %lld binds at %lld, applied at %lld", name, (long long)size,
+                  (long long)r->head, (long long)r->bind, (long long)lo);
+            for (int j = 0; j < r->n; j++) {
+                char key[40];
+                snprintf(key, sizeof key, "%s|%s", ids[r->voice[j]], r->target[j]);
+                int i = 0;
+                while (i < nkeys && strcmp(keys[i].key, key) < 0) i++;
+                f64 start = F64(0x3FE0000000000000);                      /* 0.5, never touched */
+                if (i < nkeys && !strcmp(keys[i].key, key)) {
+                    start = bl_morph_value(&keys[i].m, r->bind);
+                } else {
+                    CHECK(nkeys < CC_MAX_KEYS, "cc.ref %s: too many keys", name);
+                    if (nkeys == CC_MAX_KEYS) return morphs;
+                    memmove(&keys[i + 1], &keys[i], (size_t)(nkeys - i) * sizeof keys[0]);
+                    nkeys++;
+                    snprintf(keys[i].key, sizeof keys[i].key, "%s", key);
+                    keys[i].voice = r->voice[j];
+                }
+                bl_morph_t *m = &keys[i].m;
+                m->start = start;
+                m->end = f64_max(F64(0), f64_min(F64(0x3FF0000000000000), r->dest[j]));     /* max(0, min(1, d)) */
+                m->t0 = r->bind;
+                m->t1 = r->bind + (bl_tick_t)(r->bars > 1 ? r->bars : 1) * BL_TICKS_PER_BAR;
+                morphs++;
+            }
+        }
+        for (int i = 0; i < nkeys; i++) {
+            int n = bl_morph_emit(&keys[i].m, keys[i].voice, 74, lo, hi, out, CC_BUF);
+            CHECK(n <= CC_BUF, "cc.ref %s/%lld window %lld: %d events", name, (long long)size, (long long)lo, n);
+            for (int e = 0; e < n && e < CC_BUF; e++, k++) {
+                int ok = k < nwant && out[e].at == want[k].at && out[e].voice == want[k].voice &&
+                         out[e].controller == want[k].controller && out[e].value == want[k].value &&
+                         out[e].at >= lo && out[e].at < hi;
+                if (!ok && bad++ < 5)
+                    CHECK(0, "cc.ref %s, windows of %lld: event %d: %lld %s %d %d, want %lld %s %d %d", name,
+                          (long long)size, k, (long long)out[e].at, ids[out[e].voice], out[e].controller,
+                          out[e].value, k < nwant ? (long long)want[k].at : -1ll,
+                          k < nwant ? ids[want[k].voice] : "-", k < nwant ? want[k].controller : -1,
+                          k < nwant ? want[k].value : -1);
+            }
+            if (n >= 2) {
+                one[1].at = -1;
+                cc_short(n, out, one, bl_morph_emit(&keys[i].m, keys[i].voice, 74, lo, hi, one, 1), name, lo);
+            }
+        }
+    }
+    CHECK(applied == nreq, "cc.ref %s/%lld: %d of %d requests bound", name, (long long)size, applied, nreq);
+    CHECK(k == nwant, "cc.ref %s, windows of %lld: %d events, want %d", name, (long long)size, k, nwant);
+    return morphs;
+}
+
+static void test_cc_vectors(void)
+{
+    char *text = read_file("tests/equiv/cc.ref");
+    CHECK(text != NULL, "tests/equiv/cc.ref: cannot read");
+    if (!text) return;
+    static int64_t lane_at[50000];
+    static uint8_t lane_v[50000];
+    static cc_req_t req[CC_MAX_REQ];
+    static bl_cc_t want[CC_MAX_WANT];
+    static char ids[BL_MAX_VOICES][16], mname[16];
+    bl_cclane_t lane = {0};
+    char lname[32] = "";
+    uint8_t ctl = 0;
+    int nlane = -1, lanes = 0, runs = 0, mruns = 0, nids = 0, nreq = 0, nwant = 0, morphs = 0, in_case = 0;
+    long events = 0, mevents = 0;
+    bl_tick_t total = 0, msize = 0, mtotal = 0;
+    char *save = text;
+    cc_line = 0;
+    for (char *l = text;; l = save) {
+        char *nl = l ? strchr(l, '\n') : NULL;
+        if (l) {
+            save = nl ? nl + 1 : NULL;
+            if (nl) *nl = 0;
+            cc_line++;
+        }
+        char *p = l, *word = l ? next_word(&p) : "";
+        /* the end of a morph run: at the next run, the voices of the next sequence, the end of the file */
+        if (in_case && (!l || !strcmp(word, "mcase") || !strcmp(word, "voices"))) {
+            morphs += cc_morph_run(ids, mname, msize, mtotal, req, nreq, want, nwant);
+            mevents += nwant;
+            mruns++;
+            in_case = 0;
+        }
+        if (!l) break;
+        if (!*word || *word == '#') continue;
+        if (!strcmp(word, "lane")) {
+            snprintf(lname, sizeof lname, "%s", next_word(&p));
+            CHECK(!strcmp(next_word(&p), "sine"), "cc.ref:%d: lane %s: not a sine", cc_line, lname);
+            lane.shape = BL_LFO_SINE;
+            lane.target = 0;
+            lane.cycle_bars.bits = strtoull(next_word(&p), NULL, 16);
+            lane.depth.bits = strtoull(next_word(&p), NULL, 16);
+            lane.center.bits = strtoull(next_word(&p), NULL, 16);
+            lane.phase.bits = strtoull(next_word(&p), NULL, 16);
+            ctl = (uint8_t)next_int(&p);
+            total = next_int(&p) * BL_TICKS_PER_BAR;
+            nlane = -1;
+            lanes++;
+        } else if (!strcmp(word, "w")) {
+            bl_tick_t size = next_int(&p);
+            int count = (int)next_int(&p);
+            if (!strcmp(next_word(&p), "same")) {
+                CHECK(nlane == count, "cc.ref:%d lane %s: %d events, the first stream %d", cc_line, lname, count,
+                      nlane);
+            } else {
+                /* the stream's c lines follow */
+                CHECK(count <= 50000, "cc.ref:%d: %d events", cc_line, count);
+                for (int i = 0; i < count && save; i++) {
+                    l = save;
+                    nl = strchr(l, '\n');
+                    save = nl ? nl + 1 : NULL;
+                    if (nl) *nl = 0;
+                    cc_line++;
+                    p = l;
+                    CHECK(!strcmp(next_word(&p), "c"), "cc.ref:%d: not a c line", cc_line);
+                    int64_t at = next_int(&p);
+                    int v = (int)next_int(&p);
+                    if (i < 50000) {
+                        lane_at[i] = at;
+                        lane_v[i] = (uint8_t)v;
+                    }
+                }
+                nlane = count;
+            }
+            events += cc_lane_run(&lane, ctl, lname, size, total, lane_at, lane_v, nlane);
+            runs++;
+        } else if (!strcmp(word, "voices")) {
+            next_word(&p);
+            for (nids = 0; *p && nids < BL_MAX_VOICES; nids++) snprintf(ids[nids], sizeof ids[0], "%s", next_word(&p));
+        } else if (!strcmp(word, "mcase")) {
+            snprintf(mname, sizeof mname, "%s", next_word(&p));
+            msize = next_int(&p);
+            mtotal = next_int(&p) * BL_TICKS_PER_BAR;
+            nreq = nwant = 0;
+            in_case = 1;
+        } else if (!strcmp(word, "scene")) {
+            CHECK(nreq < CC_MAX_REQ, "cc.ref:%d: too many requests", cc_line);
+            if (nreq == CC_MAX_REQ) continue;
+            cc_req_t *r = &req[nreq++];
+            r->head = next_int(&p);
+            r->bind = next_int(&p);
+            r->bars = (int)next_int(&p);
+            next_word(&p);                                          /* the scene's name */
+            for (r->n = 0; *p && r->n < CC_MAX_KEYS; r->n++) {
+                char *w = next_word(&p), *t = strchr(w, ':'), *b = t ? strchr(t + 1, ':') : NULL;
+                CHECK(b != NULL, "cc.ref:%d: bad destination %s", cc_line, w);
+                if (!b) break;
+                *t++ = 0;
+                *b++ = 0;
+                int v = -1;
+                for (int i = 0; i < nids; i++)
+                    if (!strcmp(ids[i], w)) v = i;
+                CHECK(v >= 0, "cc.ref:%d: unknown voice %s", cc_line, w);
+                r->voice[r->n] = (uint8_t)(v >= 0 ? v : 0);
+                snprintf(r->target[r->n], sizeof r->target[0], "%s", t);
+                r->dest[r->n].bits = strtoull(b, NULL, 16);
+            }
+        } else if (!strcmp(word, "c")) {
+            CHECK(in_case && nwant < CC_MAX_WANT, "cc.ref:%d: a c line out of a morph run", cc_line);
+            if (!in_case || nwant == CC_MAX_WANT) continue;
+            bl_cc_t *c = &want[nwant++];
+            c->at = next_int(&p);
+            const char *id = next_word(&p);
+            int v = -1;
+            for (int i = 0; i < nids; i++)
+                if (!strcmp(ids[i], id)) v = i;
+            CHECK(v >= 0, "cc.ref:%d: unknown voice %s", cc_line, id);
+            c->voice = (uint8_t)(v >= 0 ? v : 0);
+            c->controller = (uint8_t)next_int(&p);
+            c->value = (uint8_t)next_int(&p);
+        } else {
+            CHECK(0, "cc.ref:%d: unknown line %s", cc_line, word);
+        }
+    }
+    CHECK(lanes == 15 && runs == 45 && mruns == 8 && morphs == 4 * 64, "cc.ref: %d lanes, %d lane runs, %d morph runs, "
+          "%d morphs", lanes, runs, mruns, morphs);
+    printf("cc: %d lanes in %d runs, %ld events; %d morph runs, %d morphs, %ld events\n", lanes, runs, events, mruns,
+           morphs, mevents);
+    free(text);
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -1312,6 +1571,7 @@ int main(void)
     test_harmony_vectors();
     test_sched_compaction();
     test_arrange_vectors();
+    test_cc_vectors();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

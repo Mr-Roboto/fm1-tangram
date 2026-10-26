@@ -10,6 +10,7 @@
 //   RefTool mut                    the lifecycle and the mutations, for legit.c
 //   RefTool harmony                the transposition schedule, the note pipeline and the velocity policy, for harmony.c
 //   RefTool arrange                the arrangement state machine, for arrange.c
+//   RefTool cc                     the CC lanes and the scene morphs, for cc.c
 //   RefTool selftest               the tool checked against the engine's own offline renderer
 
 import BerlinanEngine
@@ -23,6 +24,7 @@ let modes: [(name: String, usage: String, run: ([String]) throws -> Int32)] = [
     ("mut", "mut", mutMode),
     ("harmony", "harmony", harmonyMode),
     ("arrange", "arrange", arrangeMode),
+    ("cc", "cc", ccMode),
     ("selftest", "selftest", selftestMode),
 ]
 

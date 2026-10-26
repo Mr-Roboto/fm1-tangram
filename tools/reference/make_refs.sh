@@ -3,13 +3,12 @@
 # Copyright (C) 2026 Jiří Píša
 # Regenerate the committed reference files with RefTool over the pinned Berlinan engine: every tests/equiv/*.script
 # into its .ref (script mode), then tests/equiv/<mode>.ref for each vector mode in VECTORS (templates, rng, gen,
-# mut, harmony, arrange; the task that adds cc adds it here). The tests never run this; they read the committed
-# files.
+# mut, harmony, arrange, cc). The tests never run this; they read the committed files.
 #   tools/reference/make_refs.sh
 #   BERLINAN   Berlinan checkout, for fetch.sh (default: ~/Development/Claude/berlin_school_manual)
 set -e
 cd "$(dirname "$0")/../.."
-VECTORS="templates rng gen mut harmony arrange"
+VECTORS="templates rng gen mut harmony arrange cc"
 SWIFT_PIN="Apple Swift version 6.3.3 "
 swift --version 2>&1 | grep -q "$SWIFT_PIN" || { echo "make_refs.sh: the references are made with $SWIFT_PIN"; exit 1; }
 sh tools/reference/fetch.sh

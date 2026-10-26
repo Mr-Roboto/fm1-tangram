@@ -392,3 +392,52 @@ the SM's calls can do reaches them: the variation's `density < 0.4` (only the su
 ending follows it), the payoff's re-activation of missing voices (the build has activated every voice before the
 payoff) and the 0.3 floor (`0.85^6 > 0.3`: seven voices give at most six subtractions). The C test runs the `q` and
 `z` bars one at a time, and checks every field of the C SM there against the bar before.
+
+## The CC lanes and the scene morphs
+
+`tests/equiv/cc.ref` is `RefTool cc` (`tools/reference/Sources/RefTool/Cc.swift`), for `app/engine/cc.c`. Integers
+are decimal, a `Double` the 16 lower-case hex digits of its bit pattern; `#` lines are comments.
+
+The lanes: `ModulationEngine.render(lanes: [lane], ccMap: ["filter": 74], voiceID: "v", in: lo..<hi, meter:
+.fourFour, seed: 0)` of one sine lane (`render`'s lookup and sort are then the identity), in the windows
+`lo..<min(lo + size, bars × 3840)`, lo = 0, size, 2 size, …, for the sizes 960, 37 and 3840. The lanes, in this
+order: `bed` and `pad`, the templates' own (`Project.demo`'s bedPluck1: 16 bars, depth 0.3, center 0.6;
+`Project.fullEnsemble`'s pad: 32 bars, 0.4, 0.5; phase 0), 10,000 bars each; then made-up ones (`CCLane(target:
+"filter", shape: .sine, …)`): the two with a phase (0.25, 0.7), a phase of 0.999, depth 1 about 0.5 (0 and 127
+reached), clipped at 1 (`clip-high`, `top`) and at 0 (`clip-low`, `bottom`), depth 0 (`flat`: tick 0 alone), cycles
+of half a bar, 64 bars and 7.3 bars, over 100 to 2,000 bars. The lane's events in all its windows, one after the
+other, are one stream; a window's events are the stream's with lo ≤ at < hi, so the stream is the whole of what the
+windows return. It is written for the first size; a later size whose stream is the same is written `same` (it is,
+for every lane: `render` is chunk-safe). RefTool checks that every event lies in its window.
+
+| Line | Content |
+| --- | --- |
+| `lane <name> sine <cycleBars> <depth> <center> <phase> <controller> <bars>` | a lane (`Double`s as bits), rendered over `bars` bars |
+| `w <size> <count>` | the lane's stream in windows of `size`: the `count` `c` lines that follow |
+| `w <size> <count> same` | the stream in windows of `size` is the lane's first one |
+| `c <at> <value>` | a `RenderedCC` (voice `v`, the lane line's controller) |
+
+The scene morphs: `SceneMorph` and `sceneEmissions` are internal to LiveEngine, so a real `LiveEngine` runs them:
+`Project.ambientDrift` (A natural minor) with its arranger off (`enabled = false`, so no phase fires a scene; its
+voices have no lanes, so `renderCC` is `sceneEmissions` alone), rendered in windows of 37, 960, 2500 and 3840 ticks.
+Between two windows, each request whose tick the render head has reached is enqueued at the head:
+`.morphToScene(name:, bars:)`, `atTick:` the head; then `render` and `renderCC` of the window. Two sequences:
+`ambient`, the template's scenes, 8 bars each: 10 requests (closed from 0.5 at tick 0, retargets mid-morph, two
+binding to one bar line, the same scene twice), 40 morphs, 85 bars; `extra`, the template with a third scene `wide`
+(drone 1.3, bedPluck1 -0.4, bedPluck2 1, pad 0: clamped, both ends), with 8, 1, 0 and 3 bars and morphs departing
+from 0 and 1: 6 requests, 24 morphs, 30 bars.
+
+| Line | Content |
+| --- | --- |
+| `voices <sequence> <id>…` | the project's voices, in order (all with `ccMap: ["filter": 74]`) |
+| `mcase <sequence> <size> <bars>` | a fresh engine, windows of `size` over `bars` bars |
+| `scene <head> <bind> <bars> <name> (<id>:<target>:<value>)…` | a request enqueued at `head`; `bind` is `barBindTick` (the next bar line of the head, `quantizedEventBar` × 3840; the head is `renderedUpTo`); the scene's destinations as defined (unclamped), sorted |
+| `c <at> <id> <controller> <value>` | a `RenderedCC` of `renderCC`, in the order it returned them |
+
+The morphs the C test makes from these lines (`startSceneMorph`, the live engine's): before a window lo..<hi, each
+request with `bind < hi` not yet made, in file order (`render` binds every change before the window's end, and
+`renderCC` then reads the morphs as they stand), gives for each destination the morph of key `id|target`: start =
+`bl_morph_value` of the key's morph at `bind` (0.5 when there is none), end = `max(0, min(1, value))`, t0 = `bind`,
+t1 = `bind + max(1, bars) × 3840`. The window's events are then `bl_morph_emit` of each key's morph in string order of
+the keys (as `sceneMorphs.sorted(by: key)`), controller 74. So a window that crosses a bind tick loses the replaced
+morph's events before that tick, in Swift as here.
