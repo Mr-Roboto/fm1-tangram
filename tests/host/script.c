@@ -406,6 +406,8 @@ static void scr_text_line(void *ctx, const char *text)
     t->stopped = t->emit(t->ctx, line);
 }
 
+void (*bl_script_watch)(void *ctx, const bl_live_t *e, bl_tick_t end);
+
 /* Run.play */
 int bl_script_play(const bl_script_t *s, int text, bl_emit_fn emit, void *ctx, char *err, int errmax)
 {
@@ -474,6 +476,7 @@ int bl_script_play(const bl_script_t *s, int text, bl_emit_fn emit, void *ctx, c
                      c->controller, c->value);
             stopped = emit(ctx, line);
         }
+        if (bl_script_watch) bl_script_watch(ctx, &r->engine, end);
         bl_tick_t stop = bl_live_stop_tick(&r->engine);
         if (!stopped && !r->stop_shown && stop >= 0) {
             snprintf(line, sizeof line, "S %lld", (long long)(stop + r->origin));

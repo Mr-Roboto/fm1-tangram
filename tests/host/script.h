@@ -56,3 +56,6 @@ void bl_script_project(const bl_script_t *s, bl_project_t *out);
  * engine's capacities (a queue full, a window of more notes or CC than the run holds), which the Mac's has not */
 typedef int (*bl_emit_fn)(void *ctx, const char *line);
 int bl_script_play(const bl_script_t *s, int text, bl_emit_fn emit, void *ctx, char *err, int errmax);
+/* a test's look at the running engine after each window of a play, end the render head (NULL: none; engine_test's
+ * states). It gets emit's ctx */
+extern void (*bl_script_watch)(void *ctx, const bl_live_t *e, bl_tick_t end);

@@ -21,6 +21,9 @@
 #include "cc.h"
 #include "project.h"
 #include "live.h"
+#include "state.h"
+#include "script.h"
+#include "app.h"                                    /* app/project.c's, on the stubs below */
 
 static double dbl(uint64_t b)
 {
@@ -1806,6 +1809,432 @@ static void test_live_bind(void)
           bl_live_offset(&e, 2), bl_live_offset(&e, 3));
 }
 
+/* --------------------------------------------------------------- state --- */
+/* two states the same, field by field (the ids by their text, a pattern's notes up to its n) */
+static int state_same(const bl_state_t *a, const bl_state_t *b)
+{
+    if (a->n != b->n || a->sched.n != b->sched.n) return 0;
+    for (int i = 0; i < a->sched.n; i++)
+        if (a->sched.ev[i].bar != b->sched.ev[i].bar || a->sched.ev[i].offset != b->sched.ev[i].offset) return 0;
+    for (int i = 0; i < a->n; i++) {
+        const bl_voice_t *x = &a->v[i], *y = &b->v[i];
+        const bl_pattern_t *p = &x->pat, *q = &y->pat;
+        if (strcmp(x->id, y->id) || x->role != y->role || x->reg_low != y->reg_low || x->reg_high != y->reg_high ||
+            x->participates != y->participates || x->anchor != y->anchor || x->ref_c != y->ref_c ||
+            a->generation[i] != b->generation[i])
+            return 0;
+        if (p->length != q->length || p->start_offset != q->start_offset || p->n != q->n ||
+            p->generator != q->generator || p->locked != q->locked || p->remaining != q->remaining ||
+            p->seed != q->seed)
+            return 0;
+        for (int k = 0; k < p->n; k++) {
+            const bl_pnote_t *m = &p->note[k], *o = &q->note[k];
+            if (m->position != o->position || m->gate != o->gate || m->pitch.degree != o->pitch.degree ||
+                m->pitch.octave != o->pitch.octave || m->pitch.accidental != o->pitch.accidental ||
+                m->velocity != o->velocity || m->accent != o->accent || m->ratchet != o->ratchet)
+                return 0;
+        }
+    }
+    return 1;
+}
+
+/* the states of the equivalence scripts, one every 32 bars of each play (the scripts in this order, until 200) */
+#define PACK_STATES 200
+#define PACK_EVERY (32 * BL_TICKS_PER_BAR)
+static struct {
+    int n, most;
+    bl_tick_t next;
+    bl_state_t last;
+} pk;
+
+static void pack_watch(void *ctx, const bl_live_t *e, bl_tick_t end)
+{
+    static bl_state_t st, back;
+    static uint8_t buf[PLAT_STORE_MAX];
+    (void)ctx;
+    if (pk.n >= PACK_STATES || end < pk.next) return;
+    pk.next += PACK_EVERY;
+    bl_live_capture(e, &st);
+    int n = state_pack(&st, buf, (int)sizeof buf);
+    CHECK(n > 0, "state %d: not packed", pk.n);
+    if (n > pk.most) pk.most = n;
+    memset(&back, 0xA5, sizeof back);
+    CHECK(n > 0 && !state_unpack(buf, n, &back) && state_same(&st, &back), "state %d: not the same back", pk.n);
+    pk.last = st;
+    pk.n++;
+}
+
+static int pack_emit(void *ctx, const char *line)
+{
+    (void)ctx, (void)line;
+    return pk.n >= PACK_STATES;
+}
+
+/* state_pack / state_unpack: 200 states of the scripts there and back the same, the largest within a slot's store
+ * object (its 8 bytes of header aside); a buffer one byte short, every prefix of the bytes, a byte more, an id the
+ * format has no code for and a code no id has are refused */
+static void test_state_pack(void)
+{
+    static const char *const SCRIPTS[] = {
+        "live_actions_full_960", "live_actions_demo_960", "live_actions_ambient_960", "live_arranger_toggle_960",
+        "live_arranger_classic_960", "live_arranger_slow_960", "live_arranger_ambient_960", "live_plain_full_960",
+        "live_plain_demo_960", "live_plain_ambient_960", "live_seeds_full_960", "live_seeds_demo_960",
+        "live_seeds_ambient_960",
+    };
+    static bl_state_t back;
+    static uint8_t buf[PLAT_STORE_MAX + 1];
+    char path[128], err[200];
+    memset(&pk, 0, sizeof pk);
+    bl_script_watch = pack_watch;
+    for (unsigned i = 0; i < sizeof SCRIPTS / sizeof SCRIPTS[0] && pk.n < PACK_STATES; i++) {
+        bl_script_t s;
+        snprintf(path, sizeof path, "tests/equiv/%s.script", SCRIPTS[i]);
+        char *text = read_file(path);
+        int bad = !text || bl_script_parse(text, &s, err, sizeof err);
+        free(text);
+        CHECK(!bad, "%s: cannot read or parse", path);
+        if (bad) continue;
+        pk.next = PACK_EVERY;
+        CHECK(!bl_script_play(&s, 0, pack_emit, NULL, err, sizeof err), "%s: %s", path, err);
+        bl_script_free(&s);
+    }
+    bl_script_watch = NULL;
+    CHECK(pk.n == PACK_STATES, "%d states", pk.n);
+    CHECK(pk.most <= (int)PLAT_STORE_MAX - 8, "the largest state is %d bytes", pk.most);
+    printf("state pack: %d states there and back, the largest %d bytes (a slot holds %u)\n", pk.n, pk.most,
+           PLAT_STORE_MAX - 8u);
+
+    bl_state_t *st = &pk.last;
+    int n = state_pack(st, buf, (int)sizeof buf);
+    CHECK(n > 0 && state_pack(st, buf, n - 1) == -1, "a buffer one byte short: %d", n);
+    n = state_pack(st, buf, (int)sizeof buf);
+    int prefixes = 0;
+    for (int k = 0; k < n; k++) prefixes += state_unpack(buf, k, &back) == -1;
+    CHECK(prefixes == n, "%d of %d prefixes refused", prefixes, n);
+    buf[n] = 0;
+    CHECK(state_unpack(buf, n + 1, &back) == -1, "a byte more");
+    buf[1] = BL_NVIDS;                                  /* the first voice's id code */
+    CHECK(state_unpack(buf, n, &back) == -1, "an id code no id has");
+    back = *st;
+    back.v[0].id = "sitar";
+    CHECK(state_pack(&back, buf, (int)sizeof buf) == -1, "an id with no code");
+    back = *st;
+    back.v[0].pat.note[0].position = 70000;
+    CHECK(state_pack(&back, buf, (int)sizeof buf) == -1, "a position past u16");
+}
+
+/* bl_initial_state is a fresh engine's capture: the three templates on their seeds and three others, in their key
+ * and D dorian, with the template's arranger, it switched off and each form preset (the arranger holds voices back,
+ * the state has them all; ambient lengthens the lifecycles) */
+static void test_initial_state(void)
+{
+    static bl_live_t e;
+    static bl_state_t a, b;
+    int n = 0, scaled = 0, held = 0;
+    for (int t = 0; t < BL_NTPL; t++)
+        for (int form = -1; form <= 3; form++)
+            for (uint64_t k = 0; k < 5; k++) {
+                bl_project_t p;
+                bl_template(t, &p);
+                if (k && k < 4) p.seed = bl_seed_derive(k, "initial", (const char *)NULL);
+                if (k == 4) {
+                    p.key.root = 2;
+                    bl_scale_preset(BL_MODE_DORIAN, &p.key.scale);
+                }
+                if (form == 0 && p.has_arr) p.arr.enabled = 0;
+                if (form > 0) {
+                    p.has_arr = 1;
+                    p.arr = form == 1 ? bl_arr_classic : form == 2 ? bl_arr_slow : bl_arr_ambient;
+                }
+                bl_live_init(&e, &p);
+                bl_live_capture(&e, &a);
+                memset(&b, 0x5A, sizeof b);
+                CHECK(!bl_initial_state(&p, &b) && state_same(&a, &b), "%s form %d seed %d: not the capture",
+                      BL_TPL_NAME[t], form, (int)k);
+                CHECK(a.n == p.nvoices, "%s: %d voices captured", BL_TPL_NAME[t], a.n);
+                scaled += a.v[0].pat.remaining == 16;
+                for (int i = 0; i < p.nvoices; i++) held += !e.st[i].active;
+                n++;
+            }
+    CHECK(scaled > 0 && held > 0, "ambient lifecycles %d, voices held back %d", scaled, held);
+    printf("initial state: %d projects as a fresh engine's capture (%d with the ambient lifecycles)\n", n, scaled);
+}
+
+/* ---------------------------------------------------- the saved project --- */
+/* app/project.c on the host: the store a buffer per object (as fm1-base's simulator's), the transport a stub that
+ * keeps what it is given and captures its project's initial state, generation[0] counting the captures */
+static uint8_t stub_obj[OBJ_NOBJ][PLAT_STORE_MAX];
+static int stub_len[OBJ_NOBJ], stub_writes, stub_playing, stub_captures, stub_nact, stub_tempo, stub_chan[BL_NVIDS];
+static uint32_t stub_ms = 1000, stub_master = 2048;
+static bl_project_t stub_proj;
+static bl_action_t stub_act;
+static bl_state_t stub_recalled;
+
+int plat_store_load(uint32_t obj, void *dst, uint32_t max)
+{
+    if (obj >= OBJ_NOBJ || stub_len[obj] < 0) return -1;
+    int n = stub_len[obj] < (int)max ? stub_len[obj] : (int)max;
+    memcpy(dst, stub_obj[obj], (size_t)n);
+    return n;
+}
+int plat_store_save(uint32_t obj, const void *src, uint32_t len)
+{
+    if (obj >= OBJ_NOBJ || len > PLAT_STORE_MAX) return -1;
+    memcpy(stub_obj[obj], src, len);
+    stub_len[obj] = (int)len;
+    stub_writes++;
+    return 0;
+}
+uint32_t plat_ms(void) { return stub_ms; }
+uint32_t plat_master(void) { return stub_master; }
+int rt_playing(void) { return stub_playing; }
+void rt_load(const bl_project_t *p) { stub_proj = *p; }
+int rt_action(const bl_action_t *a)
+{
+    stub_act = *a;
+    stub_nact++;
+    if (a->kind == BL_A_RECALL) stub_recalled = *a->state;
+    return 0;
+}
+void rt_capture(bl_state_t *out)
+{
+    bl_initial_state(&stub_proj, out);
+    out->generation[0] = ++stub_captures;
+}
+void rt_set_tempo(int32_t bpm) { stub_tempo = bpm; }
+void rt_set_channel(int vid, uint8_t ch) { stub_chan[vid] = ch; }
+void rt_set_sync(int ext) { (void)ext; }
+void rt_set_ext_port(int mask) { (void)mask; }
+
+#include "../../app/project.c"
+
+static void store_put(uint32_t obj, const void *src, int n)
+{
+    memcpy(stub_obj[obj], src, (size_t)n);
+    stub_len[obj] = n;
+}
+
+static void store_clear(void)
+{
+    for (int i = 0; i < OBJ_NOBJ; i++) stub_len[i] = -1;
+}
+
+/* proj as proj_defaults makes it, apart from the seed */
+static int proj_is_defaults(void)
+{
+    proj_t got = proj;
+    proj_defaults();
+    proj_t def = proj;
+    def.seed = got.seed;
+    proj = got;
+    return !memcmp(&got, &def, sizeof def) && got.tpl == BL_TPL_FULL && got.key_root == 9 &&
+           got.key_mode == BL_MODE_NATURAL_MINOR;
+}
+
+/* a record that is not the project's (none, another magic, another format, short, a value out of its range) loads
+ * as the defaults with a fresh seed and says so; the project's own loads as it was */
+static void test_store_bad_magic(void)
+{
+    proj_t good, rec;
+    store_clear();
+    CHECK(proj_load() != 0 && proj_is_defaults(), "nothing saved");
+    proj_defaults();
+    good = proj;
+    good.tpl = BL_TPL_DEMO;
+    good.key_root = 2;
+    good.key_mode = BL_MODE_DORIAN;
+    good.bpm = 120;
+    good.seed = UINT64_C(0x123456789ABCDEF0);
+    good.arr_form = ARR_SLOW;
+    good.has_density = 1;
+    good.density_pct = 35;
+    good.channel[2] = 11;
+    good.sync = 1;
+    good.ext_ports = 1u << PORT_TRS;
+    good.lights = 2;
+
+    rec = good;
+    rec.magic = 0x314F4E45u;                            /* AMB-1's "ENO1" */
+    store_put(OBJ_PROJ, &rec, sizeof rec);
+    stub_ms = 2000;
+    CHECK(proj_load() != 0 && proj_is_defaults(), "another magic");
+    uint64_t seed = proj.seed;
+    stub_ms = 3000;
+    CHECK(proj_load() != 0 && proj_is_defaults() && proj.seed != seed, "a fresh seed each time: %llx",
+          (unsigned long long)proj.seed);
+    for (uint32_t f = 0; f < 3; f++) {
+        rec = good;
+        rec.format = f ? PROJ_FORMAT + f : 0;
+        store_put(OBJ_PROJ, &rec, sizeof rec);
+        CHECK(proj_load() != 0 && proj_is_defaults(), "format %u", rec.format);
+    }
+    static const int SHORT[] = {0, 4, 8, (int)sizeof(proj_t) - 1};
+    for (int i = 0; i < 4; i++) {
+        store_put(OBJ_PROJ, &good, SHORT[i]);
+        CHECK(proj_load() != 0 && proj_is_defaults(), "a record of %d bytes", SHORT[i]);
+    }
+    for (int i = 0; i < 12; i++) {
+        rec = good;
+        switch (i) {
+        case 0: rec.tpl = BL_NTPL; break;
+        case 1: rec.key_root = 12; break;
+        case 2: rec.key_mode = BL_NMODES; break;
+        case 3: rec.bpm = 39; break;
+        case 4: rec.bpm = 221; break;
+        case 5: rec.arr_form = 4; break;
+        case 6: rec.density_pct = 101; break;
+        case 7: rec.has_density = 2; break;
+        case 8: rec.channel[6] = 16; break;
+        case 9: rec.sync = 2; break;
+        case 10: rec.ext_ports = 1u << PORT_BLE; break;
+        case 11: rec.lights = 3; break;
+        }
+        store_put(OBJ_PROJ, &rec, sizeof rec);
+        CHECK(proj_load() != 0 && proj_is_defaults(), "value %d out of range", i);
+    }
+    store_put(OBJ_PROJ, &good, sizeof good);
+    CHECK(proj_load() == 0 && !memcmp(&proj, &good, sizeof good), "the project's own record");
+}
+
+/* the app project as Berlinan's: the template, then its seed, key, tempo, arranger, density and channels; the
+ * arranger off keeps the template's config switched off (Ambient drift's plateau), a form is its preset; a template
+ * loaded brings its own values and a fresh seed */
+static void test_proj_to_engine(void)
+{
+    bl_project_t got, want;
+    proj_defaults();
+    proj.tpl = BL_TPL_FULL;
+    proj.seed = 42;
+    proj.key_root = 2;
+    proj.key_mode = BL_MODE_DORIAN;
+    proj.bpm = 133;
+    proj.arr_form = ARR_CLASSIC;
+    proj.has_density = 1;
+    proj.density_pct = 35;
+    proj.channel[1] = 7;
+    proj_to_engine(&got);
+    bl_template(BL_TPL_FULL, &want);
+    bl_scale_preset(BL_MODE_DORIAN, &want.key.scale);
+    CHECK(got.seed == 42 && got.key.root == 2 && !memcmp(&got.key.scale, &want.key.scale, sizeof want.key.scale) &&
+          got.bpm == 133, "seed, key, tempo");
+    CHECK(got.has_arr && !memcmp(&got.arr, &bl_arr_classic, sizeof got.arr), "classic");
+    CHECK(f64_eq(got.density, f64_div(f64_from_i64(35), F64(0x4059000000000000))), "density 35 / 100");
+    CHECK(got.voice[1].channel == 7 && got.voice[0].channel == want.voice[0].channel &&
+          got.nvoices == want.nvoices, "channels");
+    proj.arr_form = ARR_OFF;
+    proj.has_density = 0;
+    proj_to_engine(&got);
+    CHECK(!got.has_arr && f64_eq(got.density, want.density), "full: no arranger, the template's density");
+    proj.tpl = BL_TPL_AMBIENT;
+    proj_to_engine(&got);
+    bl_arrcfg_t off = bl_arr_ambient;
+    off.enabled = 0;
+    CHECK(got.has_arr && !memcmp(&got.arr, &off, sizeof off), "ambient off: its plateau, off");
+    CHECK(proj_set_template(BL_TPL_AMBIENT) == 0 && proj.arr_form == ARR_AMBIENT && proj.bpm == 72 &&
+          proj.key_root == 9 && proj.key_mode == BL_MODE_NATURAL_MINOR && proj.channel[0] == 0 &&
+          proj.channel[3] == 3 && !proj.has_density && proj.seed != 42, "a template's own values, a fresh seed");
+}
+
+/* a change while playing goes into the project at once, and what the Mac does live to the transport; the transport
+ * gets the project when it stops; what the Mac allows stopped only is refused while playing; Dice */
+static void test_proj_stale(void)
+{
+    proj_defaults();
+    stub_playing = 0;
+    proj_apply();
+    stub_playing = 1;
+    proj_set_bpm(120);
+    CHECK(proj.bpm == 120 && stub_tempo == 120 && stub_proj.bpm == 96, "tempo: the project's, the transport's from "
+          "the bar, the transport's project the old one");
+    CHECK(proj_set_density(50) == 0 && stub_act.kind == BL_A_DENSITY && proj.has_density && proj.density_pct == 50,
+          "density live");
+    CHECK(proj_set_key(4, BL_MODE_PHRYGIAN) == 0 && stub_act.kind == BL_A_KEY && stub_act.key.root == 4,
+          "key live");
+    CHECK(proj_set_form(ARR_CLASSIC) == 0 && stub_act.kind == BL_A_ARRANGER && stub_act.arg == 1 &&
+          proj.arr_form == ARR_CLASSIC, "the arranger on live");
+    CHECK(proj_set_form(ARR_SLOW) == -1 && proj.arr_form == ARR_CLASSIC, "a form while playing");
+    CHECK(proj_set_sync(1) == -1 && proj.sync == 0, "sync while playing");
+    int nact = stub_nact;
+    proj_set_bpm(120);
+    CHECK(stub_nact == nact, "the same tempo does nothing");
+    CHECK(stub_proj.bpm == 96 && f64_eq(stub_proj.density, F64(0x3FF0000000000000)), "nothing rebuilt yet");
+    proj_stopped();
+    CHECK(stub_proj.bpm == 96, "playing: no rebuild");
+    stub_playing = 0;
+    proj_stopped();
+    CHECK(stub_proj.bpm == 120 && f64_eq(stub_proj.density, F64(0x3FE0000000000000)) && stub_proj.key.root == 4 &&
+          stub_proj.has_arr && stub_proj.arr.enabled, "stopped: the project to the transport");
+    stub_proj.bpm = 1;
+    proj_stopped();
+    CHECK(stub_proj.bpm == 1, "once");
+    CHECK(proj_set_form(ARR_SLOW) == 0 && stub_proj.arr.min_bars == 12 && proj_set_sync(1) == 0 && proj.sync == 1,
+          "stopped: a form and sync");
+    proj.sync = 0;
+
+    stub_playing = 1;                                   /* Dice: an undo point, the fresh state recalled */
+    uint64_t seed = proj.seed;
+    stub_ms += 7;
+    int caps = stub_captures;
+    CHECK(proj_dice() == 0 && proj.seed != seed && stub_captures == caps + 1 && stub_act.kind == BL_A_RECALL,
+          "dice");
+    bl_project_t p;
+    static bl_state_t want;
+    proj_to_engine(&p);
+    bl_initial_state(&p, &want);
+    CHECK(state_same(&stub_recalled, &want), "dice recalls LiveEngine(project).captureState()");
+    stub_playing = 0;
+}
+
+/* the slots: SAVE writes the project and each slot stored since, read back; the load takes each slot as it was,
+ * a slot record that is not one stays empty; recall pushes an undo point, an empty slot does nothing */
+static void test_store_slots(void)
+{
+    static bl_state_t want;
+    store_clear();
+    proj_load();
+    proj_apply();
+    for (int k = 0; k < PROJ_SLOTS; k++) CHECK(!slot_used(k), "slot %d used", k);
+    CHECK(slot_store(-1) == -1 && slot_store(PROJ_SLOTS) == -1 && !slot_used(PROJ_SLOTS), "no such slot");
+    CHECK(slot_store(2) == 0 && slot_used(2), "store slot 2");
+    bl_initial_state(&stub_proj, &want);
+    want.generation[0] = stub_captures;
+    stub_writes = 0;
+    CHECK(proj_save() == 0 && stub_writes == 2, "SAVE: %d writes", stub_writes);
+    CHECK(proj_save() == 0 && stub_writes == 3, "SAVE again: the project alone (%d)", stub_writes);
+    store_put(OBJ_SLOT4, "garbage", 7);
+    uint8_t rec[64];
+    memcpy(rec, stub_obj[OBJ_SLOT2], sizeof rec);
+    store_put(OBJ_SLOT3, rec, sizeof rec);              /* the header, the state cut short */
+    proj.bpm = 1;
+    CHECK(proj_load() == 0 && proj.bpm == 96, "load");
+    for (int k = 0; k < PROJ_SLOTS; k++) CHECK(slot_used(k) == (k == 2), "slot %d after the load", k);
+    stub_playing = 1;
+    int caps = stub_captures, nact = stub_nact;
+    CHECK(slot_recall(1) == -1 && stub_captures == caps && stub_nact == nact, "an empty slot: nothing");
+    CHECK(slot_recall(2) == 0 && stub_captures == caps + 1 && state_same(&stub_recalled, &want), "recall slot 2");
+    CHECK(undo_pop() == 0 && stub_recalled.generation[0] == caps + 1, "its undo point");
+    CHECK(undo_pop() == -1, "no more");
+    stub_playing = 0;
+}
+
+/* undo: 20 deep, the oldest dropped, the latest first; a load empties it */
+static void test_undo_depth(void)
+{
+    store_clear();
+    proj_load();
+    proj_apply();
+    stub_playing = 1;
+    int first = stub_captures + 1;
+    for (int i = 0; i < 25; i++) undo_push();
+    int ok = 0;
+    for (int i = 0; i < PROJ_UNDO; i++) ok += undo_pop() == 0 && stub_recalled.generation[0] == first + 24 - i;
+    CHECK(ok == PROJ_UNDO && undo_pop() == -1, "%d of 20 undone in order", ok);
+    undo_push();
+    proj_load();
+    CHECK(undo_pop() == -1, "a load empties the undo stack");
+    stub_playing = 0;
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -1825,6 +2254,13 @@ int main(void)
     test_pending_overflow();
     test_live_unknown_ids();
     test_live_bind();
+    test_state_pack();
+    test_initial_state();
+    test_store_bad_magic();
+    test_proj_to_engine();
+    test_proj_stale();
+    test_store_slots();
+    test_undo_depth();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

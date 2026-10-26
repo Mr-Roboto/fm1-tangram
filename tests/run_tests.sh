@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Jiří Píša
 # Berlinan's tests: the engine (tests/host/engine_test.c: f64 against the host's IEEE binary64, the sine, and the
-# parts against RefTool's vectors), the live engine against Berlinan's on every script (tests/host/equiv_test.c), the
+# parts against RefTool's vectors; the states packed for the flash; the saved project, app/project.c on stubs of the
+# platform and the transport), the live engine against Berlinan's on every script (tests/host/equiv_test.c), the
 # firmware's own libc (tests/host/libc_test.c), the firmware free of float and double, the update path against
 # Berlinan's package (./build.sh first), the whole app in fm1-base's simulator (tests/scenarios/*.bln: the engine,
 # the panel, the clock, the saved state), with screenshots in app/build/scenarios/. fm1-base's own tests:
@@ -27,8 +28,9 @@ run() {
         FAIL=1
     fi
 }
-run engine sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Iapp/engine -Iapp/engine/softfloat \
-    -o $OUT/engine_test tests/host/engine_test.c app/engine/*.c app/engine/softfloat/*.c -lm && $OUT/engine_test"
+run engine sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -DPLAT_HOST -Iapp/engine \
+    -Iapp/engine/softfloat -Itests/host -Iapp -Ibase/include -o $OUT/engine_test tests/host/engine_test.c \
+    tests/host/script.c app/engine/*.c app/engine/softfloat/*.c -lm && $OUT/engine_test"
 run equiv sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Iapp/engine -Iapp/engine/softfloat \
     -Itests/host -o $OUT/equiv_test tests/host/equiv_test.c tests/host/script.c app/engine/*.c \
     app/engine/softfloat/*.c -lm && $OUT/equiv_test"

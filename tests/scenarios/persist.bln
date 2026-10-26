@@ -1,0 +1,60 @@
+# SAVE as a Berlinan document (AppServices.saveDocument): the project and the snapshot slots to flash, and both
+# back after a restart as they were. The template (on a seed of its own), the key, the tempo and a channel changed
+# stopped, the density while playing (the project's at once, the engine's at the next bar), slot 2 stored at the
+# render head after ten bars (the patterns mutated), SAVE, a reboot: the same project, slot 2 lit and holding the
+# same patterns; recalled after the reboot, the engine plays them from the next bar. pat_hash: FNV-1a 64 over the
+# running engine's patterns (their notes, not their lifecycles); slot_pat2: the same over slot 2's.
+proj template demo 0x5EED1234
+proj key 2 dorian
+proj tempo 120
+proj channel bass 5
+expect tpl 0
+expect root 2
+expect mode 1
+expect bpm 120
+expect chan2 5
+expect seed_hi 0
+expect seed_lo 0x5EED1234
+tap PLAY
+wait 2000
+proj density 40
+expect density_pct 40
+wait 18000
+slot store 2
+expect slot_used2 1
+expect pat_hash_hi 0x442d3fdd
+expect slot_pat2_hi 0x442d3fdd
+expect pat_hash_lo 0x65e6daaf
+expect slot_pat2_lo 0x65e6daaf
+tap PLAY
+expect playing 0
+tap SAVE
+expect store_writes 2
+reboot
+expect playing 0
+expect tpl 0
+expect root 2
+expect mode 1
+expect bpm 120
+expect chan2 5
+expect density_pct 40
+expect seed_lo 0x5EED1234
+expect slot_used2 1
+expect slot_used1 0
+wait 50
+expect slot_lit2 1
+expect slot_lit1 0
+expect slot_pat2_hi 0x442d3fdd
+expect slot_pat2_lo 0x65e6daaf
+# after the reboot: the project's own patterns (generation 0's), then slot 2's from bar 2 (tick 7680), before any of
+# them loops; the recall pushed an undo point
+tap PLAY
+wait 3000
+expect pat_hash_hi 0xabd25f74
+slot recall 2
+expect undo_depth 1
+wait 1500
+expect head >7680
+expect head <11280
+expect pat_hash_hi 0x442d3fdd
+expect pat_hash_lo 0x65e6daaf

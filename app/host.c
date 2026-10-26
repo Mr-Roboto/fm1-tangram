@@ -15,6 +15,15 @@
  *   midicmp midilines        the last cmpmidi: 0 the same, else the first line that differs (-1: a file missing);
  *                            the lines that matched
  *   selfnotes selfhash_hi selfhash_lo   the last selfrender
+ *   tpl root mode bpm_proj seed_hi seed_lo chanI density_pct has_density form sync ext_ports lights
+ *                            the app project (proj: chanI its voice I's channel; form its arr_form)
+ *   slot_usedK slot_litK undo_depth stale   slot K (0-5) stored; its key lit; the undo points; a change made while
+ *                            playing that the transport has not got yet (transportStale)
+ *   pat_hash_hi pat_hash_lo  FNV-1a 64 over the transport's patterns (as captureState gives them: the running
+ *                            engine's at the head; before a Play, the project's initial ones), their notes and lengths
+ *                            only, as text: per voice "ID LENGTH N\n", then per note "POSITION GATE DEGREE OCTAVE
+ *                            ACCIDENTAL VELOCITY ACCENT RATCHET\n"
+ *   slot_patK_hi slot_patK_lo   the same over slot K's state
  * Its commands:
  *   selfrender TEMPLATE BARS (stopped) the template on its own seed, rendered by the app's engine for BARS bars in
  *                            windows of 240 ticks, from tick 0 to the end or the arranger's ending; selfnotes its
@@ -35,7 +44,13 @@
  *   rt play | stop | tempo BPM | load TEMPLATE [SEED] | mute VOICE 0|1 | channel VOICE CH | sync int|ext |
  *      port USB|TRS|both     the transport's controls (VOICE a voice id, CH 0-15), until the panel has them all
  *   rt burst N               (playing) N note-ons on channel 16 (notes 0..N-1, velocity 1) due now and their offs a
- *                            tick later, into the queue: more than a ms may send */
+ *                            tick later, into the queue: more than a ms may send
+ *   proj template TEMPLATE [SEED] | key ROOT MODE | tempo BPM | density K | form off|classic|slow|ambient |
+ *      channel VOICE CH | sync int|ext | dice
+ *                            the project's changes as the Mac's AppServices makes them (project.c: MODE a ModeID raw
+ *                            value, K 0-100; SEED a test's in place of the fresh one), until the panel has them all
+ *   slot store K | slot recall K | undo push | undo pop | save
+ *                            the slots (K 0-5), the undo stack, SAVE */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +87,7 @@ static void selfrender(const char *tpl, const char *bars)
     }
     bl_template(t, &rt_next);            /* (the pending project's room: nothing is pending while stopped) */
     bl_live_init(&rt_eng, &rt_next);     /* the transport's engine (Play makes its own) */
+    rt.fresh = 1;                        /* (it is not the project's: captureState gives the project's preview) */
     self_notes = 0;
     self_hash = UINT64_C(0xcbf29ce484222325);
     for (head = 0; head < total; head = end) {
@@ -357,7 +373,152 @@ static int rt_cmd(const char *a, const char *b, const char *c)
     return 0;
 }
 
+/* ---- the project's changes, the slots, undo */
+static int voice_of(const char *id)      /* the project template's voice of that id, -1 none */
+{
+    static bl_project_t p;
+    int i;
+    bl_template(proj.tpl, &p);
+    for (i = 0; i < p.nvoices; i++)
+        if (!strcmp(p.voice[i].id, id))
+            return i;
+    return -1;
+}
+
+static int form_named(const char *w)
+{
+    static const char *const NAME[] = {"off", "classic", "slow", "ambient"};
+    int f = 0;
+    while (f <= ARR_AMBIENT && strcmp(NAME[f], w))
+        f++;
+    return f;
+}
+
+static int mode_named(const char *w)
+{
+    int m = 0;
+    while (m < BL_NMODES && strcmp(BL_MODE_RAW[m], w))
+        m++;
+    return m;
+}
+
+static int proj_cmd(const char *a, const char *b, const char *c)
+{
+    int r = 0;
+    if (!strcmp(a, "template") && tpl_of(b) < BL_NTPL)
+        r = c[0] ? template_seeded(tpl_of(b), strtoull(c, 0, 0)) : proj_set_template(tpl_of(b));
+    else if (!strcmp(a, "key") && mode_named(c) < BL_NMODES)
+        r = proj_set_key(atoi(b), mode_named(c));
+    else if (!strcmp(a, "tempo"))
+        proj_set_bpm(atoi(b));
+    else if (!strcmp(a, "density"))
+        r = proj_set_density(atoi(b));
+    else if (!strcmp(a, "form") && form_named(b) <= ARR_AMBIENT)
+        r = proj_set_form(form_named(b));
+    else if (!strcmp(a, "channel") && voice_of(b) >= 0)
+        proj_set_channel(voice_of(b), atoi(c));
+    else if (!strcmp(a, "sync") && (!strcmp(b, "int") || !strcmp(b, "ext")))
+        r = proj_set_sync(b[0] == 'e');
+    else if (!strcmp(a, "dice"))
+        r = proj_dice();
+    else
+        return -2;
+    return r;
+}
+
+static uint64_t pat_hash(const bl_state_t *s)
+{
+    char line[128];
+    uint64_t h = UINT64_C(0xcbf29ce484222325);
+    int i, k;
+    for (i = 0; i < s->n; i++) {
+        const bl_pattern_t *p = &s->v[i].pat;
+        snprintf(line, sizeof line, "%s %lld %d\n", s->v[i].id, (long long)p->length, p->n);
+        h = fnv(h, line);
+        for (k = 0; k < p->n; k++) {
+            const bl_pnote_t *q = &p->note[k];
+            snprintf(line, sizeof line, "%lld %lld %d %d %d %d %d %d\n", (long long)q->position, (long long)q->gate,
+                     (int)q->pitch.degree, (int)q->pitch.octave, (int)q->pitch.accidental, q->velocity, q->accent,
+                     q->ratchet);
+            h = fnv(h, line);
+        }
+    }
+    return h;
+}
+
+/* pat_hash_hi / _lo, slot_patK_hi / _lo: 1 and the half in *got, or 0 for another name (or an empty slot: -1) */
+static int pat_expect(const char *what, int *got)
+{
+    static bl_state_t s;
+    const char *half;
+    int k;
+    if (!strncmp(what, "pat_hash_", 9)) {
+        rt_capture(&s);
+        half = what + 9;
+    } else if (!strncmp(what, "slot_pat", 8) && what[8] >= '0' && what[8] < '0' + PROJ_SLOTS && what[9] == '_') {
+        k = what[8] - '0';
+        if (!slot_used(k) || state_unpack(slots[k].rec + SLOT_HEAD, slots[k].n - SLOT_HEAD, &s)) {
+            *got = -1;
+            return 1;
+        }
+        half = what + 10;
+    } else {
+        return 0;
+    }
+    if (strcmp(half, "hi") && strcmp(half, "lo"))
+        return 0;
+    *got = (int)(uint32_t)(half[0] == 'h' ? pat_hash(&s) >> 32 : pat_hash(&s));
+    return 1;
+}
+
+static int proj_expect(const char *what, int *got)
+{
+    if (!strcmp(what, "tpl"))
+        *got = proj.tpl;
+    else if (!strcmp(what, "root"))
+        *got = proj.key_root;
+    else if (!strcmp(what, "mode"))
+        *got = proj.key_mode;
+    else if (!strcmp(what, "bpm_proj"))
+        *got = proj.bpm;
+    else if (!strcmp(what, "seed_hi"))
+        *got = (int)(uint32_t)(proj.seed >> 32);
+    else if (!strcmp(what, "seed_lo"))
+        *got = (int)(uint32_t)proj.seed;
+    else if (!strncmp(what, "chan", 4) && what[4] >= '0' && what[4] < '0' + BL_MAX_VOICES && !what[5])
+        *got = proj.channel[what[4] - '0'];
+    else if (!strcmp(what, "density_pct"))
+        *got = proj.density_pct;
+    else if (!strcmp(what, "has_density"))
+        *got = proj.has_density;
+    else if (!strcmp(what, "form"))
+        *got = proj.arr_form;
+    else if (!strcmp(what, "sync"))
+        *got = proj.sync;
+    else if (!strcmp(what, "ext_ports"))
+        *got = proj.ext_ports;
+    else if (!strcmp(what, "lights"))
+        *got = proj.lights;
+    else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])
+        *got = slot_used(what[9] - '0');
+    else if (!strncmp(what, "slot_lit", 8) && what[8] >= '0' && what[8] < '0' + PROJ_SLOTS && !what[9])
+        *got = (int)(led_keys >> (SLOT_KEY0 + what[8] - '0') & 1u);
+    else if (!strcmp(what, "undo_depth"))
+        *got = undo_n;
+    else if (!strcmp(what, "stale"))
+        *got = proj_stale;
+    else
+        return pat_expect(what, got);
+    return 1;
+}
+
+static int rt_expect(const char *what, int *got);
 int app_expect(const char *what, int *got)
+{
+    return proj_expect(what, got) || rt_expect(what, got);   /* (the project: the main loop's, no lock) */
+}
+
+static int rt_expect(const char *what, int *got)   /* the transport's, under the lock */
 {
     uint32_t f = plat_lock();
     int ok = 1, c, n;
@@ -444,9 +605,33 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
     else if (!strcmp(cmd, "rt")) {
         if (rt_cmd(a, b, c))
             printf("FAIL rt %s %s %s: no such control\n", a, b, c);
+    } else if (!strcmp(cmd, "proj")) {
+        int r = proj_cmd(a, b, c);
+        if (r == -2)
+            printf("FAIL proj %s %s %s: no such change\n", a, b, c);
+        else if (r)
+            printf("  proj %s %s %s: refused (the Mac's stopped only, or the engine's queue full)\n", a, b, c);
+    } else if (!strcmp(cmd, "slot") && (!strcmp(a, "store") || !strcmp(a, "recall"))) {
+        if (a[0] == 's' ? slot_store(atoi(b)) : slot_recall(atoi(b)))
+            printf("  slot %s %s: refused (no such slot, an empty one, or the engine's queue full)\n", a, b);
+    } else if (!strcmp(cmd, "undo") && (!strcmp(a, "push") || !strcmp(a, "pop"))) {
+        if (a[1] == 'u')
+            undo_push();
+        else if (undo_pop())
+            printf("  undo pop: nothing to undo (or the engine's queue full)\n");
+    } else if (!strcmp(cmd, "save")) {
+        if (proj_save())
+            printf("FAIL save: not written, or not read back the same\n");
     } else
         return 0;
     return 1;
 }
 
-void app_host_reboot(void) { rt_stop(); }   /* nothing is kept in RAM (app_init makes the transport anew) */
+void app_host_reboot(void)               /* what RAM holds is gone: the project, the slots, the undo stack */
+{
+    rt_stop();
+    memset(&proj, 0, sizeof proj);
+    memset(slots, 0, sizeof slots);
+    undo_used = undo_n = 0;
+    proj_stale = 0;
+}

@@ -71,6 +71,7 @@ static struct {
     /* the main loop's */
     bl_tick_t head, origin;              /* the render head; where the running engine's tick 0 sits */
     uint8_t has_next, stop_queued, ext, clock_out;
+    uint8_t fresh;                       /* the engine is not rt_proj's yet (none since it came stopped): its preview */
     uint8_t muted;                       /* mutedVoices: a bit per BL_VID_ */
     uint8_t chan[BL_NVIDS];              /* channelMap by BL_VID_, RT_NONE: none */
     uint8_t vid[BL_MAX_VOICES];          /* the running engine's voices' BL_VID_ */
@@ -342,6 +343,7 @@ static void rt_engine_new(void)          /* LiveEngine(project:) of rt_proj */
 {
     int i;
     bl_live_init(&rt_eng, &rt_proj);
+    rt.fresh = 0;
     for (i = 0; i < rt_eng.project.nvoices; i++)
         rt.vid[i] = (uint8_t)bl_vid(rt_eng.project.voice[i].id);
     rt.stop_queued = 0;
@@ -493,6 +495,7 @@ void rt_init(void)                       /* the Full ensemble until the saved pr
     rt_channels(&rt_proj);
     rt.bpm = rt_proj.bpm;
     rt.rate = rt.bpm * 16;
+    rt.fresh = 1;
 }
 
 void rt_play(void)                       /* Transport.play: always from tick 0, a fresh engine */
@@ -550,6 +553,16 @@ bl_tick_t rt_tick(void)                  /* the tick sounding now (0 before tick
 
 bl_tick_t rt_head(void) { return rt.head; }
 const bl_live_t *rt_engine(void) { return &rt_eng; }
+
+/* Transport.captureState: the running engine's state at the render head (stopped, as its last Play left it); before
+ * a Play of the project in place (one loaded stopped: the Mac's new transport), its preview, the initial state */
+void rt_capture(bl_state_t *out)
+{
+    if (rt.fresh)
+        bl_initial_state(&rt_proj, out);
+    else
+        bl_live_capture(&rt_eng, out);
+}
 int rt_muted(int vid) { return vid >= 0 && vid < BL_NVIDS && rt.muted >> vid & 1u; }
 int32_t rt_bpm(void) { return rt.bpm; }
 
@@ -592,6 +605,7 @@ void rt_load(const bl_project_t *p)
     rt.muted = 0;
     rt.bpm = rt_proj.bpm;
     rt.pend_bpm = -1;
+    rt.fresh = 1;
 }
 
 /* Transport.setMuted, voice a BL_VID_: from the next window; muting silences what the voice's channel sounds (and

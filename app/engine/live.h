@@ -133,6 +133,10 @@ int bl_live_render(bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_note_t *out, int
 int bl_live_render_cc(const bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_cc_t *out, int max);
 /* captureState() */
 void bl_live_capture(const bl_live_t *e, bl_state_t *out);
+/* LiveEngine(project:).captureState() without an engine (the FM-1 has room for one): every voice materialized as
+ * bl_live_init makes it (the ambient arranger's longer lifecycles too; the voices it holds back are in the state),
+ * generation 1, the project's schedule. 0, or -1 for a project of more than BL_MAX_VOICES voices */
+int bl_initial_state(const bl_project_t *p, bl_state_t *out);
 /* pendingStopTick: the arranger's ending, where nothing renders any more and the transport stops; -1 for none */
 bl_tick_t bl_live_stop_tick(const bl_live_t *e);
 /* transpositionOffset(atBar:) */

@@ -45,22 +45,22 @@ static bl_vstate_t *state_of(bl_live_t *e, uint8_t vid)
 }
 
 /* ------------------------------------------------------------ patterns --- */
-/* OfflineRenderer.makePattern(_:project:seedLabels:idSuffix:schedule:): the generator's pattern (the bass melody
- * walks over sched), phased by phaseSteps 16ths, starting a full legitimization cycle */
-static void make_pattern(const bl_live_t *e, const bl_vcfg_t *c, uint64_t seed, const bl_sched_t *sched,
-                         bl_pattern_t *out)
+/* OfflineRenderer.makePattern(_:project:seedLabels:idSuffix:schedule:): the generator's pattern in the project's key
+ * (the bass melody walks over sched), phased by phaseSteps 16ths, starting a full legitimization cycle of repeats */
+static void make_pattern(const bl_project_t *p, int32_t repeats, const bl_vcfg_t *c, uint64_t seed,
+                         const bl_sched_t *sched, bl_pattern_t *out)
 {
     if (c->gen.kind == BL_GEN_BASS_MELODY)
         bl_make_bass_melody(c->gen.a, sched, seed, out);
     else
-        bl_make_pattern(&c->gen, c->role, &e->project.key, seed, out);
+        bl_make_pattern(&c->gen, c->role, &p->key, seed, out);
     if (c->phase_steps) bl_with_length(out, out->length + (bl_tick_t)(c->phase_steps * (BL_PPQN / 4)));
-    out->remaining = (int16_t)e->repeats;
+    out->remaining = (int16_t)repeats;
 }
 
 /* OfflineRenderer.materialize(_:project:): the voice from its config, its pattern made with the labels "voice", id,
  * "gen0" over the project's own schedule; every voice transposes (no bass reharm, participatesInTransposition nil) */
-static void materialize(const bl_live_t *e, const bl_vcfg_t *c, bl_voice_t *v)
+static void materialize(const bl_project_t *p, int32_t repeats, const bl_vcfg_t *c, bl_voice_t *v)
 {
     memset(v, 0, sizeof *v);
     v->id = c->id;
@@ -70,8 +70,17 @@ static void materialize(const bl_live_t *e, const bl_vcfg_t *c, bl_voice_t *v)
     v->ref_c = c->ref_c;
     v->participates = 1;
     v->anchor = c->anchor;
-    uint64_t seed = bl_seed_derive(e->project.seed, "voice", c->id, "gen0", (const char *)NULL);
-    make_pattern(e, c, seed, &e->project.transposition, &v->pat);
+    uint64_t seed = bl_seed_derive(p->seed, "voice", c->id, "gen0", (const char *)NULL);
+    make_pattern(p, repeats, c, seed, &p->transposition, &v->pat);
+}
+
+/* the legitimization's repeats (Legitimizer.Config.default: 4), scaled at the project level by an ambient arranger
+ * that is on (min(32, repeats * 4)), so the initial lifecycles and every mutation see it */
+static int32_t project_repeats(const bl_project_t *p)
+{
+    int32_t repeats = 4;
+    if (p->has_arr && p->arr.enabled && p->arr.ambient) repeats = repeats * 4 < 32 ? repeats * 4 : 32;
+    return repeats;
 }
 
 /* ambientPeriodBars(project:): max(8, Int((bpm / Double(beatsPerBar)).rounded())) */
@@ -87,22 +96,21 @@ static void arr_roles(const bl_project_t *p, uint8_t *roles)
     for (int i = 0; i < p->nvoices; i++) roles[i] = p->voice[i].role;
 }
 
-/* LiveEngine.init(project:): the ambient legitimization scaled at the project level (min(32, repeats * 4), so the
- * initial lifecycles and every mutation see it), the voices materialized, the arranger made when the project's is on
- * (its seed the labels "arrangement"), the voices it has not activated held back */
+/* LiveEngine.init(project:): the legitimization's repeats (the ambient arranger's), the voices materialized, the
+ * arranger made when the project's is on (its seed the labels "arrangement"), the voices it has not activated held
+ * back */
 void bl_live_init(bl_live_t *e, const bl_project_t *p)
 {
     memset(e, 0, sizeof *e);
     e->project = *p;
-    e->repeats = 4;                                     /* Legitimizer.Config.default */
-    if (p->has_arr && p->arr.enabled && p->arr.ambient) e->repeats = e->repeats * 4 < 32 ? e->repeats * 4 : 32;
+    e->repeats = project_repeats(p);
     e->density = clamp01(p->density);
     e->tension = 2;                                     /* max(0, tensionBudget ?? 2) */
     e->sched = p->transposition;                        /* HarmonyScheduler.resolve: the legacy schedule */
     e->stop = NONE;
     for (int i = 0; i < p->nvoices; i++) {
         bl_vstate_t *s = &e->st[i];
-        materialize(e, &p->voice[i], &s->voice);
+        materialize(p, e->repeats, &p->voice[i], &s->voice);
         s->generation = 1;
         s->vid = (uint8_t)bl_vid(p->voice[i].id);
         s->active = 1;
@@ -241,6 +249,21 @@ void bl_live_capture(const bl_live_t *e, bl_state_t *out)
     out->sched = e->sched;
 }
 
+/* LiveEngine(project:).captureState(), as bl_live_init leaves it: the materialized voices, generation 1, the
+ * project's schedule (the arranger touches none of them) */
+int bl_initial_state(const bl_project_t *p, bl_state_t *out)
+{
+    int32_t repeats = project_repeats(p);
+    if (p->nvoices > BL_MAX_VOICES) return -1;
+    out->n = p->nvoices;
+    for (int i = 0; i < p->nvoices; i++) {
+        materialize(p, repeats, &p->voice[i], &out->v[i]);
+        out->generation[i] = 1;
+    }
+    out->sched = p->transposition;
+    return 0;
+}
+
 /* applyRecall(_:at:): the schedule; for each voice the pattern (the whole voice) and generation of the state's voice
  * of its id, if there is one; every loop re-aligned on the bar, out of its blank and without its blank and
  * regenerate requests (the arranger's nudge and accent move stay) */
@@ -357,7 +380,7 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
             bl_dec(s->generation, gen);
             uint64_t seed = bl_seed_derive(e->project.seed, "voice", e->project.voice[i].id, "regen", gen,
                                            (const char *)NULL);
-            make_pattern(e, &e->project.voice[i], seed, &e->sched, p);
+            make_pattern(&e->project, e->repeats, &e->project.voice[i], seed, &e->sched, p);
             s->generation++;
             return;
         }

@@ -5,8 +5,9 @@
 # own ticks. Tick 0 sounds 100 ms after PLAY is seen (the press's first ms); bar N is tick N x 3840. The dumps go
 # to app/build/scenarios/stop_flush/.
 #
-# the flush's order: the Full ensemble (96 BPM) stopped at tick 1505, the bass (channel 3, 2 on the wire) and the
-# pad's chord (channel 4, 3) sounding
+# the flush's order: the Full ensemble (96 BPM) on its own seed (the boot's project has a fresh one) stopped at tick
+# 1505, the bass (channel 3, 2 on the wire) and the pad's chord (channel 4, 3) sounding
+rt load full
 dumpmidi app/build/scenarios/stop_flush/stop.txt
 tap PLAY
 wait 1000

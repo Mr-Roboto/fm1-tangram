@@ -4,6 +4,7 @@
 #pragma once
 #include <stdint.h>
 #include "plat.h"
+#include "live.h"                        /* the engine's (engine/): a project, a state */
 
 #define APP_NAME "BERLINAN"
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz (the FM-1 makes no sound) */
@@ -19,6 +20,54 @@
  * 4 KiB sectors each, in the data area 0x97000..0xDFFFF */
 enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT4, OBJ_SLOT5, OBJ_NOBJ };
 #define APP_STORE_MAP {0xDE000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u, 0xD2000u, 0xD0000u}
+
+/* ---- the project (project.c): what SAVE keeps, as a Berlinan document (AppServices.saveDocument): the project in
+ * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
+ * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
+#define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
+#define PROJ_FORMAT 1u
+#define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
+#define PROJ_UNDO 20                     /* UIState's undo stack */
+enum { ARR_OFF, ARR_CLASSIC, ARR_SLOW, ARR_AMBIENT };   /* arr_form: the arranger's form presets */
+
+typedef struct {
+    uint32_t magic, format;
+    uint8_t tpl, key_root, key_mode, sync, ext_ports, lights;   /* a BL_TPL_; 0-11; a BL_MODE_; INT 0, EXT 1; EXT's
+                                                                 * input (1 << PORT_USB, 1 << PORT_TRS); lights 0
+                                                                 * off, 1 keys and the buttons' glow, 2 keys only */
+    uint64_t seed;                       /* masterSeed */
+    int32_t bpm;                         /* 40-220 */
+    uint8_t arr_form;                    /* 0 off, 1 classic, 2 slow, 3 ambient */
+    uint8_t density_pct, has_density;    /* density 0-100 %; has_density 0: the template's (nil: 1) */
+    uint8_t channel[BL_MAX_VOICES];      /* the template's voice i's MIDI channel, 0-15 */
+} proj_t;
+
+extern proj_t proj;
+
+void proj_defaults(void);                /* the Full ensemble in A minor, a fresh seed */
+uint64_t proj_fresh_seed(void);          /* UInt64.random: a template's and Dice's */
+int proj_load(void);                     /* the project and the slots; 0 = loaded, else the defaults are in place */
+int proj_save(void);                     /* the project and the slots; 0 = saved and verified */
+void proj_to_engine(bl_project_t *out);  /* the app project as Berlinan's Project */
+void proj_apply(void);                   /* stopped: the project to the transport (the Mac's rebuildTransport) */
+void proj_stopped(void);                 /* stopped: what changed while playing, to the transport (...IfStale) */
+/* AppServices' changes: playing, what the Mac does live (0, or -1 when the engine's queue drops it) and the project
+ * for the next Play; stopped, the project to the transport. -1 too for what the Mac allows only stopped */
+int proj_set_template(int tpl);          /* applyTemplate: a fresh seed; playing, it takes over at the next bar */
+int proj_set_key(int root, int mode);    /* applyLiveMusicalChanges: playing, at the next bar */
+void proj_set_bpm(int32_t bpm);          /* the same: playing, at the next bar */
+int proj_set_density(int pct);           /* setDensity: playing, at the next bar */
+int proj_set_form(int form);             /* stopped setArrangerForm; playing setArrangerEnabled, on or off only */
+void proj_set_channel(int voice, int ch);   /* setVoiceChannel: the template's voice i, 0-15 */
+int proj_set_sync(int ext);              /* stopped only */
+void proj_set_ext_ports(int mask);
+int proj_dice(void);                     /* UIState.newSeed: an undo point, then AppServices.reseed */
+int slot_store(int k);                   /* saveSnapshot: the state at the render head; 0, -1 */
+int slot_recall(int k);                  /* recallSnapshot: an undo point, the state at the next bar; 0, -1 */
+int slot_used(int k);
+void undo_push(void);                    /* the undo point before every destructive action (regenerate, reroll,
+                                          * recall, Dice), 20 deep, the oldest dropped */
+int undo_pop(void);                      /* the last undo point recalled at the next bar; -1: none (or dropped) */
 
 /* the contract: the platform calls these */
 void app_init(void);                     /* boot: the saved project (or the defaults) */
