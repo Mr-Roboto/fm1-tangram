@@ -6,6 +6,13 @@
 #include "state.h"
 #include "gen.h"
 
+/* what an engine state holds, beyond the fields' own ranges: a slot read from the flash that holds anything else is
+ * not one (a corrupt record that still parses is refused, never played) */
+#define MIN_LENGTH (BL_PPQN / 4)         /* a loop: a 16th at least */
+#define GENERATORS (BL_GEN_DRONE + 1)
+#define MAX_ACCIDENTAL 2                 /* -2 ... 2 */
+#define MAX_RATCHET 3                    /* 1 ... 3: the mutation's 2-3, else 1 */
+
 /* ------------------------------------------------------------- writing --- */
 typedef struct {
     uint8_t *b;
@@ -65,10 +72,10 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put8(&o, v->reg_high);
         put8(&o, in_range(&o, v->ref_c, 0, 127));
         put8(&o, (v->participates ? 1u : 0u) | (p->locked ? 2u : 0u) | in_range(&o, v->anchor, 0, 3) << 2);
-        put8(&o, p->generator);
+        put8(&o, in_range(&o, p->generator, 0, GENERATORS - 1));
         put8(&o, in_range(&o, p->remaining, -1, 127) & 0xFF);
         put8(&o, in_range(&o, p->n, 0, BL_MAX_NOTES));
-        put32(&o, in_range(&o, p->length, 1, UINT32_MAX));
+        put32(&o, in_range(&o, p->length, MIN_LENGTH, UINT32_MAX));
         put32(&o, in_range(&o, p->start_offset, 0, p->length - 1));
         put32(&o, in_range(&o, s->generation[i], 0, UINT32_MAX));
         put64(&o, p->seed);
@@ -78,9 +85,9 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
             put16(&o, in_range(&o, q->gate, 1, 0xFFFF));
             put8(&o, in_range(&o, q->pitch.degree, -128, 127) & 0xFF);
             put8(&o, in_range(&o, q->pitch.octave, -128, 127) & 0xFF);
-            put8(&o, in_range(&o, q->pitch.accidental, -128, 127) & 0xFF);
-            put8(&o, q->velocity);
-            put8(&o, (q->accent ? 1u : 0u) | in_range(&o, q->ratchet, 0, 127) << 1);
+            put8(&o, in_range(&o, q->pitch.accidental, -MAX_ACCIDENTAL, MAX_ACCIDENTAL) & 0xFF);
+            put8(&o, in_range(&o, q->velocity, 1, 127));
+            put8(&o, (q->accent ? 1u : 0u) | in_range(&o, q->ratchet, 1, MAX_RATCHET) << 1);
         }
     }
     put16(&o, in_range(&o, s->sched.n, 0, BL_MAX_EVENTS));
@@ -175,12 +182,13 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         v->anchor = (uint8_t)(flags >> 2);
         check(&in, v->anchor, BL_ANCHOR_NONE, BL_ANCHOR_BEATS13);
         p->generator = (uint8_t)get8(&in);
+        check(&in, p->generator, 0, GENERATORS - 1);
         p->remaining = (int16_t)sign8(get8(&in));
         check(&in, p->remaining, -1, 127);
         p->n = (uint8_t)get8(&in);
         check(&in, p->n, 0, BL_MAX_NOTES);
         p->length = get32(&in);
-        check(&in, p->length, 1, UINT32_MAX);
+        check(&in, p->length, MIN_LENGTH, UINT32_MAX);
         p->start_offset = get32(&in);
         check(&in, p->start_offset, 0, p->length - 1);
         out->generation[i] = get32(&in);
@@ -194,10 +202,13 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
             q->pitch.degree = sign8(get8(&in));
             q->pitch.octave = sign8(get8(&in));
             q->pitch.accidental = sign8(get8(&in));
+            check(&in, q->pitch.accidental, -MAX_ACCIDENTAL, MAX_ACCIDENTAL);
             q->velocity = (uint8_t)get8(&in);
+            check(&in, q->velocity, 1, 127);
             uint32_t nf = get8(&in);
             q->accent = nf & 1u;
             q->ratchet = (uint8_t)(nf >> 1);
+            check(&in, q->ratchet, 1, MAX_RATCHET);
         }
     }
     uint32_t nev = in.bad ? 0 : get16(&in);

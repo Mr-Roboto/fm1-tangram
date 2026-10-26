@@ -15,7 +15,8 @@
  *   events                              u16, then per event the bar as LEB128 steps from the one before (the first
  *                                       from bar 0) and the offset, i8
  * A value the format cannot hold (a loop of more than 65,535 ticks, an id that is none of BL_VID_, ...) is refused,
- * never cut. */
+ * never cut; so is, both ways, what no engine state holds: a loop shorter than a 16th, a generator, velocity (1-127),
+ * accidental (-2...2) or ratchet (1-3) out of its range. */
 #pragma once
 #include <stdint.h>
 #include "live.h"

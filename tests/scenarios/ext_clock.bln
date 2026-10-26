@@ -5,6 +5,7 @@
 # 500 ms the clock runs on at the same rate, playing; MIDI Stop (FC) stops it. Clock from USB is not followed while
 # the input is TRS alone, before the start or while running, and nothing of the clock goes out (the FM-1 never
 # sends a clock it follows).
+proj template full 2477861893
 rt sync ext
 rt port TRS
 # PLAY with no clock coming: the Full ensemble's 96 BPM (1.536 ticks a ms) from the press (ms 1)

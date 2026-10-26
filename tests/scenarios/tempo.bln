@@ -2,6 +2,7 @@
 # to 100 ms and a window ahead of the sounding tick: the clock takes the new rate from that line on, never earlier,
 # and the MIDI clock out follows it (a pulse every 40 ticks). The Full ensemble: 96 BPM (1.536 ticks per ms), tick 0
 # 100 ms after PLAY is seen (ms 101), bar N is tick N x 3840.
+proj template full 2477861893
 tap PLAY
 wait 3500
 expect tick 5343

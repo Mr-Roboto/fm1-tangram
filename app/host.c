@@ -15,8 +15,11 @@
  *   midicmp midilines        the last cmpmidi: 0 the same, else the first line that differs (-1: a file missing);
  *                            the lines that matched
  *   selfnotes selfhash_hi selfhash_lo   the last selfrender
- *   tpl root mode bpm_proj seed_hi seed_lo chanI density_pct has_density form sync ext_ports lights
- *                            the app project (proj: chanI its voice I's channel; form its arr_form)
+ *   tpl root mode bpm_proj seed_hi seed_lo seeded chanI density_pct has_density arr_has arr_on arr_ambient form
+ *      sync ext_ports lights save_pending save_lit
+ *                            the app project (proj: seeded 0 while the defaults' seed is still to be drawn; chanI its
+ *                            voice I's channel; form proj_form, a FORM_); a SAVE waiting for the stop; the SAVE
+ *                            button's LED (blinking while one waits)
  *   slot_usedK slot_litK undo_depth stale   slot K (0-5) stored; its key lit; the undo points; a change made while
  *                            playing that the transport has not got yet (transportStale)
  *   pat_hash_hi pat_hash_lo  FNV-1a 64 over the transport's patterns (as captureState gives them: the running
@@ -45,8 +48,8 @@
  *      port USB|TRS|both     the transport's controls (VOICE a voice id, CH 0-15), until the panel has them all
  *   rt burst N               (playing) N note-ons on channel 16 (notes 0..N-1, velocity 1) due now and their offs a
  *                            tick later, into the queue: more than a ms may send
- *   proj template TEMPLATE [SEED] | key ROOT MODE | tempo BPM | density K | form off|classic|slow|ambient |
- *      channel VOICE CH | sync int|ext | dice
+ *   proj template TEMPLATE [SEED] | key ROOT MODE | tempo BPM | density K | arranger on|off |
+ *      form classic|slow|ambient | ambient on|off | channel VOICE CH | sync int|ext | dice
  *                            the project's changes as the Mac's AppServices makes them (project.c: MODE a ModeID raw
  *                            value, K 0-100; SEED a test's in place of the fresh one), until the panel has them all
  *   slot store K | slot recall K | undo push | undo pop | save
@@ -245,6 +248,7 @@ static void selfscript(const char *path)
         }
     bl_script_project(&ss, &p);
     rt_load(&p);
+    proj_unseeded = 0;                   /* (the transport's project is the test's: Play draws no seed over it) */
     for (i = 0; i < ss.nmute; i++)
         if (muteat(BL_VID_NAME[ss.mute[i].voice], ss.mute[i].tick, ss.mute[i].on)) {
             printf("FAIL selfscript %s: more than %d mutes\n", path, MUTES);
@@ -352,6 +356,7 @@ static int rt_cmd(const char *a, const char *b, const char *c)
         if (c[0])
             p.seed = strtoull(c, 0, 0);
         rt_load(&p);
+        proj_unseeded = 0;               /* (the transport's project is the test's: Play draws no seed over it) */
     } else if (!strcmp(a, "mute") && bl_vid(b) != BL_VID_NONE)
         rt_set_mute(bl_vid(b), atoi(c));
     else if (!strcmp(a, "channel") && bl_vid(b) != BL_VID_NONE)
@@ -385,14 +390,16 @@ static int voice_of(const char *id)      /* the project template's voice of that
     return -1;
 }
 
-static int form_named(const char *w)
+static int form_named(const char *w)    /* a FORM_ preset, FORM_OTHER for none */
 {
-    static const char *const NAME[] = {"off", "classic", "slow", "ambient"};
-    int f = 0;
-    while (f <= ARR_AMBIENT && strcmp(NAME[f], w))
+    static const char *const NAME[] = {"", "classic", "slow", "ambient"};
+    int f = FORM_CLASSIC;
+    while (f <= FORM_AMBIENT && strcmp(NAME[f], w))
         f++;
-    return f;
+    return f <= FORM_AMBIENT ? f : FORM_OTHER;
 }
+
+static int on_off(const char *w) { return !strcmp(w, "on") ? 1 : !strcmp(w, "off") ? 0 : -1; }
 
 static int mode_named(const char *w)
 {
@@ -413,8 +420,12 @@ static int proj_cmd(const char *a, const char *b, const char *c)
         proj_set_bpm(atoi(b));
     else if (!strcmp(a, "density"))
         r = proj_set_density(atoi(b));
-    else if (!strcmp(a, "form") && form_named(b) <= ARR_AMBIENT)
+    else if (!strcmp(a, "arranger") && on_off(b) >= 0)
+        r = proj_set_arranger(on_off(b));
+    else if (!strcmp(a, "form") && form_named(b) != FORM_OTHER)
         r = proj_set_form(form_named(b));
+    else if (!strcmp(a, "ambient") && on_off(b) >= 0)
+        r = proj_set_ambient(on_off(b));
     else if (!strcmp(a, "channel") && voice_of(b) >= 0)
         proj_set_channel(voice_of(b), atoi(c));
     else if (!strcmp(a, "sync") && (!strcmp(b, "int") || !strcmp(b, "ext")))
@@ -492,7 +503,17 @@ static int proj_expect(const char *what, int *got)
     else if (!strcmp(what, "has_density"))
         *got = proj.has_density;
     else if (!strcmp(what, "form"))
-        *got = proj.arr_form;
+        *got = proj_form();
+    else if (!strcmp(what, "arr_has"))
+        *got = proj.arr_has;
+    else if (!strcmp(what, "arr_on"))
+        *got = proj.arr_on;
+    else if (!strcmp(what, "arr_ambient"))
+        *got = proj.arr_ambient;
+    else if (!strcmp(what, "save_pending"))
+        *got = proj_save_pending();
+    else if (!strcmp(what, "seeded"))
+        *got = !proj_unseeded;
     else if (!strcmp(what, "sync"))
         *got = proj.sync;
     else if (!strcmp(what, "ext_ports"))
@@ -503,6 +524,8 @@ static int proj_expect(const char *what, int *got)
         *got = slot_used(what[9] - '0');
     else if (!strncmp(what, "slot_lit", 8) && what[8] >= '0' && what[8] < '0' + PROJ_SLOTS && !what[9])
         *got = (int)(led_keys >> (SLOT_KEY0 + what[8] - '0') & 1u);
+    else if (!strcmp(what, "save_lit"))
+        *got = (int)(led_buttons >> B_SAVE & 1u);
     else if (!strcmp(what, "undo_depth"))
         *got = undo_n;
     else if (!strcmp(what, "stale"))
@@ -620,8 +643,11 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         else if (undo_pop())
             printf("  undo pop: nothing to undo (or the engine's queue full)\n");
     } else if (!strcmp(cmd, "save")) {
-        if (proj_save())
+        int r = proj_save();
+        if (r < 0)
             printf("FAIL save: not written, or not read back the same\n");
+        else if (r == 1)
+            printf("  save: at the stop\n");
     } else
         return 0;
     return 1;
@@ -633,5 +659,5 @@ void app_host_reboot(void)               /* what RAM holds is gone: the project,
     memset(&proj, 0, sizeof proj);
     memset(slots, 0, sizeof slots);
     undo_used = undo_n = 0;
-    proj_stale = 0;
+    proj_stale = proj_unseeded = proj_saving = 0;
 }

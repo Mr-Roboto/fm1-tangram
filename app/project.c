@@ -3,23 +3,28 @@
 /* Berlinan's project on the FM-1 (app.h): the app's project as AppServices keeps it, and what SAVE writes, as
  * AppServices.saveDocument does: the project (OBJ_PROJ) and the six snapshot slots (OBJ_SLOT0..5, each a state as
  * state.h packs it, behind a header of its own). A project record of another magic or format, a short one, one with
- * a value out of its range: the defaults (the Full ensemble in A minor, a fresh seed); a slot record that is not one:
- * an empty slot. The undo stack and the running engine are not saved. Part of the unity build, after runtime.c.
+ * a value out of its range: the defaults, the Demo trio in A minor as the Mac's launch (its seed drawn at the first
+ * Play, template or Dice: at boot the clock and the pot hardly differ from one power-on to the next); a slot record
+ * that is not one: an empty slot. The undo stack and the running engine are not saved. Part of the unity build,
+ * after runtime.c.
  *
  * As on the Mac (AppServices, UIState):
  * - The project is the app's; the transport runs a copy of its own (Transport.project). Stopped, a change rebuilds
  *   the transport on the project (proj_apply: the next Play's engine, no mutes, the tempo); playing, the part the Mac
  *   does live goes to the running engine (tempo, key, density, the arranger's on / off at the next bar, a channel at
  *   once, a template at the next bar line, Dice's fresh state recalled at the next bar) and the project waits for
- *   the stop (transportStale, rebuildTransportIfStale). The arranger's form and the sync are stopped only.
+ *   the stop (transportStale, rebuildTransportIfStale). The arranger's form and ambient mode and the sync are
+ *   stopped only.
+ * - The arrangement is the Mac's: nil or a config, with AUTO (enabled), the form (a preset's periods and reprise) and
+ *   ambient mode in it apart; AUTO or ambient mode on a nil one starts from ArrangementConfig(); off keeps the rest.
  * - A slot stores the transport's state at the render head (captureState: before a Play of the project in place,
  *   its initial state). Recall and undo enqueue a recall, which a stopped transport drops (Play starts with no
  *   actions). Undo: a point before every destructive action, 20 deep, the oldest dropped; a load empties it
  *   (loadSlots).
  * Where it is the FM-1's own:
- * - The arranger is one setting, arr_form: off keeps the template's config switched off (Ambient drift's plateau;
- *   nil for the others), a form is its preset (classicArc, slowBuild, ambientPlateau). The Mac's AUTO, form and
- *   ambient mode are three.
+ * - SAVE while playing waits for the stop (proj_stopped: the button's, MIDI Stop, the arranger's ending): a flash
+ *   write stops everything for a moment, the MIDI clock too.
+ * - A stale project reaches the transport after any stop, not only the PLAY button's (the Mac's rebuild).
  * - A channel is the template's voice i's (the UI's voice i).
  * - The slots and the undo points are kept packed (a bl_state_t is 16.8 KB), the undo points in 32 KB: 20 of the
  *   templates' states fit with room to spare, a larger state takes the room of more than one. */
@@ -46,11 +51,14 @@ static uint8_t undo_mem[UNDO_BYTES] PLAT_POOL;   /* the undo points, the oldest 
 static uint16_t undo_used;               /* bytes */
 static uint8_t undo_n;
 static uint8_t proj_stale;               /* transportStale */
+static uint8_t proj_unseeded;            /* the defaults: their seed is drawn at the first Play */
+static uint8_t proj_saving;              /* a SAVE made while playing, written at the stop */
 static bl_state_t proj_st PLAT_POOL;     /* a state captured, unpacked */
 static bl_project_t proj_eng PLAT_POOL;  /* the project as the engine's, a template */
 static uint8_t proj_buf[PLAT_STORE_MAX] PLAT_POOL;   /* a state packed; a record read back */
 
 static const bl_arrcfg_t *const FORMS[] = {0, &bl_arr_classic, &bl_arr_slow, &bl_arr_ambient};
+static const bl_arrcfg_t ARR_DEFAULT = {0, 0, 0, 8, 16};      /* ArrangementConfig() */
 
 uint64_t proj_fresh_seed(void)           /* one SplitMix64 round over the ms and the MASTER pot */
 {
@@ -59,20 +67,39 @@ uint64_t proj_fresh_seed(void)           /* one SplitMix64 round over the ms and
     return bl_rng_next(&r);
 }
 
-static int form_same(const bl_arrcfg_t *a, const bl_arrcfg_t *b)
+static void arr_get(bl_arrcfg_t *c)     /* the project's arrangement config (nil: zeros) */
 {
-    return a->enabled == b->enabled && a->ambient == b->ambient && a->reprise == b->reprise
-           && a->min_bars == b->min_bars && a->max_bars == b->max_bars;
+    c->enabled = proj.arr_on;
+    c->ambient = proj.arr_ambient;
+    c->reprise = proj.arr_reprise;
+    c->min_bars = proj.arr_min;
+    c->max_bars = proj.arr_max;
 }
 
-static int form_of(const bl_project_t *p)   /* a template's arranger as arr_form (each is off or a preset) */
+static void arr_set(int has, const bl_arrcfg_t *c)
+{
+    proj.arr_has = (uint8_t)(has != 0);
+    proj.arr_on = has ? c->enabled : 0;
+    proj.arr_ambient = has ? c->ambient : 0;
+    proj.arr_reprise = has ? c->reprise : 0;
+    proj.arr_min = has ? c->min_bars : 0;
+    proj.arr_max = has ? c->max_bars : 0;
+}
+
+static void arr_or_default(void)         /* project.arrangement ?? ArrangementConfig() */
+{
+    if (!proj.arr_has)
+        arr_set(1, &ARR_DEFAULT);
+}
+
+int proj_form(void)
 {
     int f;
-    if (p->has_arr && p->arr.enabled)
-        for (f = ARR_CLASSIC; f <= ARR_AMBIENT; f++)
-            if (form_same(&p->arr, FORMS[f]))
-                return f;
-    return ARR_OFF;
+    for (f = FORM_CLASSIC; proj.arr_has && f <= FORM_AMBIENT; f++)
+        if (proj.arr_ambient == FORMS[f]->ambient && proj.arr_reprise == FORMS[f]->reprise
+            && proj.arr_min == FORMS[f]->min_bars && proj.arr_max == FORMS[f]->max_bars)
+            return f;
+    return FORM_OTHER;
 }
 
 static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: the template, as it is, on seed */
@@ -83,7 +110,7 @@ static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: 
     proj.key_root = (uint8_t)proj_eng.key.root;
     proj.key_mode = proj_eng.key.scale.mode;
     proj.bpm = proj_eng.bpm;
-    proj.arr_form = (uint8_t)form_of(&proj_eng);
+    arr_set(proj_eng.has_arr, &proj_eng.arr);   /* its config, whatever it is */
     proj.density_pct = 100;
     proj.has_density = 0;
     memset(proj.channel, 0, sizeof proj.channel);
@@ -99,7 +126,9 @@ void proj_defaults(void)
     proj.format = PROJ_FORMAT;
     proj.ext_ports = PORTS_ALL;
     proj.lights = 1;
-    from_template(BL_TPL_FULL, proj_fresh_seed());
+    from_template(BL_TPL_DEMO, 0);
+    proj.seed = proj_eng.seed;           /* (the template's own until the first Play draws one) */
+    proj_unseeded = 1;
 }
 
 static int proj_valid(const proj_t *p)
@@ -108,8 +137,12 @@ static int proj_valid(const proj_t *p)
     if (p->magic != PROJ_MAGIC || p->format != PROJ_FORMAT)
         return 0;
     if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES || p->sync > 1 || (p->ext_ports & ~PORTS_ALL)
-        || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->arr_form > ARR_AMBIENT || p->density_pct > 100
-        || p->has_density > 1)
+        || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
+        return 0;
+    if (p->arr_has > 1 || p->arr_on > 1 || p->arr_ambient > 1 || p->arr_reprise > 1)
+        return 0;
+    if (p->arr_has ? p->arr_min < 1 || p->arr_min > p->arr_max || p->arr_max > 1024
+                   : p->arr_on || p->arr_ambient || p->arr_reprise || p->arr_min || p->arr_max)
         return 0;
     for (i = 0; i < BL_MAX_VOICES; i++)
         if (p->channel[i] > 15)
@@ -138,13 +171,14 @@ int proj_load(void)
     static proj_t rec;
     int n, k;
     undo_used = undo_n = 0;
-    proj_stale = 0;
+    proj_stale = proj_saving = 0;
     for (k = 0; k < PROJ_SLOTS; k++)
         slot_load(k);
     memset(&rec, 0, sizeof rec);
     n = plat_store_load(OBJ_PROJ, &rec, sizeof rec);
     if (n == (int)sizeof rec && proj_valid(&rec)) {
         proj = rec;
+        proj_unseeded = 0;
         return 0;
     }
     proj_defaults();
@@ -158,9 +192,27 @@ static int save_obj(uint32_t obj, const void *src, uint32_t n)   /* written, and
     return plat_store_load(obj, proj_buf, sizeof proj_buf) == (int)n && !memcmp(proj_buf, src, n) ? 0 : -1;
 }
 
+static void draw_seed(void)              /* the defaults' seed, now (the Mac draws it at each launch) */
+{
+    if (!proj_unseeded)
+        return;
+    proj.seed = proj_fresh_seed();
+    proj_unseeded = 0;
+    proj_stale = 1;
+}
+
+int proj_save_pending(void) { return proj_saving; }
+
 int proj_save(void)                      /* the project; the slots stored since (the others are on the flash) */
 {
-    int k, r = save_obj(OBJ_PROJ, &proj, sizeof proj);
+    int k, r;
+    if (rt_playing()) {
+        proj_saving = 1;
+        return 1;
+    }
+    proj_saving = 0;
+    draw_seed();                         /* (a project saved has its seed) */
+    r = save_obj(OBJ_PROJ, &proj, sizeof proj);
     for (k = 0; k < PROJ_SLOTS; k++)
         if (slots[k].dirty) {
             if (save_obj(OBJ_SLOT0 + (uint32_t)k, slots[k].rec, slots[k].n))
@@ -181,12 +233,8 @@ void proj_to_engine(bl_project_t *out)   /* the template in A minor, then the pr
     out->key.root = proj.key_root;
     bl_scale_preset(proj.key_mode, &out->key.scale);
     out->bpm = proj.bpm;
-    if (proj.arr_form == ARR_OFF) {
-        out->arr.enabled = 0;            /* (a template with none keeps none: the engine reads both alike) */
-    } else {
-        out->has_arr = 1;
-        out->arr = *FORMS[proj.arr_form];
-    }
+    out->has_arr = proj.arr_has;
+    arr_get(&out->arr);
     if (proj.has_density)
         out->density = density_of(proj.density_pct);
     for (i = 0; i < out->nvoices; i++)
@@ -206,10 +254,23 @@ void proj_apply(void)                    /* rebuildTransport: a stopped transpor
     proj_stale = 0;
 }
 
-void proj_stopped(void)
+void proj_ready(void)
 {
-    if (proj_stale && !rt_playing())
+    draw_seed();
+    if (proj_stale)
         proj_apply();
+}
+
+int proj_stopped(void)
+{
+    int r = 1;
+    if (rt_playing())
+        return 1;
+    if (proj_saving)
+        r = proj_save();
+    if (proj_stale)
+        proj_apply();
+    return r;
 }
 
 /* ---- AppServices' changes */
@@ -227,6 +288,7 @@ static int template_seeded(int t, uint64_t seed)
     if (t < 0 || t >= BL_NTPL)
         return -1;
     from_template(t, seed);
+    proj_unseeded = 0;
     if (!rt_playing()) {
         proj_apply();
         return 0;
@@ -294,24 +356,39 @@ int proj_set_density(int pct)
     return rt_action(&a);
 }
 
-int proj_set_form(int form)              /* playing: on / off only, the engine's own config */
+int proj_set_arranger(int on)            /* (arrangement ?? ArrangementConfig()), enabled on; the form kept */
 {
     bl_action_t a;
-    if (form < ARR_OFF || form > ARR_AMBIENT)
-        return -1;
+    arr_or_default();
+    proj.arr_on = on ? 1 : 0;
     if (!rt_playing()) {
-        proj.arr_form = (uint8_t)form;
         proj_apply();
         return 0;
     }
-    if ((form != ARR_OFF) == (proj.arr_form != ARR_OFF))
-        return form == proj.arr_form ? 0 : -1;
-    proj.arr_form = (uint8_t)form;
     proj_stale = 1;
     memset(&a, 0, sizeof a);
     a.kind = BL_A_ARRANGER;
-    a.arg = form != ARR_OFF;
+    a.arg = proj.arr_on;
     return rt_action(&a);
+}
+
+int proj_set_form(int form)              /* arrangement = the preset (enabled, as the presets are) */
+{
+    if (form < FORM_CLASSIC || form > FORM_AMBIENT || rt_playing())
+        return -1;
+    arr_set(1, FORMS[form]);
+    proj_apply();
+    return 0;
+}
+
+int proj_set_ambient(int on)             /* (arrangement ?? ArrangementConfig()), ambientMode on */
+{
+    if (rt_playing())
+        return -1;
+    arr_or_default();
+    proj.arr_ambient = on ? 1 : 0;
+    proj_apply();
+    return 0;
 }
 
 void proj_set_channel(int voice, int ch)
@@ -347,6 +424,7 @@ int proj_dice(void)                      /* playing: LiveEngine(project).capture
 {
     undo_push();
     proj.seed = proj_fresh_seed();
+    proj_unseeded = 0;
     if (!rt_playing()) {
         proj_apply();
         return 0;

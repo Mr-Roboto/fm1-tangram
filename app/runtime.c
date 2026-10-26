@@ -37,8 +37,9 @@
  *   DAW paused), and the next pulse takes up from the tick reached, never back. FA / FB start, FC stops. The tempo
  *   (rt_bpm) is the followed one.
  * - The registry knows what went out on the wire (the tick sends it), not what was scheduled. */
+#include "runtime.h"
 
-#define RT_WINDOW 240                    /* the windows' grid, in ticks: the longest window */
+#define RT_WINDOW 240                   /* the windows' grid, in ticks: the longest window */
 #define RT_LOOKAHEAD_MS 100
 #define RT_PREROLL_MS 100                /* Transport's prerollNanos */
 #define RT_QUEUE 1024                    /* timed events (a power of two) */
@@ -674,7 +675,9 @@ void rt_set_ext_port(int mask)           /* EXT's input: bits 1 << PORT_USB, 1 <
 
 void app_loop(void)
 {
-    if (rt.start_req && !rt.playing)     /* an FA / FB (the tick's): the engine is the main loop's to make */
+    if (rt.start_req && !rt.playing) {   /* an FA / FB (the tick's): the engine is the main loop's to make */
+        proj_ready();                    /* (the project's, before any Play: app.h) */
         rt_play();
+    }
     rt_render();
 }

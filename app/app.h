@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "plat.h"
 #include "live.h"                        /* the engine's (engine/): a project, a state */
+#include "runtime.h"
 
 #define APP_NAME "BERLINAN"
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz (the FM-1 makes no sound) */
@@ -28,7 +29,7 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
 #define PROJ_FORMAT 1u
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
-enum { ARR_OFF, ARR_CLASSIC, ARR_SLOW, ARR_AMBIENT };   /* arr_form: the arranger's form presets */
+enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
 
 typedef struct {
     uint32_t magic, format;
@@ -37,27 +38,37 @@ typedef struct {
                                                                  * off, 1 keys and the buttons' glow, 2 keys only */
     uint64_t seed;                       /* masterSeed */
     int32_t bpm;                         /* 40-220 */
-    uint8_t arr_form;                    /* 0 off, 1 classic, 2 slow, 3 ambient */
+    uint8_t arr_has, arr_on, arr_ambient, arr_reprise;   /* Project.arrangement: nil (arr_has 0, the rest 0) or its
+                                                          * config: enabled (AUTO), ambientMode, reprise */
+    int16_t arr_min, arr_max;            /* its minPeriodBars ... maxPeriodBars, 1 <= min <= max */
     uint8_t density_pct, has_density;    /* density 0-100 %; has_density 0: the template's (nil: 1) */
     uint8_t channel[BL_MAX_VOICES];      /* the template's voice i's MIDI channel, 0-15 */
 } proj_t;
 
 extern proj_t proj;
 
-void proj_defaults(void);                /* the Full ensemble in A minor, a fresh seed */
-uint64_t proj_fresh_seed(void);          /* UInt64.random: a template's and Dice's */
+void proj_defaults(void);                /* the Demo trio in A minor, its seed drawn at the first Play (proj_ready) */
+uint64_t proj_fresh_seed(void);          /* UInt64.random: a template's, Dice's, the defaults' */
 int proj_load(void);                     /* the project and the slots; 0 = loaded, else the defaults are in place */
-int proj_save(void);                     /* the project and the slots; 0 = saved and verified */
+int proj_save(void);                     /* the project and the slots: 0 = saved and verified; playing, 1: at the
+                                          * next stop (a flash write stops everything, the MIDI clock too); -1 */
+int proj_save_pending(void);             /* a SAVE waits for the stop */
 void proj_to_engine(bl_project_t *out);  /* the app project as Berlinan's Project */
 void proj_apply(void);                   /* stopped: the project to the transport (the Mac's rebuildTransport) */
-void proj_stopped(void);                 /* stopped: what changed while playing, to the transport (...IfStale) */
+void proj_ready(void);                   /* before a Play: the defaults' seed drawn, the project changed meanwhile
+                                          * to the transport */
+int proj_stopped(void);                  /* stopped: a SAVE that waited (its proj_save result, else 1), what changed
+                                          * while playing to the transport (rebuildTransportIfStale) */
 /* AppServices' changes: playing, what the Mac does live (0, or -1 when the engine's queue drops it) and the project
  * for the next Play; stopped, the project to the transport. -1 too for what the Mac allows only stopped */
 int proj_set_template(int tpl);          /* applyTemplate: a fresh seed; playing, it takes over at the next bar */
 int proj_set_key(int root, int mode);    /* applyLiveMusicalChanges: playing, at the next bar */
 void proj_set_bpm(int32_t bpm);          /* the same: playing, at the next bar */
 int proj_set_density(int pct);           /* setDensity: playing, at the next bar */
-int proj_set_form(int form);             /* stopped setArrangerForm; playing setArrangerEnabled, on or off only */
+int proj_set_arranger(int on);           /* setArrangerEnabled (AUTO): playing, at the next bar */
+int proj_set_form(int form);             /* setArrangerForm: a FORM_ preset, stopped only */
+int proj_set_ambient(int on);            /* setAmbientMode: stopped only */
+int proj_form(void);                     /* the arrangement's preset (enabled aside), FORM_OTHER for none */
 void proj_set_channel(int voice, int ch);   /* setVoiceChannel: the template's voice i, 0-15 */
 int proj_set_sync(int ext);              /* stopped only */
 void proj_set_ext_ports(int mask);
