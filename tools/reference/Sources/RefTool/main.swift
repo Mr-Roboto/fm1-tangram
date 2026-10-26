@@ -5,6 +5,7 @@
 //   RefTool script [--text] FILE   the reference lines of a script (tests/equiv/README.md); --text writes the state
 //                                  text in place of each H line, for finding a mismatch
 //   RefTool templates              the three templates as the Mac instantiates them
+//   RefTool rng                    SplitMix64, seed streams and the standard library's random draws, for rng.c
 //   RefTool selftest               the tool checked against the engine's own offline renderer
 
 import BerlinanEngine
@@ -13,6 +14,7 @@ import Foundation
 let modes: [(name: String, usage: String, run: ([String]) throws -> Int32)] = [
     ("script", "script [--text] FILE", scriptMode),
     ("templates", "templates", templatesMode),
+    ("rng", "rng", rngMode),
     ("selftest", "selftest", selftestMode),
 ]
 
@@ -25,6 +27,64 @@ func scriptMode(_ args: [String]) throws -> Int32 {
     run.showText = showText
     var out = Output()
     run.play(emit: { out.line($0) })
+    out.flush()
+    return 0
+}
+
+/// The random draws of the engine, through the standard library's own functions on a SplitMix64: the lines are in
+/// tests/equiv/README.md ("rng.ref"). A generator is a fresh SplitMix64 per line.
+func rngMode(_ args: [String]) throws -> Int32 {
+    let seeds: [UInt64] = [
+        0, 1, 0xBE12_71A9, 2_477_861_893, 0x0A3B_11ED, 0x0123_4567_89AB_CDEF, 0xFFFF_FFFF_FFFF_FFFF, 0x8000_0000_0000_0000,
+        0x0000_0000_FFFF_FFFF, 0x1_0000_0000, 2, 3, 7, 42, 12345, 0xDEAD_BEEF, 0xCAFE_BABE_F00D_D00D, 0x5555_5555_5555_5555,
+        0xAAAA_AAAA_AAAA_AAAA, 0x9E37_79B9_7F4A_7C15, 0x1234, 0xFFFF_FFFF, 1_000_000_007, 0x7FFF_FFFF_FFFF_FFFF,
+    ]
+    var out = Output()
+    out.line("# rng.ref: RefTool rng (tests/equiv/README.md)")
+    for seed in seeds {
+        var g = SplitMix64(seed: seed)
+        out.line("next \(seed) " + (0..<64).map { _ in String(g.next()) }.joined(separator: " "))
+    }
+    let lists: [[String]] = [
+        ["voice", "bass", "mut", "12"], ["humanize", "-240"], ["arrangement"], ["a"], ["ab", "c"], ["a", "bc"],
+        ["voice", "pad", "gen"], ["voice", "lead", "mut", "0"], ["voice", "kick", "mut", "7"], ["scene", "open"],
+        ["transposition"], ["x", "y", "z"], ["voice", "bedPluck1", "gen", "3"], ["density"], ["voice", "drone"],
+        ["humanize", "240", "velocity"],
+    ]
+    for master in [UInt64(0xBE12_71A9), 0, 0xFFFF_FFFF_FFFF_FFFF] {
+        for labels in lists {
+            out.line("derive \(master) \(SeedStream.derive(master: master, labels: labels)) " + labels.joined(separator: " "))
+        }
+    }
+    let closed: [ClosedRange<Int>] = [1...12, 0...3, -7...7, 2...4, 102...138]
+    let open: [Range<Int>] = [0..<16, 0..<1]
+    var k = 0
+    for r in closed {
+        var g = SplitMix64(seed: seeds[2 + k % 6]); k += 1
+        out.line("in \(seeds[2 + (k - 1) % 6]) \(r.lowerBound) \(r.upperBound) "
+                 + (0..<2000).map { _ in String(Int.random(in: r, using: &g)) }.joined(separator: " "))
+    }
+    for r in open {
+        var g = SplitMix64(seed: seeds[2 + k % 6]); k += 1
+        out.line("upto \(seeds[2 + (k - 1) % 6]) \(r.lowerBound) \(r.upperBound) "
+                 + (0..<2000).map { _ in String(Int.random(in: r, using: &g)) }.joined(separator: " "))
+    }
+    for seed in [seeds[2], seeds[0], seeds[6]] {
+        var g = SplitMix64(seed: seed)
+        out.line("bool \(seed) " + (0..<2000).map { _ in Bool.random(using: &g) ? "1" : "0" }.joined(separator: " "))
+    }
+    for seed in [seeds[2], seeds[1], seeds[5]] {
+        var g = SplitMix64(seed: seed)
+        out.line("unit \(seed) " + (0..<2000).map { _ in
+            let s = String(Double.random(in: 0..<1, using: &g).bitPattern, radix: 16)
+            return String(repeating: "0", count: 16 - s.count) + s
+        }.joined(separator: " "))
+    }
+    for count in 1...17 {
+        var g = SplitMix64(seed: seeds[2])
+        let items = Array(0..<count)
+        out.line("index \(seeds[2]) \(count) " + (0..<500).map { _ in String(items.randomElement(using: &g)!) }.joined(separator: " "))
+    }
     out.flush()
     return 0
 }

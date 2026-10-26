@@ -24,9 +24,10 @@ run() {
 }
 run engine sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Iapp/engine -Iapp/engine/softfloat \
     -o $OUT/engine_test tests/host/engine_test.c app/engine/*.c app/engine/softfloat/*.c -lm && $OUT/engine_test"
-# comments included ("IEEE binary64" in prose); the vendored SoftFloat (app/engine/softfloat/, outside these globs)
-# keeps its upstream comments
-run no-double sh -c "! grep -nwE 'double|float' app/*.c app/*.h app/engine/*.[ch]"
+# comments included ("IEEE binary64" in prose); the vendored SoftFloat (app/engine/softfloat/, but for platform.h, which is
+# ours) keeps its upstream comments
+# (grep's status 1 is "no match"; 2 is an error, such as a glob matching no file, and must not pass)
+run no-double sh -c "grep -nwE 'double|float' app/*.c app/*.h app/engine/*.[ch] app/engine/softfloat/platform.h; [ \$? -eq 1 ]"
 run host-build sh build.sh --host
 for s in tests/scenarios/*.bln; do
     n=$(basename "$s" .bln)

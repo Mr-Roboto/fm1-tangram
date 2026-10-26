@@ -10,6 +10,7 @@
 #include <math.h>
 #include "test.h"
 #include "f64.h"
+#include "rng.h"
 
 static double dbl(uint64_t b)
 {
@@ -233,11 +234,125 @@ static void test_sin_range(void)
            raw, ulp_max);
 }
 
+/* ---------------------------------------------------------------- rng --- */
+/* tests/equiv/rng.ref: every line replayed on rng.c; the file is read whole, a line at a time */
+static char *read_file(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *buf = malloc((size_t)n + 1);
+    if (buf && fread(buf, 1, (size_t)n, f) != (size_t)n) {
+        free(buf);
+        buf = NULL;
+    }
+    fclose(f);
+    if (buf) buf[n] = 0;
+    return buf;
+}
+
+static void test_rng_vectors(void)
+{
+    char *text = read_file("tests/equiv/rng.ref");
+    CHECK(text != NULL, "tests/equiv/rng.ref: cannot read");
+    if (!text) return;
+    int lines = 0, values = 0;
+    for (char *line = strtok(text, "\n"); line; line = strtok(NULL, "\n")) {
+        char *p = line, *end;
+        if (*line == '#') continue;
+        char word[16];
+        int n = 0;
+        while (*p && *p != ' ' && n < 15) word[n++] = *p++;
+        word[n] = 0;
+        uint64_t seed = strtoull(p, &end, 10);
+        p = end;
+        bl_rng_t r;
+        bl_rng_seed(&r, seed);
+        lines++;
+        if (!strcmp(word, "derive")) {
+            uint64_t want = strtoull(p, &end, 10);
+            const char *lab[8];
+            int nl = 0;
+            for (p = end; *p;) {
+                while (*p == ' ') *p++ = 0;
+                if (*p) lab[nl++] = p;
+                while (*p && *p != ' ') p++;
+            }
+            uint64_t got = 0;
+            CHECK(nl >= 1 && nl <= 4, "derive: %d labels", nl);
+            if (nl == 1) got = bl_seed_derive(seed, lab[0], (const char *)NULL);
+            if (nl == 2) got = bl_seed_derive(seed, lab[0], lab[1], (const char *)NULL);
+            if (nl == 3) got = bl_seed_derive(seed, lab[0], lab[1], lab[2], (const char *)NULL);
+            if (nl == 4) got = bl_seed_derive(seed, lab[0], lab[1], lab[2], lab[3], (const char *)NULL);
+            CHECK(got == want, "derive %llu %s: %llu, want %llu", (unsigned long long)seed, lab[0],
+                  (unsigned long long)got, (unsigned long long)want);
+            values++;
+            continue;
+        }
+        int64_t lo = 0, hi = 0, count = 0;
+        if (!strcmp(word, "in") || !strcmp(word, "upto")) {
+            lo = strtoll(p, &end, 10);
+            hi = strtoll(end, &end, 10);
+            p = end;
+        } else if (!strcmp(word, "index")) {
+            count = strtoll(p, &end, 10);
+            p = end;
+        }
+        for (int i = 0;; i++) {
+            while (*p == ' ') p++;
+            if (!*p) break;
+            if (!strcmp(word, "next")) {
+                uint64_t want = strtoull(p, &end, 10), got = bl_rng_next(&r);
+                CHECK(got == want, "next %llu #%d: %llu, want %llu", (unsigned long long)seed, i,
+                      (unsigned long long)got, (unsigned long long)want);
+            } else if (!strcmp(word, "unit")) {
+                uint64_t want = strtoull(p, &end, 16), got = bl_rand_unit(&r).bits;
+                CHECK(got == want, "unit %llu #%d: %016llx, want %016llx", (unsigned long long)seed, i,
+                      (unsigned long long)got, (unsigned long long)want);
+            } else {
+                int64_t want = strtoll(p, &end, 10), got = -1;
+                if (!strcmp(word, "in")) got = bl_rand_in(&r, lo, hi);
+                else if (!strcmp(word, "upto")) got = bl_rand_upto(&r, lo, hi);
+                else if (!strcmp(word, "bool")) got = bl_rand_bool(&r);
+                else if (!strcmp(word, "index")) got = bl_rand_index(&r, count);
+                else {
+                    CHECK(0, "rng.ref: unknown line %s", word);
+                    break;
+                }
+                CHECK(got == want, "%s %llu #%d: %lld, want %lld", word, (unsigned long long)seed, i, (long long)got,
+                      (long long)want);
+            }
+            values++;
+            p = end;
+        }
+    }
+    CHECK(lines >= 100 && values > 30000, "rng.ref: only %d lines, %d values", lines, values);
+    free(text);
+
+    /* String(Int) */
+    static const int64_t D[] = {0, 7, -7, 12, -240, 102, 1000000, INT64_MAX, INT64_MIN};
+    static const char *const S[] = {"0", "7", "-7", "12", "-240", "102", "1000000", "9223372036854775807",
+                                    "-9223372036854775808"};
+    for (int i = 0; i < 9; i++) {
+        char buf[24];
+        bl_dec(D[i], buf);
+        CHECK(!strcmp(buf, S[i]), "bl_dec(%lld) = %s, want %s", (long long)D[i], buf, S[i]);
+    }
+    /* the label spelled as the engine writes it equals the literal */
+    char lab[24];
+    bl_dec(12, lab);
+    CHECK(bl_seed_derive(0xBE1271A9u, "voice", "bass", "mut", lab, (const char *)NULL) ==
+              bl_seed_derive(0xBE1271A9u, "voice", "bass", "mut", "12", (const char *)NULL), "dec label");
+}
+
 int main(void)
 {
     test_f64_ops();
     test_sin_cc_level();
     test_sin_range();
+    test_rng_vectors();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

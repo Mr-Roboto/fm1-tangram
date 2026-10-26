@@ -209,3 +209,19 @@ of its bit pattern, booleans are `0`/`1`, and `-` marks an optional that is nil.
 | `phase <phase> <scene>` | one per `sceneByPhase` entry, sorted by phase |
 
 The engine reads a nil `ccLanes`, `ccMap`, `ccScenes` or `sceneByPhase` as empty, so in this file both give no lines.
+
+## The random draws
+
+`tests/equiv/rng.ref` is `RefTool rng`: what the Swift 6.3.3 standard library draws from a `SplitMix64(seed:)`, for
+`app/engine/rng.c`. Each line starts with a word and a seed (unsigned decimal; a fresh generator per line), integers
+are decimal, a `Double` is the 16 lower-case hex digits of its bit pattern; `#` lines are comments.
+
+| Line | Content |
+| --- | --- |
+| `next <seed> <v>…` | the first 64 `next()` of the generator |
+| `derive <master> <result> <label>…` | `SeedStream.derive(master:, labels:)`; the labels are the rest of the line (none contains a space) |
+| `in <seed> <lo> <hi> <v>…` | 2,000 successive `Int.random(in: lo...hi)` |
+| `upto <seed> <lo> <hi> <v>…` | 2,000 successive `Int.random(in: lo..<hi)` |
+| `bool <seed> <v>…` | 2,000 successive `Bool.random()`, `1` for true |
+| `unit <seed> <bits>…` | 2,000 successive `Double.random(in: 0..<1)` |
+| `index <seed> <count> <v>…` | 500 successive `randomElement` indices of an array of `count` elements |
