@@ -1,0 +1,5 @@
+# The demo template on its own seed, 512 bars in windows of 960 ticks, no actions: the engine left to itself
+# (legitimization, mutation and, for ambient, the arranger's plateau with its scenes).
+template demo
+window 960
+bars 512

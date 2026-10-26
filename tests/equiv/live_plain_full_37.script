@@ -1,0 +1,5 @@
+# The full template on its own seed, 512 bars in windows of 37 ticks, no actions: the engine left to itself
+# (legitimization, mutation and, for ambient, the arranger's plateau with its scenes).
+template full
+window 37
+bars 512

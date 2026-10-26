@@ -1,0 +1,13 @@
+# The ambient template with 8 seeds, 256 bars each, in windows of 37 ticks: the first from the seed line, each
+# next one loaded on its bar line (it takes over at once), so the 8 engines play one after the other.
+template ambient
+seed 0x0
+window 37
+bars 2048
+at 983040 load ambient 0x1
+at 1966080 load ambient 0x2A
+at 2949120 load ambient 0xDEADBEEF
+at 3932160 load ambient 0x0123456789ABCDEF
+at 4915200 load ambient 0xFFFFFFFFFFFFFFFF
+at 5898240 load ambient 0x9E3779B97F4A7C15
+at 6881280 load ambient 0x5EED5EED

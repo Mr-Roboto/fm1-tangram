@@ -1,0 +1,17 @@
+# The full ensemble on its own seed in windows of 37 ticks, the arranger switched on while it plays (it adopts
+# the running ensemble and settles into the bed), three advances, two of them in one bar; the bass locked just
+# after the arranger nudges it (the nudge then leaves the locked pattern alone) and while the arranger picks its
+# targets; the arranger off at bar 128 (left on, it reaches its ending at bar 175) and on again at bar 208 over
+# the voices it left playing (a build); these two switches and an advance pending at a 16-bar line.
+template full
+window 37
+bars 400
+at 76800 arranger on
+at 115200 advance
+at 119000 advance
+at 119100 advance
+at 165200 lock bass 1
+at 345600 lock bass 0
+at 491000 arranger off
+at 798000 arranger on
+at 798100 advance

@@ -1,0 +1,6 @@
+# The full ensemble on its own seed under the arranger preset classic, in windows of 37 ticks: the build, bed,
+# variation, B part, payoff (with its reprise but in ambient), subtract and ending, to the stop.
+template full
+arranger classic
+window 37
+bars 800

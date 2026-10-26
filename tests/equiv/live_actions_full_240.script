@@ -1,0 +1,87 @@
+# Every action of tests/equiv/README.md three times or more over 400 bars, on the full template in windows of 240
+# ticks: on and off bar lines, some just before a 16-bar line (pending in an H state), two in one bar, voices the
+# engine lacks, saves and recalls, reseeds, the arranger on and off, and three loads (the last back to full).
+template full
+window 240
+bars 400
+at 15360 transpose 4
+at 24274 regenerate bedPluck1
+at 34660 save 0
+at 38400 lock bass 1
+at 38400 reroll
+at 48081 blank bedPluck2
+at 60600 key 2 dorian
+at 61200 density 35
+at 77800 bpart
+at 78800 bpart
+at 84497 tension
+at 96000 recall 0
+at 107620 voice bedPluck2 off
+at 122840 voice bedPluck2 on
+at 122860 density 100
+at 145925 key 9 naturalMinor
+at 183000 arranger on
+at 183480 advance
+at 199680 reseed 0x1234
+at 230400 arranger off
+at 245759 transpose 2
+at 253440 regenerate bass
+at 268800 blank bedPluck1
+at 276480 lock bedPluck1 1
+at 276490 reroll
+at 288000 save 1
+at 306360 tension
+at 326400 scene 0
+at 345600 lock bedPluck1 0
+at 364802 voice pad on
+at 384000 regenerate drone
+at 384001 regenerate lead
+at 395000 key 9 minorPentatonic
+at 411000 key 9 naturalMinor
+at 422400 key 0 dorian
+at 428159 density 60
+at 460800 recall 1
+at 490680 recall 0
+at 499200 bpart
+at 537600 arranger on
+at 541440 advance
+at 541540 advance
+at 614000 scene 1
+at 614400 transpose -3
+at 652800 tension
+at 672000 key 9 naturalMinor
+at 691200 reseed 0xBEEF
+at 729600 blank bass
+at 768000 arranger off
+at 787200 voice bedPluck1 off
+at 794880 voice bedPluck1 on
+at 806400 regenerate bedPluck2
+at 825600 lock bass 1
+at 829440 lock bass 0
+at 844800 save 2
+at 859000 density 0
+at 921000 density 100
+at 921600 scene 0
+at 960000 reseed 0x0
+at 983039 advance
+at 998400 arranger on
+at 1036800 recall 2
+at 1102180 load ambient 0xABC
+at 1102500 tension
+at 1103000 scene 1
+at 1103500 voice pad on
+at 1113600 transpose 5
+at 1152000 regenerate bedPluck1
+at 1190400 load demo 0x77
+at 1228800 key 4 phrygian
+at 1250000 key 9 minorPentatonic
+at 1267200 bpart
+at 1290000 key 9 naturalMinor
+at 1305600 arranger on
+at 1344000 advance
+at 1382400 reseed 0x5
+at 1420900 load full 0x99
+at 1459200 save 3
+at 1459200 recall 3
+at 1497600 reroll
+at 1501000 scene 1
