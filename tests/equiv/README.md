@@ -225,3 +225,36 @@ are decimal, a `Double` is the 16 lower-case hex digits of its bit pattern; `#` 
 | `bool <seed> <v>…` | 2,000 successive `Bool.random()`, `1` for true |
 | `unit <seed> <bits>…` | 2,000 successive `Double.random(in: 0..<1)` |
 | `index <seed> <count> <v>…` | 500 successive `randomElement` indices of an array of `count` elements |
+
+## The patterns
+
+`tests/equiv/gen.ref` is `RefTool gen` (`tools/reference/Sources/RefTool/Gen.swift`): the patterns of the generators
+the templates use, made by `PatternFactory.make` and `PatternFactory.makeBassMelody`, and the pattern ops on some of
+them, for `app/engine/pattern.c` and `app/engine/gen.c`. Integers are decimal (seeds unsigned), a `Double` is the 16
+lower-case hex digits of its bit pattern, booleans are `0`/`1`; `#` lines are comments.
+
+The cases, in this order: `seedProcedure(1, 4)` as `bedPluck1`, `bedPluck2` and `bass` (the bass is the procedure's
+other branch; the two beds give the same patterns), then `seedProcedure(1, 3)` the same three ways, `pulsingBass(3)` as
+`bass`, `stagedPluck(2)` as `lead`, `bassMelody(16)` as `bass` (through `make`: the pedal), `chordLayer(7)` as `pad`,
+`heartbeat` as `rhythm`, `drone(8)` as `drone`; each in A natural minor (`Key(root: 9, scale: .preset(.naturalMinor))`),
+then in C natural minor (`Key.default`); each with the 200 seeds `SeedStream.derive(master: k, "gen")`, k = 0..<200.
+Then `makeBassMelody(bars: 16)` over two schedules, with the same 200 seeds each: the full ensemble's
+(`HarmonyScheduler.resolve(project: .fullEnsemble).schedule`, the demo's transposition) and a busy one, a change every
+bar of up to 14 degrees, so that the walk also takes its fallback steps. Meter 4/4 throughout.
+
+`<notes>` below is `<n>` and then per note of `pattern.notes`, in their order,
+`<position> <gate> <degree> <octave> <accidental> <velocity> <accent> <ratchet>`.
+
+| Line | Content |
+| --- | --- |
+| `gen <kind> <a> <b> <role> <root> <seed> <length> <startOffset> <generator> <remaining> <notes>` | a `make` case: the config (`<kind> <a> <b>` as `seedProcedure <bars> <mutations>`, `pulsingBass <accents> 0`, `stagedPluck <bars> 0`, `bassMelody <bars> 0`, `chordLayer <periodBars> 0`, `heartbeat 0 0`, `drone <bars> 0`), the role's raw value, the key's root, the seed; then the pattern: `provenance.generator`'s raw value, the lifecycle's `remaining` (or `E` for `.established`) |
+| `walk <bars> <events> <bar> <offset>… <seed> <length> <notes>` | a `makeBassMelody` case: the schedule's events (sorted by bar) and the seed; then the pattern |
+| `cap <density> <length> <notes>` | `PatternOps.densityCap` of the last `gen`/`walk` pattern, for each density 0, 0.01, 0.35, 0.5, 0.99, 1, 1.5, -0.5 (the last three: the identity and the clamp) |
+| `roots <length> <locked> <remaining> <notes>` | `PatternOps.thinToRoots` of it |
+| `accents <seed> <notes>` | `PatternOps.moveAccents` of it with that seed (`SeedStream.derive(master: i, "accents")`, i the pattern's place in the file counting from 0) |
+| `occ <length> <rotate> <lo> <hi> <startOffset> <count> <at> <index>…` | `q = p.withLength(length).rotated(by: rotate)` of it: `q.startOffset`, then `q.occurrences(in: lo..<hi)`, each its tick and its note's index in `q.notes` |
+| `onset <length> <rotate> <from> <step> <bits>` | for the same `q`, `q.hasOnset(atGlobalTick:)` at `from`, `from + step`, … up to the `occ` line's `hi`, one `0`/`1` character each |
+
+The ops follow every 104th pattern of the file (the 0th, the 104th, …: 50 of the 5,200), each with a `cap` line per
+density, one `roots` and one `accents` line, and two `occ`/`onset` pairs: the length 240 ticks shorter with no rotation
+from tick 1234, and 480 ticks longer rotated by -1000 from tick -3000, both over two loops and 777 ticks.

@@ -12,6 +12,9 @@
 #include "f64.h"
 #include "rng.h"
 #include "music.h"
+#include "pattern.h"
+#include "gen.h"
+#include "harmony.h"
 
 static double dbl(uint64_t b)
 {
@@ -401,6 +404,203 @@ static void test_music(void)
           "floor div/mod");
 }
 
+/* ------------------------------------------------------- patterns, generators --- */
+/* tests/equiv/gen.ref: each gen and walk line made again by gen.c, each line after it (cap, roots, accents, occ,
+ * onset) applied by pattern.c to that pattern */
+static const char *const GEN_NAME[] = {"seedProcedure", "pulsingBass", "stagedPluck", "bassMelody", "chordLayer",
+                                       "heartbeat", "drone"};
+static const char *const ROLE_NAME[] = {"bedPluck1", "bedPluck2", "bass", "pad", "lead", "drone", "rhythm", "aux"};
+static int gen_max_n, gen_lines;
+
+static int name_index(const char *const *names, int count, const char *w)
+{
+    for (int i = 0; i < count; i++)
+        if (!strcmp(names[i], w)) return i;
+    return -1;
+}
+
+static char *next_word(char **p)
+{
+    while (**p == ' ') (*p)++;
+    char *w = *p;
+    while (**p && **p != ' ') (*p)++;
+    if (**p) *(*p)++ = 0;
+    return w;
+}
+static int64_t next_int(char **p) { return strtoll(next_word(p), NULL, 10); }
+
+/* the line's `<n> <note>...` against the pattern's notes; the first mismatch of a line is reported */
+static void check_notes(const bl_pattern_t *got, char **p, int line, const char *what)
+{
+    int n = (int)next_int(p);
+    CHECK(got->n == n, "gen.ref:%d %s: %d notes, want %d", line, what, got->n, n);
+    for (int i = 0; i < n && i < got->n; i++) {
+        const bl_pnote_t *g = &got->note[i];
+        int64_t w[8];
+        for (int k = 0; k < 8; k++) w[k] = next_int(p);
+        int same = g->position == w[0] && g->gate == w[1] && g->pitch.degree == w[2] && g->pitch.octave == w[3] &&
+                   g->pitch.accidental == w[4] && g->velocity == w[5] && g->accent == w[6] && g->ratchet == w[7];
+        CHECK(same, "gen.ref:%d %s note %d: %lld %lld %d %d %d %d %d %d, want %lld %lld %lld %lld %lld %lld %lld %lld",
+              line, what, i, (long long)g->position, (long long)g->gate, g->pitch.degree, g->pitch.octave,
+              g->pitch.accidental, g->velocity, g->accent, g->ratchet, (long long)w[0], (long long)w[1],
+              (long long)w[2], (long long)w[3], (long long)w[4], (long long)w[5], (long long)w[6], (long long)w[7]);
+        if (!same) return;
+    }
+}
+
+static int remaining_of(const char *w) { return !strcmp(w, "E") ? -1 : atoi(w); }
+
+static void test_gen_vectors(void)
+{
+    char *text = read_file("tests/equiv/gen.ref");
+    CHECK(text != NULL, "tests/equiv/gen.ref: cannot read");
+    if (!text) return;
+    static bl_pattern_t cur, q;
+    static bl_sched_t sched;
+    static bl_occ_t occ[1024];
+    int line = 0, ops = 0;
+    char *save = text;
+    for (char *l = text; l; l = save) {
+        char *nl = strchr(l, '\n');
+        save = nl ? nl + 1 : NULL;
+        if (nl) *nl = 0;
+        line++;
+        if (!*l || *l == '#') continue;
+        char *p = l, *word = next_word(&p);
+        if (!strcmp(word, "gen") || !strcmp(word, "walk")) {
+            char what[96];
+            if (*word == 'g') {
+                bl_gencfg_t cfg;
+                const char *kind = next_word(&p);
+                cfg.kind = (uint8_t)name_index(GEN_NAME, 7, kind);
+                cfg.a = (int16_t)next_int(&p);
+                cfg.b = (int16_t)next_int(&p);
+                const char *role_w = next_word(&p);
+                int role = name_index(ROLE_NAME, 8, role_w);
+                bl_key_t key = {(int32_t)next_int(&p), {0}};
+                bl_scale_preset(BL_MODE_NATURAL_MINOR, &key.scale);
+                uint64_t seed = strtoull(next_word(&p), NULL, 10);
+                snprintf(what, sizeof what, "%s %d %d %s %d %llu", kind, cfg.a, cfg.b, role_w, key.root,
+                         (unsigned long long)seed);
+                bl_make_pattern(&cfg, role, &key, seed, &cur);
+                CHECK(cur.seed == seed && cur.generator == cfg.kind, "gen.ref:%d %s: provenance", line, what);
+            } else {
+                int bars = (int)next_int(&p);
+                sched.n = (uint16_t)next_int(&p);
+                for (int i = 0; i < sched.n; i++) {
+                    sched.ev[i].bar = (int32_t)next_int(&p);
+                    sched.ev[i].offset = (int32_t)next_int(&p);
+                }
+                uint64_t seed = strtoull(next_word(&p), NULL, 10);
+                snprintf(what, sizeof what, "walk %d (%d events) %llu", bars, sched.n, (unsigned long long)seed);
+                bl_make_bass_melody(bars, &sched, seed, &cur);
+                CHECK(cur.seed == seed && cur.generator == BL_GEN_BASS_MELODY, "gen.ref:%d %s: provenance", line, what);
+            }
+            int64_t length = next_int(&p);
+            CHECK(cur.length == length, "gen.ref:%d %s: length %lld, want %lld", line, what, (long long)cur.length,
+                  (long long)length);
+            if (*word == 'g') {
+                int64_t offset = next_int(&p);
+                const char *gen_w = next_word(&p);
+                int remaining = remaining_of(next_word(&p));
+                CHECK(cur.start_offset == offset && cur.generator == name_index(GEN_NAME, 7, gen_w) &&
+                          cur.remaining == remaining && !cur.locked,
+                      "gen.ref:%d %s: offset %lld generator %d remaining %d", line, what, (long long)cur.start_offset,
+                      cur.generator, cur.remaining);
+            } else {
+                CHECK(cur.start_offset == 0 && cur.remaining == 4 && !cur.locked, "gen.ref:%d %s: header", line, what);
+            }
+            check_notes(&cur, &p, line, what);
+            if (cur.n > gen_max_n) gen_max_n = cur.n;
+            gen_lines++;
+        } else if (!strcmp(word, "cap")) {
+            f64 d = {strtoull(next_word(&p), NULL, 16)};
+            bl_density_cap(&cur, d, &q);
+            CHECK(q.length == next_int(&p), "gen.ref:%d cap: length", line);
+            check_notes(&q, &p, line, "cap");
+            ops++;
+        } else if (!strcmp(word, "roots")) {
+            q = cur;
+            bl_thin_to_roots(&q);
+            CHECK(q.length == next_int(&p), "gen.ref:%d roots: length", line);
+            CHECK(q.locked == next_int(&p), "gen.ref:%d roots: locked", line);
+            CHECK(q.remaining == remaining_of(next_word(&p)), "gen.ref:%d roots: remaining %d", line, q.remaining);
+            check_notes(&q, &p, line, "roots");
+            ops++;
+        } else if (!strcmp(word, "accents")) {
+            q = cur;
+            bl_move_accents(&q, strtoull(next_word(&p), NULL, 10));
+            check_notes(&q, &p, line, "accents");
+            ops++;
+        } else if (!strcmp(word, "occ") || !strcmp(word, "onset")) {
+            /* withLength(newLength).rotated(by: rotate) */
+            bl_tick_t len = next_int(&p), rotate = next_int(&p), lo = next_int(&p);
+            q = cur;
+            bl_with_length(&q, len);
+            q.start_offset = bl_floor_mod(q.start_offset + rotate, q.length);
+            if (*word == 'o' && word[1] == 'c') {
+                bl_tick_t hi = next_int(&p), offset = next_int(&p);
+                int n = (int)next_int(&p), got = bl_occurrences(&q, lo, hi, occ, 1024);
+                CHECK(q.start_offset == offset, "gen.ref:%d occ: offset %lld, want %lld", line,
+                      (long long)q.start_offset, (long long)offset);
+                CHECK(got == n, "gen.ref:%d occ: %d onsets, want %d", line, got, n);
+                for (int i = 0; i < n && i < got; i++) {
+                    bl_tick_t at = next_int(&p);
+                    int index = (int)next_int(&p);
+                    CHECK(occ[i].at == at && occ[i].index == index, "gen.ref:%d occ %d: %lld %d, want %lld %d", line, i,
+                          (long long)occ[i].at, occ[i].index, (long long)at, index);
+                    if (occ[i].at != at || occ[i].index != index) break;
+                }
+            } else {
+                bl_tick_t step = next_int(&p);
+                const char *bits = next_word(&p);
+                for (int i = 0; bits[i]; i++) {
+                    int got = bl_has_onset(&q, lo + i * step);
+                    CHECK(got == bits[i] - '0', "gen.ref:%d onset at %lld: %d", line, (long long)(lo + i * step), got);
+                    if (got != bits[i] - '0') break;
+                }
+            }
+            ops++;
+        } else {
+            CHECK(0, "gen.ref:%d: unknown line %s", line, word);
+        }
+    }
+    CHECK(gen_lines == 5200 && ops == 700, "gen.ref: %d patterns, %d ops", gen_lines, ops);
+    printf("gen: %d patterns, %d ops, at most %d notes\n", gen_lines, ops, gen_max_n);
+    free(text);
+}
+
+/* the most notes a template's generator makes fits a pattern: over gen.ref's cases, and the bass melody's worst case
+ * (a change of 14 degrees every bar: three passing tones in each of its 16 bars) */
+static void test_gen_max_notes(void)
+{
+    CHECK(gen_max_n > 0 && gen_max_n <= BL_MAX_NOTES, "gen.ref: %d notes", gen_max_n);
+    static bl_sched_t zigzag;
+    static bl_pattern_t p;
+    zigzag.n = 16;
+    for (int i = 0; i < 16; i++) zigzag.ev[i] = (bl_tev_t){i, i & 1 ? -7 : 7};
+    for (uint64_t seed = 0; seed < 500; seed++) {
+        bl_make_bass_melody(16, &zigzag, seed, &p);
+        CHECK(p.n == BL_MAX_NOTES, "bass melody over a zigzag, seed %llu: %d notes", (unsigned long long)seed, p.n);
+    }
+    bl_sched_t *s = &zigzag;
+    CHECK(bl_sched_offset(s, 0) == 7 && bl_sched_offset(s, 1) == -7 && bl_sched_offset(s, 99) == -7, "sched offset");
+    s->n = 2;
+    s->ev[0] = (bl_tev_t){8, 5};
+    s->ev[1] = (bl_tev_t){12, 3};
+    CHECK(bl_sched_offset(s, 7) == 0 && bl_sched_offset(s, 8) == 5 && bl_sched_offset(s, 11) == 5 &&
+              bl_sched_offset(s, 12) == 3,
+          "sched offset before, at and after events");
+    /* firstSoundingNote: the first of the least positions */
+    p.n = 3;
+    p.note[0].position = 480;
+    p.note[1].position = 0;
+    p.note[2].position = 0;
+    CHECK(bl_first_sounding(&p) == 1, "first sounding");
+    p.n = 0;
+    CHECK(bl_first_sounding(&p) == -1, "first sounding of none");
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -408,6 +608,8 @@ int main(void)
     test_sin_range();
     test_rng_vectors();
     test_music();
+    test_gen_vectors();
+    test_gen_max_notes();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

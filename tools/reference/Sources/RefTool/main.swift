@@ -6,6 +6,7 @@
 //                                  text in place of each H line, for finding a mismatch
 //   RefTool templates              the three templates as the Mac instantiates them
 //   RefTool rng                    SplitMix64, seed streams and the standard library's random draws, for rng.c
+//   RefTool gen                    the generators' patterns and the pattern ops, for pattern.c and gen.c
 //   RefTool selftest               the tool checked against the engine's own offline renderer
 
 import BerlinanEngine
@@ -15,6 +16,7 @@ let modes: [(name: String, usage: String, run: ([String]) throws -> Int32)] = [
     ("script", "script [--text] FILE", scriptMode),
     ("templates", "templates", templatesMode),
     ("rng", "rng", rngMode),
+    ("gen", "gen", genMode),
     ("selftest", "selftest", selftestMode),
 ]
 
