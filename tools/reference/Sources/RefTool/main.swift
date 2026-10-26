@@ -2,21 +2,27 @@
 // Copyright (C) 2026 Jiří Píša
 // RefTool: the reference writer over Berlinan's pinned engine. One function per mode, listed in `modes`; a later task
 // adds its mode (rng, gen, mut, harmony, arrange, cc, midi) as one more function and one more line there.
-//   RefTool script FILE    the reference lines of a script (tests/equiv/README.md)
-//   RefTool selftest       the tool checked against the engine's own offline renderer
+//   RefTool script [--text] FILE   the reference lines of a script (tests/equiv/README.md); --text writes the state
+//                                  text in place of each H line, for finding a mismatch
+//   RefTool templates              the three templates as the Mac instantiates them
+//   RefTool selftest               the tool checked against the engine's own offline renderer
 
 import BerlinanEngine
 import Foundation
 
 let modes: [(name: String, usage: String, run: ([String]) throws -> Int32)] = [
-    ("script", "script FILE", scriptMode),
+    ("script", "script [--text] FILE", scriptMode),
+    ("templates", "templates", templatesMode),
     ("selftest", "selftest", selftestMode),
 ]
 
 func scriptMode(_ args: [String]) throws -> Int32 {
-    guard args.count == 1 else { throw ScriptError(description: "usage: RefTool script FILE") }
-    let text = try String(contentsOfFile: args[0], encoding: .utf8)
+    let showText = args.first == "--text"
+    let files = showText ? Array(args.dropFirst()) : args
+    guard files.count == 1 else { throw ScriptError(description: "usage: RefTool script [--text] FILE") }
+    let text = try String(contentsOfFile: files[0], encoding: .utf8)
     var run = Run(try Script(text: text))
+    run.showText = showText
     var out = Output()
     run.play(emit: { out.line($0) })
     out.flush()
@@ -42,8 +48,8 @@ func selftestMode(_ args: [String]) throws -> Int32 {
         var stop = "no stop"
         run.play(emit: { if $0.hasPrefix("S") { stop = "stop at \($0.dropFirst(2))" } }, onNote: { got.append($0) })
         let same = got == expected
-        print("\(same ? "ok  " : "FAIL") parity full classic seed \(seed): \(got.count) notes, offline \(expected.count),"
-              + " \(stop)")
+        print("\(same ? "ok  " : "FAIL") parity full classic seed \(seed): \(got.count) notes,"
+              + " offline \(expected.count), \(stop)")
         if !same { failed += 1 }
     }
     var first: [String]? = nil

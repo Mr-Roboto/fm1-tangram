@@ -47,7 +47,7 @@ The order of application: the template, its key, the seed, the arranger, the den
 
 `at TICK ACTION…`: one action per line. TICK is in transport ticks, 0 ≤ TICK < bars × 3840, and never smaller than the
 previous `at` line's. `V` is a voice id of one of the templates (`bedPluck1`, `bedPluck2`, `bass`, `pad`, `lead`,
-`kick`, `drone`); an id the running engine does not have does nothing, as in the engine.
+`kick`, `drone`). The running engine need not have it (see "Ids the running engine does not have" below).
 
 | Action | What the Mac does (and the tool) |
 | --- | --- |
@@ -67,7 +67,32 @@ previous `at` line's. `V` is a voice id of one of the templates (`bedPluck1`, `b
 | `arranger on\|off` | `AppServices.setArrangerEnabled` while playing: the app project's `(arrangement ?? ArrangementConfig())` gets `enabled`, then `.setArrangementEnabled`. |
 | `advance` | `.advancePhase`. |
 | `reseed 0xHEX` | `AppServices.reseed` while playing: p = the app project with `masterSeed` = HEX; `.recallSnapshot(LiveEngine(project: p).captureState())`; the app project becomes p. The running engine keeps its own project (and its old seed). |
-| `load demo\|full\|ambient 0xHEX` | `AppServices.applyTemplate` while playing: p = the template (in A minor, as above) with `masterSeed` = HEX, nothing else of the current setup; the app project becomes p and `Transport.loadProject(p)` arms it. |
+| `load demo\|full\|ambient 0xHEX` | `AppServices.applyTemplate` while playing: p = the template (in A minor, as above) with `masterSeed` = HEX, nothing else of the current setup; the app project becomes p and `Transport.loadProject(p)` arms it. The template's tempo changes only the transport's clock (wall time per tick), never the ticks, so it is not part of the reference. |
+
+**Ids the running engine does not have.** A script may name a voice or scene the running engine lacks: `voice pad on`
+on the demo trio, or a `tension` or `scene` between a `load` and its bar line (they read the app project, already the
+new template, while the old engine still runs). The engine then does what `LiveEngine.enqueue` does, action by action:
+
+- `regenerate`, `blank`, `lock`: nothing at all (`withState` finds no voice).
+- `voice V on|off`: queued as a bar-bound change like any other; until it binds it is an `up … voiceActive on|off V`
+  line of the state text; when it binds, nothing changes.
+- `tension`: queued; until it binds, an `up … tension V V` line; when it binds it still spends one unit
+  (`tensionRemaining` drops by one if it is above 0), and the one-shot note is dropped without sounding when its window
+  renders, because the engine has no such voice.
+- `scene N`: queued with the app project's scene name; until it binds, an `up … scene NAME -` line; when it binds,
+  nothing if the engine's project has no scene of that name. If it has one, every `voiceID|target` of that scene gets a
+  morph, including voices the engine lacks; those never emit CC (`sceneEmissions` skips them).
+- `reseed` and `recall` of a state captured from another project: `applyRecall` takes the schedule, takes the pattern
+  and generation of each voice whose id is in the state, and leaves the other voices' patterns and generations as they
+  are (all voices re-align and leave blank, regenerate and melody requests).
+
+In a script, `tension` and `scene` reach an engine without that voice or scene only between a `load` and its bar line.
+They bind on that same bar line, where the new engine has already taken over, so they show only as `up` lines in an
+`H` state of the old engine. The C engine must still apply the effects above, because it is checked against the engine
+and not only against these scripts.
+
+So the C runner must be able to keep, in its queued changes, a voice id (and a scene name) that its engine does not
+have, write it into the state text, and apply it with the engine's effect above.
 
 **The app project.** As on the Mac, the app's project (`AppServices.project`) is not the running engine's: it starts as
 the script's project, and `key`, `density`, `arranger`, `reseed` and `load` change it as the table says. `tension`,
@@ -94,6 +119,13 @@ from 0 to bars × 3840. One step:
 `origin` (where the running engine's tick 0 sits) is 0 until a `load` takes over. Output ticks are transport ticks:
 engine ticks + `origin`.
 
+### Debugging a mismatch
+
+`RefTool script --text FILE` writes the same lines, except that each `H` line is replaced by the canonical state text
+it would hash (below). Each line of that text is prefixed with `T `, so the C runner can print the same text and the
+two can be diffed. To get the `H` hash back from a block of `T` lines, drop each `T ` prefix, end every line with `\n`,
+and hash the result.
+
 ## Reference lines
 
 One line per item, words separated by one space, every line ending in `\n`, no comments. Per window, in this order:
@@ -118,7 +150,7 @@ only from the engine's public API: `snap = engine.snapshot()` and `engine.captur
 1. Per voice of `snap.voices` (project order):
    `voice <id> <active> <blankActive> <pending> <generation> <length> <startOffset> <locked> <lifecycle> <seed>`
    - `pending`: `snap`'s `pendingRequest` as `<kind> <tick>` (kind `blank`, `regenerate`, `replace` or
-     `melodyToggle`, tick in engine ticks), or `-` when there is none.
+     `melodyToggle`), or `-` when there is none. The tick is the engine's (no `origin` added).
    - `generation`: `captureState().generations[id]`.
    - `length`, `startOffset`, `locked`: of the voice's `pattern`.
    - `lifecycle`: the `remaining` of `.repeating(remaining:)`, or `E` for `.established`.
@@ -127,13 +159,15 @@ only from the engine's public API: `snap = engine.snapshot()` and `engine.captur
    then per note of `pattern.notes`, in their order:
    `note <position> <degree> <octave> <accidental> <velocity> <gate> <accent> <ratchet>` (`degree`, `octave`,
    `accidental` of `pitch`).
-2. Per event of `snap.scheduleEvents`: `sched <bar> <degreeOffset>`.
+2. Per event of `snap.scheduleEvents`: `sched <bar> <degreeOffset>`; the bar counts from the running engine's tick 0
+   (no `origin` added).
 3. `key <root> <offset>…`: `snap.key.root`, then each of `snap.key.scale.offsets`.
 4. `density <16 hex digits>`: the bit pattern of `snap.density` (IEEE binary64), lower case.
 5. `tension <snap.tensionRemaining>`.
 6. `arr <phase> <barsInPhase> <barsUntilChange> <id>…` of `snap.arrangement` (`phase` its raw value: `build`, `bed`,
    `variation`, `bPart`, `payoff`, `subtract`, `ending`; then `activeVoices` in their order), or `arr -` when nil.
-7. Per event of `snap.upcomingEvents` (the engine's order): `up <tick> <kind> <detail> <voiceID>`. `kind` the raw
+7. Per event of `snap.upcomingEvents` (the engine's order): `up <tick> <kind> <detail> <voiceID>`, the tick in
+   engine ticks (no `origin` added). `kind` the raw
    value (`key`, `recall`, `density`, `bPart`, `voiceActive`, `alternating`, `tension`, `promoteToLead`, `arranger`,
    `advance`, `scene`); `detail` as the engine formats it, `-` when empty: the key's root in decimal; for density
    Swift's description of `(value * 100).rounded() / 100` (shortest round-trip form with at least one decimal:
@@ -142,3 +176,36 @@ only from the engine's public API: `snap = engine.snapshot()` and `engine.captur
 
 The text has no trailing separator besides the last line's `\n`. The `note` lines follow their `voice` line; nothing
 else is in the text (pattern ids, ties, gate cycles, MIDI delay and melody state are not part of it).
+
+## The templates
+
+`tests/equiv/templates.ref` is `RefTool templates`: the three templates as the Mac instantiates them
+(`TemplateStore.inDefaultKey`: A natural minor, each with its own seed, nothing else changed), for checking the port's
+templates field by field. For each template, in the order demo, full, ambient: a comment line `# template <name>`, then
+one line per item. Words are separated by one space, integers are decimal, a `Double` is the 16 lower-case hex digits
+of its bit pattern, booleans are `0`/`1`, and `-` marks an optional that is nil.
+
+| Line | Field |
+| --- | --- |
+| `seed <masterSeed>` | unsigned decimal |
+| `bpm <bits>` | `bpm` |
+| `key <root> <offset>…` | `key.root`, `key.scale.offsets` |
+| `meter <beatsPerBar> <beatUnit> <grouping>…` | `meter` |
+| `event <bar> <degreeOffset>` | one per event of `transposition.events` (none: no line) |
+| `arrangement <enabled> <minPeriodBars> <maxPeriodBars> <ambientMode> <reprise> <buildOrder>…` or `arrangement -` | `reprise` 0/1/`-`; `buildOrder` its ids, or `-` when nil |
+| `density <bits>` or `density -` | `density` |
+| `bpart <barsPerStep> <swapBass> <dropBed> <progressionSteps>…` or `bpart -` | `bPart` |
+| `tension <n>` or `tension -` | `tensionBudget` |
+| `legitimization <repeats> <ratchetProbability bits or ->` or `legitimization -` | `legitimization` |
+| `velocity <accentBoost> <humanizeRange>` or `velocity -` | `velocity` |
+| `slides <0\|1>` or `slides -` | `slidesEnabled` |
+| `unported <harmony> <alternating> <snapshots>` | each `set` or `-`: fields the port leaves out, which must be `-` |
+| `voice <id> <role> <low> <high> <referenceC> <channel> <phaseSteps> <anchorPolicy> <participates>` | one per voice in project order; `role` and `anchorPolicy` raw values; `phaseSteps`, `anchorPolicy`, `participatesInTransposition` `-` when nil |
+| `generator <case> <params>…` | after its voice: `seedProcedure <bars> <mutations>`, `pulsingBass <accents>`, `stagedPluck <bars>`, `bassMelody <bars>`, `chordLayer <periodBars>`, `heartbeat`, `drone <bars>` (also `highMidLow <register>`, `drunkardsWalk <bars> <scatter>`, `arpeggiator <octaves> <direction> <rate> <degrees>…`, which no template uses) |
+| `lane <target> <shape> <cycleBars> <depth> <center> <phase> <preStrikeTicks>` | one per `ccLanes` entry, in order; `shape` its raw value, the four Doubles as bits |
+| `ccmap <target> <controller>` | one per `ccMap` entry, sorted by target |
+| `unported <gateRamp> <accumulator> <overridePattern> <midiDelay>` | the voice's last line; each `set` or `-` |
+| `scene <name>` | one per `ccScenes` entry, in order, followed by its `value <voiceID> <target> <bits>` lines, sorted by voice id, then by target |
+| `phase <phase> <scene>` | one per `sceneByPhase` entry, sorted by phase |
+
+The engine reads a nil `ccLanes`, `ccMap`, `ccScenes` or `sceneByPhase` as empty, so in this file both give no lines.

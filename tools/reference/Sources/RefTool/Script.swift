@@ -103,7 +103,9 @@ struct Script {
                 lastTick = Tick(tick)
                 let parsed: ScriptAction?
                 do { parsed = try Script.action(Array(words.dropFirst(2))) } catch { throw fail("\(error)") }
-                guard let action = parsed else { throw fail("bad action '\(words.dropFirst(2).joined(separator: " "))'") }
+                guard let action = parsed else {
+                    throw fail("bad action '\(words.dropFirst(2).joined(separator: " "))'")
+                }
                 actions.append((tick: Tick(tick), action: action))
                 continue
             }
@@ -213,6 +215,8 @@ struct Run {
     /// UIState.snapshotSlots.
     private var slots: [LiveEngine.StateSnapshot?] = Array(repeating: nil, count: Script.slots)
     private var stopShown = false
+    /// `script --text`: the canonical state text (each line after `T `) in place of each H line.
+    var showText = false
 
     init(_ script: Script) {
         self.script = script
@@ -267,7 +271,13 @@ struct Run {
                 emit(Dump.stopLine(stop + origin))
                 stopShown = true
             }
-            if end / Run.hashPeriod > head / Run.hashPeriod { emit(Dump.hashLine(end, engine)) }
+            if end / Run.hashPeriod > head / Run.hashPeriod {
+                if showText {
+                    for line in Dump.stateText(engine).split(separator: "\n") { emit("T \(line)") }
+                } else {
+                    emit(Dump.hashLine(end, engine))
+                }
+            }
             head = end
             // The arranger's ending: the transport stops once the render head reaches the stop tick.
             if let stop = engine.pendingStopTick, head >= stop + origin { break }
