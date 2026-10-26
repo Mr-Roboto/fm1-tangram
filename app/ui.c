@@ -24,19 +24,20 @@
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
 static const char *const VIEW_NAME[NVIEWS] = {"Perform", "Voice", "Pattern", "CC", "Arranger", "Delay", "Setup"};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
-/* the four knobs of each page; the values the Mac cannot change (KS_ on) are shown, not edited */
+/* the four knobs of each page (KN_); the values the Mac cannot change (KNS_) are shown, not edited */
 enum {
-    K_NONE, K_TEMPO, K_AUTO, K_FORM, K_AMBIENT, K_CHANNEL, K_ROOT, K_SYNC, K_PORT, K_LIGHTS,
-    KS_LOOP, KS_REGISTER, KS_GEN, KS_TARGET, KS_CYCLE, KS_DEPTH, KS_SCENE, KS_PHASE, KS_LENGTH, KS_DROP, KS_REPRISE
+    KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS,
+    KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
+    KNS_REPRISE
 };
 static const uint8_t VIEW_KNOB[NVIEWS][4] = {
-    {K_TEMPO, K_AUTO, K_FORM, K_AMBIENT},
-    {K_CHANNEL, KS_LOOP, KS_REGISTER, KS_GEN},
-    {K_NONE, K_NONE, K_NONE, K_NONE},
-    {KS_TARGET, KS_CYCLE, KS_DEPTH, KS_SCENE},
-    {KS_PHASE, KS_LENGTH, KS_DROP, KS_REPRISE},
-    {K_NONE, K_NONE, K_NONE, K_NONE},
-    {K_ROOT, K_SYNC, K_PORT, K_LIGHTS},
+    {KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT},
+    {KN_CHANNEL, KNS_LOOP, KNS_REGISTER, KNS_GEN},
+    {KN_NONE, KN_NONE, KN_NONE, KN_NONE},
+    {KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE},
+    {KNS_PHASE, KNS_LENGTH, KNS_DROP, KNS_REPRISE},
+    {KN_NONE, KN_NONE, KN_NONE, KN_NONE},
+    {KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS},
 };
 
 /* the keys: the voices' (key k is the role KEY_ROLE[k]), the degrees' (white keys 4-10), the scenes' (black keys
@@ -81,7 +82,8 @@ static struct {
     uint8_t combo[NB];                   /* the voice key held when the button went down, plus one */
     uint32_t turn_t;                     /* the last knob turn */
     uint8_t help;                        /* a button's card is up: the button + 1 */
-    uint8_t pot, pot_sent;               /* MASTER: the step it is on (since pot_t), the step last sent */
+    uint8_t pot, pot_sent, pot_settled;  /* MASTER: the step it is on (since pot_t), the step last sent (or its first
+                                          * settled place), that place taken */
     uint32_t pot_t;
     char msg[2][24];
     uint32_t msg_until;
@@ -198,42 +200,19 @@ static int v_locked(int k)
 }
 
 /* the degree in force at the render head's bar (Transport.currentDegreeOffset + 1), and the one the next bar brings
- * when it differs (a press binds there), 0 none; stopped: 1 and none. The head's bar in the running engine's ticks:
- * its renderedUpTo, the render head less the engine's origin */
-static int32_t head_bar(void) { return (int32_t)(rt_engine()->rendered / BL_TICKS_PER_BAR); }
-static int degree_now(void) { return rt_playing() ? bl_live_offset(rt_engine(), head_bar()) + 1 : 1; }
+ * when it differs (a press binds there), 0 none; stopped: 1 and none */
+static int degree_now(void) { return ui.st_ok ? bl_live_offset(rt_engine(), ui_st.bar) + 1 : 1; }
 static int degree_pending(void)
 {
-    int32_t b, o;
-    if (!rt_playing())
+    int32_t o;
+    if (!ui.st_ok)
         return 0;
-    b = head_bar();
-    o = bl_live_offset(rt_engine(), b + 1);
-    return o != bl_live_offset(rt_engine(), b) ? o + 1 : 0;
+    o = bl_live_offset(rt_engine(), ui_st.bar + 1);
+    return o != bl_live_offset(rt_engine(), ui_st.bar) ? o + 1 : 0;
 }
 
-/* the scene the running engine's morphs head for (every one of its targets), as a BL_SCN_; BL_SCN_NONE none */
-static int scene_now(void)
-{
-    const bl_live_t *e = rt_engine();
-    int s, j, k;
-    if (!rt_playing())
-        return BL_SCN_NONE;
-    for (s = 0; s < e->project.nscenes; s++) {
-        const bl_scene_t *sc = &e->project.scene[s];
-        for (j = 0; j < sc->n; j++) {
-            for (k = 0; k < e->nmorph; k++)
-                if (e->morph[k].voice == sc->voice[j] && e->morph[k].target == sc->target[j]
-                    && e->morph[k].m.end.bits == sc->value[j].bits)
-                    break;
-            if (k == e->nmorph)
-                break;
-        }
-        if (sc->n && j == sc->n)
-            return bl_scn(sc->name);
-    }
-    return BL_SCN_NONE;
-}
+/* the scene the running engine's morphs head for, a BL_SCN_; BL_SCN_NONE none */
+static int scene_now(void) { return ui.st_ok ? ui_st.scene : BL_SCN_NONE; }
 
 static int tension_left(void) { return ui.st_ok ? ui_st.tension : BL_MAX_TENSION; }   /* stopped: the budget */
 
@@ -279,7 +258,8 @@ static void voice_tap(int k)             /* toggleMute; a voice held back: setVo
     say(ROLE_NAME[k], rt_muted(v) ? "MUTED" : "ON");
 }
 
-static void voice_combo(int b, int k)    /* a voice key held: regenerate, blankCycle, toggleLock */
+static void voice_combo(int b, int k)    /* a voice key held: regenerate, blankCycle, toggleLock (a role the
+                                          * template lacks: nothing, the button taken all the same) */
 {
     int v = key_vid(k);
     if (v == BL_VID_NONE)
@@ -405,11 +385,11 @@ static void key_up(int k)
         voice_tap(k);
 }
 
-static int held_voice(void)              /* the voice key held (the lowest, of a voice the template has), -1 none */
+static int held_voice(void)              /* the voice key held (the lowest), -1 none */
 {
     int k;
     for (k = 0; k < NVKEYS; k++)
-        if ((ui.keys >> k & 1u) && key_voice(k) >= 0)
+        if (ui.keys >> k & 1u)
             return k;
     return -1;
 }
@@ -483,14 +463,14 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     int d = e > 0 ? 1 : -1, v, i;
     char t[8];
     switch (k) {
-    case K_TEMPO: tempo_to(proj.bpm + accel(role, e, 180)); break;
-    case K_AUTO:
+    case KN_TEMPO: tempo_to(proj.bpm + accel(role, e, 180)); break;
+    case KN_AUTO:
         if (proj_set_arranger(d > 0))
             warn("AUTO", "QUEUE FULL");
         else
             say("AUTO", proj.arr_on ? "ON" : "OFF");
         break;
-    case K_FORM:
+    case KN_FORM:
         v = proj_form() == FORM_OTHER ? (d > 0 ? FORM_CLASSIC : FORM_AMBIENT) : proj_form() + d;
         v = clamp(v, FORM_CLASSIC, FORM_AMBIENT);
         if (proj_set_form(v))
@@ -498,39 +478,39 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
         else
             say("FORM", FORM_NAME[v]);
         break;
-    case K_AMBIENT:
+    case KN_AMBIENT:
         if (proj_set_ambient(d > 0))
             warn("AMBIENT", "WHEN STOPPED");
         else
             say("AMBIENT", proj.arr_ambient ? "ON" : "OFF");
         break;
-    case K_CHANNEL:
+    case KN_CHANNEL:
         if ((i = key_voice(ui.sel)) < 0)
             break;
         proj_set_channel(i, clamp(proj.channel[i] + e, 0, 15));
         itoa_u(proj.channel[i] + 1u, t);
         say("CHANNEL", t);
         break;
-    case K_ROOT:
+    case KN_ROOT:
         if (proj_set_key((proj.key_root + d + 12) % 12, proj.key_mode))
             warn("ROOT", "QUEUE FULL");
         else
             say("ROOT", NOTE_NAME[proj.key_root]);
         break;
-    case K_SYNC:
+    case KN_SYNC:
         if (proj_set_sync(d > 0))
             warn("SYNC", "WHEN STOPPED");
         else
             say("SYNC", proj.sync ? "EXT" : "INT");
         break;
-    case K_PORT:
+    case KN_PORT:
         for (i = 0; i < 2 && PORTS[i] != proj.ext_ports; i++)
             ;
         i = clamp(i + d, 0, 2);
         proj_set_ext_ports(PORTS[i]);
         say("EXT INPUT", PORT_NAME[i]);
         break;
-    case K_LIGHTS:
+    case KN_LIGHTS:
         proj.lights = (uint8_t)clamp(proj.lights + d, 0, 2);
         say("LIGHTS", LIGHTS[proj.lights]);
         break;
@@ -596,7 +576,8 @@ static void button(int b)                /* a button's job, on its release (PLAY
 }
 
 /* HELP CARDS (AMB-1's): hold one button alone for HELP_HOLD and a card says what it does. A key, a turn or another
- * button puts it away; letting go after its card does nothing else. PLAY acts on its press: it has no card */
+ * button puts it away; letting go after its card does nothing else. PLAY acts on its press: it has no card (Ruling
+ * AC); nor has a button pressed with a voice key held (its job is that voice's, whenever it is let go) */
 static void help_tick(uint32_t btn, uint32_t keys)
 {
     uint32_t now = plat_ms();
@@ -610,27 +591,42 @@ static void help_tick(uint32_t btn, uint32_t keys)
     if (!btn || (btn & (btn - 1u)) || keys)
         return;
     for (i = 0; i < NB; i++)
-        if (btn == 1u << i && i != B_PLAY && !(ui.btn_used & btn) && now - ui.down_t[i] >= HELP_HOLD
-            && (int32_t)(ui.turn_t - ui.down_t[i]) <= 0) {
+        if (btn == 1u << i && i != B_PLAY && !ui.combo[i] && !(ui.btn_used & btn) && now - ui.down_t[i] >= HELP_HOLD
+            && (int32_t)(ui.turn_t - ui.down_t[i]) <= 0) {   /* (a button held for a voice is no card) */
             ui.help = (uint8_t)(i + 1);
             ui.btn_used |= btn;          /* its release now does nothing */
         }
 }
 
+/* MASTER's place as a density step, 0-100 %, rounded: an end zone at each end (0-20: 0 %; from 4076: 100 %), as the
+ * device's smoothed pot tops out at about 4092 (Ruling AB) */
+static uint32_t pot_step(void)
+{
+    uint32_t s = (plat_master() * 100u + 2048u) / 4096u;
+    return s > 100u ? 100u : s;
+}
+
 /* MASTER: density in steps of 1 %, sent when the pot has held a new step DENSITY_HOLD ms (setDensity: playing, at
- * the next bar) */
+ * the next bar). At boot the saved density wins (Ruling AD): the platform reports the pot's middle until its
+ * smoothing has caught up, so the first step held DENSITY_HOLD ms is taken as the pot's place, not sent; the pot
+ * takes over once it moves from there */
 static void pot(void)
 {
-    uint32_t s = plat_master() * 100u / 4096u;
+    uint32_t s = pot_step();
     char t[8];
-    if (s > 100u)
-        s = 100u;
     if (s != ui.pot) {
         ui.pot = (uint8_t)s;
         ui.pot_t = plat_ms();
         return;
     }
-    if (s == ui.pot_sent || plat_ms() - ui.pot_t < DENSITY_HOLD)
+    if (plat_ms() - ui.pot_t < DENSITY_HOLD)
+        return;
+    if (!ui.pot_settled) {               /* the pot's first settled place: nothing sent */
+        ui.pot_settled = 1;
+        ui.pot_sent = (uint8_t)s;
+        return;
+    }
+    if (s == ui.pot_sent)
         return;
     ui.pot_sent = (uint8_t)s;
     itoa_u(s, t);
@@ -852,8 +848,8 @@ static void draw_main(void)
 void ui_init(void)
 {
     memset(&ui, 0, sizeof ui);
-    ui.pot = ui.pot_sent = (uint8_t)(plat_master() * 100u / 4096u > 100u ? 100u : plat_master() * 100u / 4096u);
-    ui.pot_t = plat_ms();                /* (the pot's place at boot is taken as it is: nothing sent) */
+    ui.pot = (uint8_t)pot_step();        /* (not settled yet: pot() takes its place once it holds a step) */
+    ui.pot_t = plat_ms();
     sel_fix();
     lcd_fill(0, 0, 240, 240, K_BG);
 }

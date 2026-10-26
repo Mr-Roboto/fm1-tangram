@@ -77,6 +77,19 @@ expect undo_depth 1
 wait 3000
 expect req0 0
 expect blank0 1
+# the Pad's key held (the Demo trio has none) + EDIT / REC / SEL: the buttons are its, and do nothing (no re-roll,
+# no B part: the degree stays 1 over the next bar)
+key 3 down
+tap EDIT
+tap REC
+tap SEL
+key 3 up
+expect undo_depth 1
+expect req1 0
+expect req2 0
+expect locked0 0
+wait 2700
+expect degree 1
 # ---- the degrees: D4 (degree 2) pending until the next bar, then current
 expect degree 1
 expect pending_degree 0
@@ -122,22 +135,43 @@ expect pat_hash_lo 0x0c3f13f6
 tapkey 21
 expect warns 1
 expect undo_depth 3
-# three recalls in one bar: the engine holds two, the third is refused and said
+# three recalls in one bar: the engine holds two, the third is refused and said, and leaves no undo point; an undo
+# in the same bar is refused too, its point kept
 wait 1500
 tapkey 20
 tapkey 20
+expect undo_depth 5
 tapkey 20
 expect warns 2
+expect undo_depth 5
+tap OCT-
+expect warns 3
+expect undo_depth 5
+wait 2700
+tap OCT-
+expect undo_depth 4
+expect warns 3
 # ---- G5: tension, on Pluck 1 here (the Demo trio has no pad), lit while some is left
 expect tension_left 2
 expect key_led26 2
 tapkey 26
+expect tension_voice 0
 wait 2700
 expect tension_left 1
 tapkey 26
 wait 2700
 expect tension_left 0
 expect key_led26 0
+tap PLAY
+# ---- the Full ensemble (96 BPM): the tension lands on the Pad
+proj template full 2477861893
+tap PLAY
+wait 500
+tapkey 26
+expect tension_voice 3
+wait 2600
+expect tension_voice -1
+expect tension_left 1
 tap PLAY
 # ---- Ambient drift (72 BPM: a bar is 3333 ms): the arranger holds voices back (WAITS), its two scenes, >>
 proj template ambient 0x0A3B11ED

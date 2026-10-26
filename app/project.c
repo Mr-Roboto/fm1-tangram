@@ -455,21 +455,37 @@ int slot_store(int k)
     return 0;
 }
 
-int slot_recall(int k)
-{
-    if (!slot_used(k))
-        return -1;
-    undo_push();
-    if (state_unpack(slots[k].rec + SLOT_HEAD, slots[k].n - SLOT_HEAD, &proj_st))
-        return -1;
-    return proj_recall(&proj_st);
-}
-
 static uint32_t undo_len(uint32_t at)   /* the length of the point at at */
 {
     uint16_t n;
     memcpy(&n, undo_mem + at, sizeof n);
     return n;
+}
+
+static uint32_t undo_last(void)          /* where the latest point is: past the others */
+{
+    uint32_t at = 0;
+    int k;
+    for (k = 1; k < undo_n; k++)
+        at += 2u + undo_len(at);
+    return at;
+}
+
+/* a recall the engine's queue refused leaves no undo point for it (one the push dropped to make room stays gone) */
+int slot_recall(int k)
+{
+    int pushed;
+    if (!slot_used(k))
+        return -1;
+    pushed = !undo_push();
+    if (state_unpack(slots[k].rec + SLOT_HEAD, slots[k].n - SLOT_HEAD, &proj_st) || proj_recall(&proj_st)) {
+        if (pushed) {
+            undo_used = (uint16_t)undo_last();
+            undo_n--;
+        }
+        return -1;
+    }
+    return 0;
 }
 
 int undo_refused(void) { return undo_lost; }
@@ -499,17 +515,20 @@ int undo_push(void)
     return 0;
 }
 
-int undo_pop(void)
+int undo_pop(void)                      /* the point kept when the engine's queue refuses its recall */
 {
-    uint32_t at = 0;
-    int k;
+    uint32_t at;
     if (!undo_n)
         return -1;
-    for (k = 1; k < undo_n; k++)         /* the latest: past the others */
-        at += 2u + undo_len(at);
+    at = undo_last();
+    if (state_unpack(undo_mem + at + 2, (int)undo_len(at), &proj_st)) {
+        undo_n--;                        /* (a point that does not unpack: gone) */
+        undo_used = (uint16_t)at;
+        return -1;
+    }
+    if (proj_recall(&proj_st))
+        return -1;
     undo_n--;
     undo_used = (uint16_t)at;
-    if (state_unpack(undo_mem + at + 2, (int)undo_len(at), &proj_st))
-        return -1;
-    return proj_recall(&proj_st);
+    return 0;
 }

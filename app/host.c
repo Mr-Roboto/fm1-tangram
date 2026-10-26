@@ -37,7 +37,9 @@
  *                            locked; its generation, its pending request (0 none, 1 blank, 2 regenerate) and its
  *                            blank cycle (-1 for each: not there)
  *   tension_left arr_phase   the tension left (stopped: the budget, 2); the arranger's phase (-1 none, stopped)
- *   key_ledK                 key K's light as last set: 0 off, 1 dim, 2 lit
+ *   key_ledK btn_ledB        key K's light as last set: 0 off, 1 dim, 2 lit; button B's (a B_ number: 0 FX ... 13
+ *                            OCT+), 0 or 1
+ *   tension_voice            the voice the first pending tension lands on, as its key (-1 none)
  * Its commands:
  *   selfrender TEMPLATE BARS (stopped) the template on its own seed, rendered by the app's engine for BARS bars in
  *                            windows of 240 ticks, from tick 0 to the end or the arranger's ending; selfnotes its
@@ -595,7 +597,16 @@ static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mi
         *got = vstat(v) < 0 ? -1 : ui_st.voice[vstat(v)].blank;
     else if (indexed(what, "key_led", NKEYS, &v))
         *got = ui.led_k >> v & 1u ? 2 : (int)(ui.dim_k >> v & 1u);
-    else
+    else if (indexed(what, "btn_led", NB, &v))
+        *got = (int)(ui.led_b >> v & 1u);
+    else if (!strcmp(what, "tension_voice")) {   /* the first pending tension's voice, as its key; -1 none */
+        int i, k;
+        *got = -1;
+        for (i = 0; ui.st_ok && i < ui_st.nup && *got < 0; i++)
+            for (k = 0; ui_st.up[i].kind == BL_UP_TENSION && k < NVKEYS; k++)
+                if (key_vid(k) == ui_st.up[i].voice)
+                    *got = k;
+    } else
         return 0;
     return 1;
 }

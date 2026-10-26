@@ -74,13 +74,15 @@ int proj_set_sync(int ext);              /* stopped only */
 void proj_set_ext_ports(int mask);
 int proj_dice(void);                     /* UIState.newSeed: an undo point, then AppServices.reseed */
 int slot_store(int k);                   /* saveSnapshot: the state at the render head; 0, -1 */
-int slot_recall(int k);                  /* recallSnapshot: an undo point, the state at the next bar; 0, -1 */
+int slot_recall(int k);                  /* recallSnapshot: an undo point, the state at the next bar; 0, -1 (the
+                                          * engine's queue full: no undo point either) */
 int slot_used(int k);
 int undo_push(void);                     /* the undo point before every destructive action (regenerate, reroll,
                                           * recall, Dice), 20 deep, the oldest dropped; -1: none taken (a state the
                                           * format cannot hold) */
 int undo_refused(void);                  /* the last undo point was not taken (the pushes inside recall and Dice) */
-int undo_pop(void);                      /* the last undo point recalled at the next bar; -1: none (or dropped) */
+int undo_pop(void);                      /* the last undo point recalled at the next bar; -1: none, or the engine's
+                                          * queue full (the point kept) */
 int undo_depth(void);                    /* the undo points held (UIState.canUndo: more than none) */
 
 /* the panel and the screen (ui.c) */

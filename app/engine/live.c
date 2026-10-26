@@ -745,6 +745,20 @@ void bl_live_status(const bl_live_t *e, bl_status_t *out)
     out->density = e->density;
     out->tension = e->tension;
     out->key = e->project.key;
+    out->bar = head_bar(e);
+    out->scene = BL_SCN_NONE;
+    for (int s = 0; s < e->project.nscenes && out->scene == BL_SCN_NONE; s++) {
+        const bl_scene_t *sc = &e->project.scene[s];
+        int j = 0;
+        for (; j < sc->n; j++) {        /* a morph of the target to the scene's value (its end: the value clamped) */
+            int k = 0;
+            while (k < e->nmorph && !(e->morph[k].voice == sc->voice[j] && e->morph[k].target == sc->target[j]
+                                      && f64_eq(e->morph[k].m.end, clamp01(sc->value[j]))))
+                k++;
+            if (k == e->nmorph) break;
+        }
+        if (sc->n && j == sc->n) out->scene = (uint8_t)bl_scn(sc->name);
+    }
 }
 
 /* ---------------------------------------------------------- state text --- */

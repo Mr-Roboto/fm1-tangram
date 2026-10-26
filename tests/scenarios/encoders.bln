@@ -1,6 +1,8 @@
 # The encoders and the pot (spec, Controls: Encoders and the pot), one expect a row:
-#   MASTER     density 0-100 % in steps of 1 % (plat_master() * 100 / 4096), sent when the step changes and the pot
-#              has held it 150 ms (at boot its place is taken as it is: nothing sent); playing, at the next bar
+#   MASTER     density 0-100 % in steps of 1 % ((plat_master() * 100 + 2048) / 4096: 0 % up to 20, 100 % from
+#              4076, the device's pot tops out at about 4092), sent when the step changes and the pot has held it
+#              150 ms; playing, at the next bar. At boot the saved density wins: the pot's first settled place is
+#              taken, not sent, and it takes over once it moves from there (Ruling AD)
 #   SELECT     the selected voice (the template's, in key order); HOME held: the tempo (HOME then no page)
 #   ALGORITHM  the scale mode (the key's root kept), round
 #   PRESETS    the template (a fresh seed), round; while playing it takes over at the next bar
@@ -8,7 +10,7 @@
 #              stopped only); Voice the selected voice's channel; Setup root, sync (stopped only), EXT input,
 #              lights. The rest are shown, their knobs do nothing.
 proj template demo 0x5EED1234
-# ---- MASTER: the pot at 2048 from the start sends nothing
+# ---- MASTER: the pot settled where it is at boot (2048, 50 %) sends nothing
 wait 300
 expect density_pct 100
 expect has_density 0
@@ -25,12 +27,19 @@ wait 100
 expect density_pct 25
 wait 60
 expect density_pct 51
-master 4096
+# the top and the bottom of the device's travel reach 100 % and 0 %
+master 4092
 wait 200
 expect density_pct 100
-master 0
+master 4060
+wait 200
+expect density_pct 99
+master 8
 wait 200
 expect density_pct 0
+master 30
+wait 200
+expect density_pct 1
 master 2048
 wait 200
 expect density_pct 50
@@ -124,3 +133,22 @@ master 3072
 wait 200
 expect density_pct 75
 tap PLAY
+# ---- at boot the saved density wins (Ruling AD): 35 % saved; at the restart the platform reports the pot's middle
+# (2048, as the device's before its smoothing catches up), then its place (3000, 73 %) 40 ms on; the project's 35 %
+# stays until the pot moves from where it settled
+wait 100
+master 1434
+wait 200
+expect density_pct 35
+tap SAVE
+master 2048
+reboot
+master 3000
+wait 1000
+expect density_pct 35
+master 3010
+wait 200
+expect density_pct 35
+master 1000
+wait 200
+expect density_pct 24

@@ -16,6 +16,17 @@ shot help_edit.png
 release EDIT
 expect help 0
 expect undo_depth 0
+# EDIT pressed with the Bass's key held, the key let go, EDIT held on: no card, the Bass regenerated at the release
+key 2 down
+press EDIT
+key 2 up
+wait 1200
+expect help 0
+expect undo_depth 0
+release EDIT
+expect undo_depth 1
+expect req2 2
+expect muted2 0
 # SAVE held: its card, no save at the release
 press SAVE
 wait 1100

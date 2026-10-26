@@ -18,6 +18,8 @@ tap ARP
 expect view 2
 tap LFO
 expect view 3
+expect btn_led3 1
+expect btn_led6 0
 tap SEQ
 expect view 4
 tap FX
@@ -26,6 +28,8 @@ tap GLO
 expect view 6
 tap HOME
 expect view 0
+expect btn_led6 1
+expect btn_led3 0
 # ---- SAVE stopped: written at once
 expect store_writes 0
 tap SAVE
@@ -71,9 +75,14 @@ tap OCT-
 expect warns 1
 # ---- OCT+: Dice, an undo point, a fresh seed (from the clock and the pot: the simulator's are the test's)
 expect seed_lo 0x5EED1234
+expect pat_hash_hi 0xabd25f74
 tap OCT+
 expect undo_depth 1
 expect seed_lo 0xe815d91a
+# the new seed's patterns from the next bar: before its line the old ones still play
+expect pat_hash_hi 0xabd25f74
+wait 2700
+expect pat_hash_hi 0x0f277af5
 # ---- OCT- with OCT+: neither undoes nor dices
 press OCT-
 press OCT+

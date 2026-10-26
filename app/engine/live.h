@@ -162,7 +162,10 @@ typedef struct {
 } bl_upcoming_t;
 
 /* Snapshot: per voice in project order; the upcoming events sorted by tick (stable: the global changes in queue
- * order, then the arranger's on/offs, then the advances); the arranger's status when there is one */
+ * order, then the arranger's on/offs, then the advances); the arranger's status when there is one. The FM-1's own
+ * (for the panel; on the Mac the Transport and the UI work them out): bar, the bar of renderedUpTo (the render
+ * head's, Transport's mirror bar); scene, the scene (a BL_SCN_) every one of whose targets a scene morph heads for
+ * (the first in the project's order), BL_SCN_NONE none */
 typedef struct {
     uint8_t nvoices;
     struct {
@@ -179,6 +182,8 @@ typedef struct {
     f64 density;
     int32_t tension;
     bl_key_t key;
+    int32_t bar;
+    uint8_t scene;
 } bl_status_t;
 
 void bl_live_status(const bl_live_t *e, bl_status_t *out);

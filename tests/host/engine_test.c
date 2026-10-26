@@ -1809,6 +1809,36 @@ static void test_live_bind(void)
           st.up[1].kind == BL_UP_ADVANCE && st.up[2].tick == 5 * BL_TICKS_PER_BAR, "bind ticks: %d upcoming", st.nup);
     CHECK(bl_live_offset(&e, 2) == 0 && bl_live_offset(&e, 3) == 3, "the transposition binds at bar 3: %d %d",
           bl_live_offset(&e, 2), bl_live_offset(&e, 3));
+    CHECK(st.bar == 2, "the status's bar: %d", (int)st.bar);
+}
+
+/* the status's scene (the panel's): none until a morph heads for every target of one; Ambient drift's closed from
+ * its bind bar, then open; a template without scenes, none */
+static void test_live_status_scene(void)
+{
+    static bl_live_t e;
+    static bl_status_t st;
+    static bl_note_t out[2048];
+    bl_project_t p;
+    bl_template(BL_TPL_AMBIENT, &p);
+    bl_live_init(&e, &p);
+    bl_live_render(&e, 0, 100, out, 2048);
+    bl_action_t closed = {BL_A_SCENE, 0, 8, {0}, {0, {0}}, NULL, BL_SCN_CLOSED},
+                open = {BL_A_SCENE, 0, 8, {0}, {0, {0}}, NULL, BL_SCN_OPEN};
+    CHECK(!bl_live_enqueue(&e, &closed, 100), "enqueue");
+    bl_live_status(&e, &st);
+    CHECK(st.scene == BL_SCN_NONE, "before the bar: %d", st.scene);
+    bl_live_render(&e, 100, BL_TICKS_PER_BAR + 100, out, 2048);
+    bl_live_status(&e, &st);
+    CHECK(st.scene == BL_SCN_CLOSED && st.bar == 1, "closed from bar 1: %d, bar %d", st.scene, (int)st.bar);
+    CHECK(!bl_live_enqueue(&e, &open, BL_TICKS_PER_BAR + 100), "enqueue");
+    bl_live_render(&e, BL_TICKS_PER_BAR + 100, 2 * BL_TICKS_PER_BAR + 100, out, 2048);
+    bl_live_status(&e, &st);
+    CHECK(st.scene == BL_SCN_OPEN, "then open: %d", st.scene);
+    bl_template(BL_TPL_DEMO, &p);
+    bl_live_init(&e, &p);
+    bl_live_status(&e, &st);
+    CHECK(st.scene == BL_SCN_NONE && st.bar == 0, "the demo: %d", st.scene);
 }
 
 /* --------------------------------------------------------------- state --- */
@@ -2004,6 +2034,7 @@ int main(void)
     test_pending_overflow();
     test_live_unknown_ids();
     test_live_bind();
+    test_live_status_scene();
     test_state_pack();
     test_initial_state();
     test_state_caps();
