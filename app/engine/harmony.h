@@ -26,7 +26,8 @@ typedef struct bl_sched {
  * schedule. Swift's schedule has no bound; when this one would pass BL_MAX_EVENTS it first drops the events from bar
  * 16 on that another event at or before now_bar follows (no answer for bars below 16, which the bass melody's walk
  * reads, or at or after now_bar changes). If that is not room enough, nothing is added and -1 returned (the UI's
- * "SCHEDULE FULL"); else 0 */
+ * "SCHEDULE FULL"), the compaction staying done: the answers for bars 16 ... now_bar - 1 may then differ from
+ * Swift's, every one for bars below 16 and from now_bar on is kept. Else 0 */
 int bl_sched_merge(bl_sched_t *s, const bl_tev_t *add, int n, int32_t now_bar);
 /* TranspositionSchedule.offset(atBar:): the latest event at or before the bar, 0 before the first */
 int32_t bl_sched_offset(const bl_sched_t *s, int32_t bar);

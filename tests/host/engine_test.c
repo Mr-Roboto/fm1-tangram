@@ -925,7 +925,7 @@ static void test_harmony_vectors(void)
             int want = (int)next_int(&p), got = bl_render_voice(&v, index, &sched, &key, lo, hi, out, 256);
             CHECK(got == want, "harmony.ref:%d %s: window %lld: %d notes, want %d", line, what, (long long)lo, got,
                   want);
-            for (int i = 0; i < want && i < got; i++) {
+            for (int i = 0; i < want && i < got && i < 256; i++) {
                 const bl_note_t *g = &out[i];
                 int64_t w[7];
                 for (int k = 0; k < 7; k++) w[k] = next_int(&p);
@@ -974,6 +974,36 @@ static int32_t ref_offset(const bl_tev_t *ev, int n, int32_t bar)
     return result;
 }
 
+/* the unbounded schedule's merge of one event: replace its bar or insert in bar order */
+static void ref_merge(bl_tev_t *ev, int *n, bl_tev_t e)
+{
+    int k = 0;
+    while (k < *n && ev[k].bar < e.bar) k++;
+    if (k == *n || ev[k].bar != e.bar) {
+        memmove(ev + k + 1, ev + k, sizeof ev[0] * (size_t)(*n - k));
+        (*n)++;
+    }
+    ev[k] = e;
+}
+
+/* a schedule of these events (sorted, at most BL_MAX_EVENTS), set directly */
+static void fill_sched(bl_sched_t *s, const bl_tev_t *ev, int n)
+{
+    s->n = (uint16_t)n;
+    memcpy(s->ev, ev, sizeof ev[0] * (size_t)n);
+}
+
+/* the answers compaction keeps: bars 0-15 and now_bar...upto, against the unbounded schedule */
+static void check_domain(const bl_sched_t *s, const bl_tev_t *ref, int nref, int32_t now_bar, int32_t upto,
+                         const char *what)
+{
+    CHECK(s->n <= BL_MAX_EVENTS, "%s: %d events", what, s->n);
+    for (int32_t q = 0; q <= upto; q = q == 15 && now_bar > 16 ? now_bar : q + 1) {
+        int32_t got = bl_sched_offset(s, q), want = ref_offset(ref, nref, q);
+        CHECK(got == want, "%s: offset at bar %d %d, want %d", what, q, got, want);
+    }
+}
+
 static void test_sched_compaction(void)
 {
     static bl_tev_t ref[2000];
@@ -1018,6 +1048,38 @@ static void test_sched_compaction(void)
     CHECK(bl_sched_merge(&s, two, 2, 0) == 0 && s.n == BL_MAX_EVENTS && bl_sched_offset(&s, 7) == 4 &&
               bl_sched_offset(&s, 8) == 1,
           "full: a replacement refused");
+
+    /* a replaced bar that the compaction drops is new again (the review's case): bars 0-14, 20, 30, 31-269, now 30,
+     * merging 20 and 1000 drops 20 and then has no room for two; merging 20 alone fits */
+    static bl_tev_t full[BL_MAX_EVENTS + 8];
+    int nfull = 0;
+    for (int32_t b = 0; b < 270; b++)
+        if (b < 15 || b == 20 || b >= 30) full[nfull++] = (bl_tev_t){b, b % 7 - 3};
+    bl_tev_t add[4] = {{20, 5}, {1000, 6}};
+    for (int k = 2; k >= 1; k--) {
+        fill_sched(&s, full, nfull);
+        int r = bl_sched_merge(&s, add, k, 30);
+        nref = nfull;
+        memcpy(ref, full, sizeof full[0] * (size_t)nfull);
+        if (r == 0)
+            for (int i = 0; i < k; i++) ref_merge(ref, &nref, add[i]);
+        CHECK(r == (k == 2 ? -1 : 0) && s.n == (k == 2 ? BL_MAX_EVENTS - 1 : BL_MAX_EVENTS),
+              "compacted, %d new: %d, %d events", k, r, s.n);
+        check_domain(&s, ref, nref, 30, 1100, k == 2 ? "compacted, refused" : "compacted, replaced");
+    }
+
+    /* inserts out of bar order after a compaction: bars 0-14 and 16-256, now 200 (16-199 go), one replace */
+    nfull = 0;
+    for (int32_t b = 0; b <= 256; b++)
+        if (b != 15) full[nfull++] = (bl_tev_t){b, b % 5 - 2};
+    fill_sched(&s, full, nfull);
+    nref = nfull;
+    memcpy(ref, full, sizeof full[0] * (size_t)nfull);
+    bl_tev_t odd[4] = {{400, 1}, {15, 6}, {300, 2}, {250, -4}};
+    CHECK(bl_sched_merge(&s, odd, 4, 200) == 0 && s.n == 15 + 57 + 3, "out of order: %d events", s.n);
+    for (int i = 0; i < 4; i++) ref_merge(ref, &nref, odd[i]);
+    for (int k = 1; k < s.n; k++) CHECK(s.ev[k - 1].bar < s.ev[k].bar, "out of order: not sorted at %d", k);
+    check_domain(&s, ref, nref, 200, 500, "out of order");
 }
 
 int main(void)

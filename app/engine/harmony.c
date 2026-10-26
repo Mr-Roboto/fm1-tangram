@@ -42,15 +42,21 @@ static void compact(bl_sched_t *s, int32_t now_bar)
 
 /* TranspositionSchedule(events: s.events + add): byBar[event.bar] = event in input order (the last of a bar wins),
  * then byBar.values sorted by bar. The schedule is that already, so each add event replaces its bar's event or is
- * inserted in bar order */
+ * inserted in bar order. fresh is counted against the schedule the loop inserts into (after the compaction, which
+ * may drop a bar an add event would have replaced), so the loop inserts exactly fresh events and s->n + fresh <=
+ * BL_MAX_EVENTS holds it in bounds; the loop's own check is a second fence, never reached */
 int bl_sched_merge(bl_sched_t *s, const bl_tev_t *add, int n, int32_t now_bar)
 {
     int fresh = new_bars(s, add, n);
-    if (s->n + fresh > BL_MAX_EVENTS) compact(s, now_bar);
-    if (s->n + fresh > BL_MAX_EVENTS) return -1;
+    if (s->n + fresh > BL_MAX_EVENTS) {
+        compact(s, now_bar);
+        fresh = new_bars(s, add, n);
+        if (s->n + fresh > BL_MAX_EVENTS) return -1;
+    }
     for (int i = 0; i < n; i++) {
         int k = find_bar(s, add[i].bar);
         if (k == s->n || s->ev[k].bar != add[i].bar) {
+            if (s->n >= BL_MAX_EVENTS) return -1;
             for (int j = s->n; j > k; j--) s->ev[j] = s->ev[j - 1];
             s->n++;
         }
