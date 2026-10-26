@@ -15,6 +15,7 @@
 #include "pattern.h"
 #include "gen.h"
 #include "harmony.h"
+#include "legit.h"
 
 static double dbl(uint64_t b)
 {
@@ -429,18 +430,18 @@ static char *next_word(char **p)
 static int64_t next_int(char **p) { return strtoll(next_word(p), NULL, 10); }
 
 /* the line's `<n> <note>...` against the pattern's notes; the first mismatch of a line is reported */
-static void check_notes(const bl_pattern_t *got, char **p, int line, const char *what)
+static void check_notes(const char *file, const bl_pattern_t *got, char **p, int line, const char *what)
 {
     int n = (int)next_int(p);
-    CHECK(got->n == n, "gen.ref:%d %s: %d notes, want %d", line, what, got->n, n);
+    CHECK(got->n == n, "%s:%d %s: %d notes, want %d", file, line, what, got->n, n);
     for (int i = 0; i < n && i < got->n; i++) {
         const bl_pnote_t *g = &got->note[i];
         int64_t w[8];
         for (int k = 0; k < 8; k++) w[k] = next_int(p);
         int same = g->position == w[0] && g->gate == w[1] && g->pitch.degree == w[2] && g->pitch.octave == w[3] &&
                    g->pitch.accidental == w[4] && g->velocity == w[5] && g->accent == w[6] && g->ratchet == w[7];
-        CHECK(same, "gen.ref:%d %s note %d: %lld %lld %d %d %d %d %d %d, want %lld %lld %lld %lld %lld %lld %lld %lld",
-              line, what, i, (long long)g->position, (long long)g->gate, g->pitch.degree, g->pitch.octave,
+        CHECK(same, "%s:%d %s note %d: %lld %lld %d %d %d %d %d %d, want %lld %lld %lld %lld %lld %lld %lld %lld",
+              file, line, what, i, (long long)g->position, (long long)g->gate, g->pitch.degree, g->pitch.octave,
               g->pitch.accidental, g->velocity, g->accent, g->ratchet, (long long)w[0], (long long)w[1],
               (long long)w[2], (long long)w[3], (long long)w[4], (long long)w[5], (long long)w[6], (long long)w[7]);
         if (!same) return;
@@ -509,13 +510,13 @@ static void test_gen_vectors(void)
             } else {
                 CHECK(cur.start_offset == 0 && cur.remaining == 4 && !cur.locked, "gen.ref:%d %s: header", line, what);
             }
-            check_notes(&cur, &p, line, what);
+            check_notes("gen.ref", &cur, &p, line, what);
             patterns++;
         } else if (!strcmp(word, "cap")) {
             f64 d = {strtoull(next_word(&p), NULL, 16)};
             bl_density_cap(&cur, d, &q);
             CHECK(q.length == next_int(&p), "gen.ref:%d cap: length", line);
-            check_notes(&q, &p, line, "cap");
+            check_notes("gen.ref", &q, &p, line, "cap");
             ops++;
         } else if (!strcmp(word, "roots")) {
             q = cur;
@@ -523,12 +524,12 @@ static void test_gen_vectors(void)
             CHECK(q.length == next_int(&p), "gen.ref:%d roots: length", line);
             CHECK(q.locked == next_int(&p), "gen.ref:%d roots: locked", line);
             CHECK(q.remaining == remaining_of(next_word(&p)), "gen.ref:%d roots: remaining %d", line, q.remaining);
-            check_notes(&q, &p, line, "roots");
+            check_notes("gen.ref", &q, &p, line, "roots");
             ops++;
         } else if (!strcmp(word, "accents")) {
             q = cur;
             bl_move_accents(&q, strtoull(next_word(&p), NULL, 10));
-            check_notes(&q, &p, line, "accents");
+            check_notes("gen.ref", &q, &p, line, "accents");
             ops++;
         } else if (!strcmp(word, "occ") || !strcmp(word, "onset")) {
             /* withLength(newLength).rotated(by: rotate) */
@@ -654,6 +655,145 @@ static void test_gen_max_notes(void)
     CHECK(bl_first_sounding(&p) == -1, "first sounding of none");
 }
 
+/* ------------------------------------------------------ legitimization --- */
+/* tests/equiv/mut.ref: each voice made again by gen.c, then its lines applied in order to that voice by legit.c
+ * (mut: a mutation, advance: loop boundaries, lock: the lock flag); a life line starts a bare lifecycle. The span
+ * guard must have refused some degree shifts, or the vectors do not test it */
+static const char *const ANCHOR_NAME[] = {"none", "beat1", "beats1and3"};
+
+static void test_mut_vectors(void)
+{
+    char *text = read_file("tests/equiv/mut.ref");
+    CHECK(text != NULL, "tests/equiv/mut.ref: cannot read");
+    if (!text) return;
+    static bl_voice_t v, before;
+    static char id[32];
+    bl_key_t key = {0, {0}};
+    uint64_t master = 0;
+    int line = 0, voices = 0, muts = 0, same = 0, advances = 0, lives = 0, refused = 0;
+    char *save = text, what[128] = "";
+    for (char *l = text; l; l = save) {
+        char *nl = strchr(l, '\n');
+        save = nl ? nl + 1 : NULL;
+        if (nl) *nl = 0;
+        line++;
+        if (!*l || *l == '#') continue;
+        char *p = l, *word = next_word(&p);
+        if (!strcmp(word, "voice")) {
+            snprintf(id, sizeof id, "%s", next_word(&p));
+            v.id = id;
+            v.role = (uint8_t)name_index(ROLE_NAME, 8, next_word(&p));
+            v.anchor = (uint8_t)name_index(ANCHOR_NAME, 3, next_word(&p));
+            v.reg_low = (uint8_t)next_int(&p);
+            v.reg_high = (uint8_t)next_int(&p);
+            v.ref_c = (int32_t)next_int(&p);
+            v.participates = (uint8_t)next_int(&p);
+            key.root = (int32_t)next_int(&p);
+            const char *mode = next_word(&p);
+            bl_scale_preset(name_index(BL_MODE_RAW, BL_NMODES, mode), &key.scale);
+            bl_gencfg_t cfg;
+            const char *kind = next_word(&p);
+            cfg.kind = (uint8_t)name_index(GEN_NAME, 7, kind);
+            cfg.a = (int16_t)next_int(&p);
+            cfg.b = (int16_t)next_int(&p);
+            master = strtoull(next_word(&p), NULL, 10);
+            bl_tick_t phase = next_int(&p);
+            snprintf(what, sizeof what, "%s %s %d %s %s %d %d %llu", id, ANCHOR_NAME[v.anchor], key.root, mode, kind,
+                     cfg.a, cfg.b, (unsigned long long)master);
+            CHECK(bl_make_pattern(&cfg, v.role, &key, master, &v.pat) == 0, "mut.ref:%d %s: notes dropped", line,
+                  what);
+            if (phase) CHECK(bl_with_length(&v.pat, v.pat.length + phase) == 0, "mut.ref:%d %s: phase", line, what);
+            bl_tick_t length = next_int(&p), offset = next_int(&p);
+            int locked = (int)next_int(&p), remaining = remaining_of(next_word(&p));
+            CHECK(v.pat.length == length && v.pat.start_offset == offset && v.pat.locked == locked &&
+                      v.pat.remaining == remaining,
+                  "mut.ref:%d %s: length %lld offset %lld locked %d remaining %d", line, what, (long long)v.pat.length,
+                  (long long)v.pat.start_offset, v.pat.locked, v.pat.remaining);
+            check_notes("mut.ref", &v.pat, &p, line, what);
+            voices++;
+        } else if (!strcmp(word, "mut")) {
+            int gen = (int)next_int(&p);
+            uint64_t seed = strtoull(next_word(&p), NULL, 10);
+            int repeats = (int)next_int(&p);
+            const char *rw = next_word(&p);
+            f64 ratchet = strcmp(rw, "nil") ? (f64){strtoull(rw, NULL, 16)} : BL_RATCHET_DEFAULT;
+            char g[24];
+            bl_dec(gen, g);
+            CHECK(bl_seed_derive(master, "voice", v.id, "mut", g, (const char *)NULL) == seed,
+                  "mut.ref:%d %s: the seed of mutation %d", line, what, gen);
+            before = v;
+            int may = bl_is_mutable(&v.pat);
+            refused += bl_mutate(&v, &key, seed, repeats, ratchet);
+            CHECK(v.id == before.id && v.role == before.role && v.anchor == before.anchor &&
+                      v.reg_low == before.reg_low && v.reg_high == before.reg_high && v.ref_c == before.ref_c &&
+                      v.participates == before.participates && v.pat.seed == before.pat.seed &&
+                      v.pat.generator == before.pat.generator,
+                  "mut.ref:%d %s: the voice changed", line, what);
+            /* the identity leaves the pattern as it was, to the byte */
+            if (!may) {
+                CHECK(!memcmp(&v.pat, &before.pat, sizeof v.pat), "mut.ref:%d %s: not the identity", line, what);
+                same++;
+            }
+            int locked = (int)next_int(&p), remaining = remaining_of(next_word(&p));
+            bl_tick_t length = next_int(&p), offset = next_int(&p);
+            CHECK(v.pat.locked == locked && v.pat.remaining == remaining && v.pat.length == length &&
+                      v.pat.start_offset == offset,
+                  "mut.ref:%d %s mut %d: locked %d remaining %d length %lld offset %lld", line, what, gen,
+                  v.pat.locked, v.pat.remaining, (long long)v.pat.length, (long long)v.pat.start_offset);
+            char w2[160];
+            snprintf(w2, sizeof w2, "%s mut %d", what, gen);
+            check_notes("mut.ref", &v.pat, &p, line, w2);
+            muts++;
+        } else if (!strcmp(word, "advance")) {
+            int n = (int)next_int(&p);
+            for (int i = 0; i < n; i++) {
+                bl_advance_boundary(&v.pat);
+                int remaining = remaining_of(next_word(&p)), may = (int)next_int(&p);
+                CHECK(v.pat.remaining == remaining && bl_is_mutable(&v.pat) == may,
+                      "mut.ref:%d %s: boundary %d: remaining %d mutable %d, want %d %d", line, what, i,
+                      v.pat.remaining, bl_is_mutable(&v.pat), remaining, may);
+            }
+            advances++;
+        } else if (!strcmp(word, "lock")) {
+            v.pat.locked = (uint8_t)next_int(&p);
+        } else if (!strcmp(word, "life")) {
+            v.pat.remaining = (int16_t)remaining_of(next_word(&p));
+            v.pat.locked = (uint8_t)next_int(&p);
+            snprintf(what, sizeof what, "life %d %d", v.pat.remaining, v.pat.locked);
+            CHECK(bl_is_mutable(&v.pat) == next_int(&p), "mut.ref:%d %s: mutable", line, what);
+            lives++;
+        } else {
+            CHECK(0, "mut.ref:%d: unknown line %s", line, word);
+        }
+    }
+    CHECK(voices == 300 && muts == 3060 && same == 60 && advances == 3020 && lives == 20,
+          "mut.ref: %d voices, %d mutations (%d the identity), %d advance lines, %d lifecycles", voices, muts, same,
+          advances, lives);
+    CHECK(refused > 0, "mut.ref: the span guard never refused a degree shift");
+    printf("mut: %d voices, %d mutations (%d the identity), %d degree shifts refused by the span guard\n", voices,
+           muts, same, refused);
+    free(text);
+}
+
+/* the anchor rule's ticks, and the lifecycle at its edges (remaining 1, 0, established) */
+static void test_legit_lifecycle(void)
+{
+    bl_tick_t t[2];
+    CHECK(bl_anchor_ticks(BL_ANCHOR_NONE, t) == 0, "anchors of none");
+    CHECK(bl_anchor_ticks(BL_ANCHOR_BEAT1, t) == 1 && t[0] == 0, "anchors of beat1");
+    CHECK(bl_anchor_ticks(BL_ANCHOR_BEATS13, t) == 2 && t[0] == 0 && t[1] == 1920, "anchors of beats1and3");
+    static bl_pattern_t p;
+    p.remaining = 2;
+    bl_advance_boundary(&p);
+    CHECK(p.remaining == 1 && !bl_is_mutable(&p), "2 -> 1");
+    bl_advance_boundary(&p);
+    CHECK(p.remaining == -1 && bl_is_mutable(&p), "1 -> established");
+    bl_advance_boundary(&p);
+    CHECK(p.remaining == -1 && bl_is_mutable(&p), "established stays");
+    p.locked = 1;
+    CHECK(!bl_is_mutable(&p), "locked");
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -663,6 +803,8 @@ int main(void)
     test_music();
     test_gen_vectors();
     test_gen_max_notes();
+    test_mut_vectors();
+    test_legit_lifecycle();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

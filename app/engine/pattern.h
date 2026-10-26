@@ -9,6 +9,7 @@
 #include "bl.h"
 #include "f64.h"
 #include "music.h"
+#include "rng.h"
 
 /* PatternNote (tie: always nil in the templates' material) */
 typedef struct {
@@ -51,3 +52,5 @@ void bl_density_cap(const bl_pattern_t *in, f64 density, bl_pattern_t *out);
 void bl_thin_to_roots(bl_pattern_t *p);
 /* PatternOps.moveAccents(_:seed:), in place */
 void bl_move_accents(bl_pattern_t *p, uint64_t seed);
+/* the same on a generator already running: Legitimizer.mutate's accent move (step 3) is this code */
+void bl_move_accents_with(bl_pattern_t *p, bl_rng_t *r);

@@ -7,6 +7,7 @@
 //   RefTool templates              the three templates as the Mac instantiates them
 //   RefTool rng                    SplitMix64, seed streams and the standard library's random draws, for rng.c
 //   RefTool gen                    the generators' patterns and the pattern ops, for pattern.c and gen.c
+//   RefTool mut                    the lifecycle and the mutations, for legit.c
 //   RefTool selftest               the tool checked against the engine's own offline renderer
 
 import BerlinanEngine
@@ -17,6 +18,7 @@ let modes: [(name: String, usage: String, run: ([String]) throws -> Int32)] = [
     ("templates", "templates", templatesMode),
     ("rng", "rng", rngMode),
     ("gen", "gen", genMode),
+    ("mut", "mut", mutMode),
     ("selftest", "selftest", selftestMode),
 ]
 

@@ -84,14 +84,14 @@ func genMode(_ args: [String]) throws -> Int32 {
 }
 
 /// `<n>` then per note `<position> <gate> <degree> <octave> <accidental> <velocity> <accent> <ratchet>`
-private func notesText(_ p: Pattern) -> String {
+func notesText(_ p: Pattern) -> String {
     "\(p.notes.count)" + p.notes.map { n in
         " \(n.position) \(n.gate) \(n.pitch.degree) \(n.pitch.octave) \(n.pitch.accidental) \(n.velocity)"
             + " \(n.accent ? 1 : 0) \(n.ratchet)"
     }.joined()
 }
 
-private func remainingText(_ l: Lifecycle) -> String {
+func remainingText(_ l: Lifecycle) -> String {
     switch l {
     case .repeating(let remaining): "\(remaining)"
     case .established: "E"
@@ -99,7 +99,7 @@ private func remainingText(_ l: Lifecycle) -> String {
 }
 
 /// `<kind> <a> <b>`, the two parameters 0 where the config has fewer
-private func configText(_ g: GeneratorConfig) -> String {
+func configText(_ g: GeneratorConfig) -> String {
     switch g {
     case .seedProcedure(let bars, let mutations): "seedProcedure \(bars) \(mutations)"
     case .pulsingBass(let accents): "pulsingBass \(accents) 0"

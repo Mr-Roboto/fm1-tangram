@@ -259,3 +259,38 @@ bar of up to 14 degrees, so that the walk also takes its fallback steps. Meter 4
 The ops follow every 104th pattern of the file (the 0th, the 104th, …: 54 of the 5,600), each with a `cap` line per
 density, one `roots` and one `accents` line, and two `occ`/`onset` pairs: the length 240 ticks shorter with no rotation
 from tick 1234, and 480 ticks longer rotated by -1000 from tick -3000, both over two loops and 777 ticks.
+
+## Legitimization and mutation
+
+`tests/equiv/mut.ref` is `RefTool mut` (`tools/reference/Sources/RefTool/Mut.swift`): the lifecycle and the mutation
+of `Legitimizer` (`advanceAtLoopBoundary`, `isMutable`, `mutate` with the slides off) on voices of the templates'
+generators, for `app/engine/legit.c`. Integers are decimal (seeds unsigned), a `Double` is the 16 lower-case hex digits
+of its bit pattern, booleans are `0`/`1`, a lifecycle is its `remaining` or `E` for `.established`, `<notes>` is as in
+gen.ref; `#` lines are comments. Meter 4/4 throughout.
+
+The voices, 25 of each of 12 cases (id, role, generator config, anchor policy; register and reference C as the
+templates have them): `bedPluck1` `seedProcedure(1, 4)` none; `bedPluck2` `seedProcedure(1, 4)` phased -240 none;
+`bass` `pulsingBass(3)` beats1and3; `bass` `bassMelody(16)` beats1and3; `pad` `chordLayer(7)` none; `kick` (rhythm)
+`heartbeat` none; `drone` `drone(8)` none; `lead` `stagedPluck(2)` none; `bedPluck1` `seedProcedure(1, 3)` beat1;
+`bedPluck2` `seedProcedure(1, 3)` phased -240 beat1; `pad` `chordLayer(7)` beat1; `bass` `pulsingBass(3)` phased -240
+beats1and3. "Phased -240" is `PhasingOps.phasedCopy(newLength: length - 240)` (bedPluck2's `phaseSteps: -1`: a loop
+shorter than a bar, so the anchors come from `max(bars, 1)`). Of the 25, 10 are in A natural minor, 10 in C natural
+minor (`Key.default`), 5 in A minor pentatonic (5 degrees: the shifts draw from -5...5), the k-th voice of a case
+(k = 0…24, counted across the three keys) made with the seed `SeedStream.derive(master: k, "gen")` (its `<master>`).
+
+Voice i of the file (from 0) has `repeats` 4 when i is even, else 16, and `ratchetProbability` nil, 0.5, nil, 0, nil,
+0.5 for i mod 6 = 0…5. Its lines: the `voice` line (the pattern fresh from `make`, `.repeating(remaining: 4)`); when
+i mod 10 = 0 a `mut` of the fresh pattern (the identity: still repeating); `advance 4` (now established); when i mod 10
+= 5 `lock 1`, a `mut` (the identity: locked), `lock 0`; then ten mutations as LiveEngine makes them, generation g =
+0…9 with the seed `SeedStream.derive(master: <master>, "voice", <id>, "mut", String(g))`, an `advance <repeats>`
+between two of them (the verbatim plays, to `.established` again). Every line applies to the voice the lines before
+made. Then 20 `life` lines, each followed by its `advance`: the lifecycle from `.established` and `.repeating` 0, 1,
+2, 3, 4, 5, 8, 16, 32, unlocked and locked, for `max(remaining, 0) + 2` boundaries.
+
+| Line | Content |
+| --- | --- |
+| `voice <id> <role> <anchor> <low> <high> <referenceC> <participates> <root> <mode> <kind> <a> <b> <master> <phase> <length> <startOffset> <locked> <lifecycle> <notes>` | a new voice: its fields (`role`, `anchor`, `mode` their raw values), the key, the generator config as in gen.ref, the seed it was made with, the phase (0: none), then the pattern |
+| `mut <g> <seed> <repeats> <ratchet> <locked> <lifecycle> <length> <startOffset> <notes>` | `Legitimizer.mutate` of the voice with that seed and `Config(repeats:ratchetProbability:)` (`<ratchet>` the probability, `nil` for nil): the result's pattern |
+| `advance <count> <lifecycle> <mutable>…` | `count` successive `advanceAtLoopBoundary`, each followed by its lifecycle and `isMutable` |
+| `lock <0/1>` | the pattern's `locked` set so |
+| `life <lifecycle> <locked> <mutable>` | the voice's pattern given that lifecycle and lock, and its `isMutable` |

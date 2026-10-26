@@ -125,6 +125,11 @@ void bl_move_accents(bl_pattern_t *p, uint64_t seed)
 {
     bl_rng_t r;
     bl_rng_seed(&r, seed);
+    bl_move_accents_with(p, &r);
+}
+
+void bl_move_accents_with(bl_pattern_t *p, bl_rng_t *r)
+{
     int from = -1, plain = 0;
     for (int i = 0; i < p->n; i++) {
         if (p->note[i].accent && from < 0) from = i;
@@ -132,7 +137,7 @@ void bl_move_accents(bl_pattern_t *p, uint64_t seed)
     }
     /* the unaccented indices' randomElement is drawn only when an accent was found (if let ..., let ...) */
     if (from >= 0 && plain > 0) {
-        int64_t k = bl_rand_index(&r, plain);
+        int64_t k = bl_rand_index(r, plain);
         for (int i = 0; i < p->n; i++)
             if (!p->note[i].accent && k-- == 0) {
                 p->note[from].accent = 0;
@@ -141,7 +146,7 @@ void bl_move_accents(bl_pattern_t *p, uint64_t seed)
             }
     }
     if (p->n > 0) {
-        int64_t i = bl_rand_index(&r, p->n);
+        int64_t i = bl_rand_index(r, p->n);
         p->note[i].accent = !p->note[i].accent;
     }
 }
