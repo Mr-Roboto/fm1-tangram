@@ -1,11 +1,13 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Jiří Píša
-# Berlinan's tests: the whole app in fm1-base's simulator (tests/scenarios/*.bln: the panel, the clock, the saved
-# state), with screenshots in app/build/scenarios/. fm1-base's own tests: base/tests/run_tests.sh.
+# Berlinan's tests: the engine (tests/host/engine_test.c: f64 against the host's IEEE binary64, the sine), the
+# firmware free of float and double, the whole app in fm1-base's simulator (tests/scenarios/*.bln: the panel, the
+# clock, the saved state), with screenshots in app/build/scenarios/. fm1-base's own tests: base/tests/run_tests.sh.
 #   tests/run_tests.sh
 set -u
 cd "$(dirname "$0")/.."
+CC="${CC:-cc}"
 B=app/build
 OUT=$B/tests
 FAIL=0
@@ -20,6 +22,11 @@ run() {
         FAIL=1
     fi
 }
+run engine sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Iapp/engine -Iapp/engine/softfloat \
+    -o $OUT/engine_test tests/host/engine_test.c app/engine/*.c app/engine/softfloat/*.c -lm && $OUT/engine_test"
+# comments included ("IEEE binary64" in prose); the vendored SoftFloat (app/engine/softfloat/, outside these globs)
+# keeps its upstream comments
+run no-double sh -c "! grep -nwE 'double|float' app/*.c app/*.h app/engine/*.[ch]"
 run host-build sh build.sh --host
 for s in tests/scenarios/*.bln; do
     n=$(basename "$s" .bln)
