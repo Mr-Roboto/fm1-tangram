@@ -56,7 +56,9 @@ sh base/tests/run_tests.sh        # fm1-base's own
 Berlinan's: the engine against Berlinan's (`tests/host/engine_test.c`, `tests/host/equiv_test.c` over
 `tests/equiv/`), the firmware's own libc (`tests/host/libc_test.c`), the update path against `app/build/berlinan.fwsc`
 (after `./build.sh`; skipped without it), and the whole app in the simulator (`tests/scenarios/*.bln`), with
-screenshots in `app/build/scenarios/`.
+screenshots in `app/build/scenarios/`. Among the scenarios, `play_midi.bln` compares every MIDI message the app
+sends with what Berlinan's transport sends for the same script (`tests/equiv/midi_full.midiref`, RefTool's midi
+mode; tests/equiv/README.md, "The MIDI reference"); its log of them is `app/build/scenarios/play_midi/midi_dump.txt`.
 
 `app/build/host/berlinan_host SCRIPT OUTDIR` runs one script. The commands are listed at the top of
 `base/host/plat_host.c`, and Berlinan's own checks at the top of `app/host.c`.

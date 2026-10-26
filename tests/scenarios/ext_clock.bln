@@ -1,0 +1,231 @@
+# Following an external clock (EXT): MIDI Start (FA) from the TRS jack starts the piece, each clock pulse (F8) is 40
+# ticks, the clock runs between pulses at the last beat's rate (24 pulses 20 ms apart: 2 ticks per ms, 125 BPM) and
+# never past the next pulse. The pulses stop (a router unplugged): after 500 ms the clock runs on at the same rate,
+# playing; MIDI Stop (FC) stops it. Clock from USB is not followed while the input is TRS alone, and nothing of the
+# clock goes out (the FM-1 never sends a clock it follows).
+rt sync ext
+rt port TRS
+midi USB F8
+wait 10
+midi USB F8
+wait 10
+midi TRS FA
+expect playing 1
+expect tick 0
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+midi TRS F8
+wait 18
+# the notes went out on the followed clock
+expect midi_out >20
+# the 96th pulse is tick 3800, 19 ms ago (a "midi" line runs 2 ms): 38 ticks on, then held short of the next
+expect tick_rate 2000
+expect tick 3838
+wait 10
+expect tick 3839
+# no pulse: held on 3839 to 500 ms after the last, then on at 2 ticks per ms (1529 ms of the 2 s: 3839 + 3058)
+wait 2000
+expect playing 1
+expect tick_rate 2000
+expect tick 6897
+expect clocks_out 0
+# the pulses again: on from the tick reached (6899: the pulse is 6920, the next multiple of 40), never back
+midi TRS F8
+expect tick 6922
+expect tick_rate 2000
+wait 18
+midi TRS F8
+expect tick 6962
+midi TRS FC
+expect playing 0
+expect sounding 0
+expect clocks_out 0

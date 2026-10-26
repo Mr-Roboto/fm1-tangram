@@ -4,6 +4,7 @@
  * this directory's string.h and stdlib.h: memmove, strcmp, abs, and the compiler's 64-bit divide (an int64_t / or %
  * by a variable: __divdi3 __moddi3 __udivdi3 __umoddi3; the toolchain's own runtime is linked only with the radio).
  * The firmware's unit (app.c) includes it; the host has its own libc (tests/host/libc_test.c checks this one there). */
+#include <stdint.h>
 
 void *memmove(void *d, const void *s, unsigned n)
 {

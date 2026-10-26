@@ -1,0 +1,70 @@
+# Nothing is left sounding (NoteRegistry.flushEvents): a stop, a mute, a template switch and the arranger's ending,
+# each while Ambient drift's drone holds its two notes (E3 52 0x34 and A3 57 0x39 on channel 1, 0 on the wire, each
+# struck every 8 bars for 8 bars): a note-off for each, then All Notes Off (CC 123) on the channel. 72 BPM: a bar
+# is 3333 ms; tick 0 sounds 100 ms after PLAY is seen (the press's first ms); bar N is tick N x 3840.
+rt load ambient
+# stop at bar 20 (the drone struck on bar 16): MIDI Stop, the offs, CC 123
+tap PLAY
+wait 66800
+expect playing 1
+expect tick 76929
+expect sounding0 2
+out
+tap PLAY
+expect playing 0
+expect_out USB FC 00 00
+expect_out USB 80 34 00
+expect_out USB 80 39 00
+expect_out USB B0 7B 00
+expect sounding 0
+expect queued 0
+# mute in bar 4 (the drone struck on bar 0): its channel silenced at once; nothing of it on bars 8 to 15; unmuted
+# in bar 13, it is struck again on bar 16
+tap PLAY
+wait 13400
+expect tick 15412
+expect sounding0 2
+out
+rt mute drone 1
+expect_out USB 80 34 00
+expect_out USB 80 39 00
+expect_out USB B0 7B 00
+expect sounding0 0
+wait 30000
+expect tick 49972
+expect sounding0 0
+rt mute drone 0
+wait 20000
+expect tick 73012
+expect sounding0 2
+# a template switch in bar 20 (tick 78772): on the next bar line (bar 21, tick 80640) the Full ensemble takes over,
+# the drone's notes silenced there, its tempo (96 BPM) from that line on
+wait 5000
+expect tick 78772
+out
+rt load full
+wait 1000
+expect tempo_tick -1
+expect sounding0 2
+wait 1000
+expect tick 81222
+expect tempo_tick 80640
+expect tick_rate 1536
+expect bpm 96
+expect_out USB 80 34 00
+expect_out USB 80 39 00
+expect_out USB B0 7B 00
+expect playing 1
+tap PLAY
+# the arranger's ending: Ambient drift's ambient plateau ends on bar 288 (tick 1105920, 960 s from tick 0); the
+# transport stops there by itself, MIDI Stop and the flush
+rt load ambient
+tap PLAY
+wait 959000
+expect playing 1
+out
+wait 2000
+expect playing 0
+expect_out USB FC 00 00
+expect sounding 0
+expect queued 0

@@ -1,0 +1,19 @@
+# What the transport sends is what Berlinan's sends: tests/equiv/midi_full.midiscript (the full ensemble on its own
+# seed, 64 bars, two transpositions, two mutes) played on the app, every message it sends logged with its tick, and
+# the log compared line by line with what RefTool's midi mode writes for the same script (midi_full.midiref: Start,
+# the notes and CC of each window of 240 ticks as NoteEventConverter makes them, the clock, in a stable sort by tick).
+selfscript tests/equiv/midi_full.midiscript
+dumpmidi app/build/scenarios/play_midi/midi_dump.txt
+tap PLAY
+expect playing 1
+# 64 bars at 96 BPM: 160 s from tick 0, which sounds 100 ms after the press; the last note-off is on bar 64's line
+wait 161000
+expect head 245760
+expect tick >245760
+cmpmidi tests/equiv/midi_full.midiref
+expect midicmp 0
+expect midilines 9466
+expect sounding 0
+expect queued 0
+expect dropped 0
+expect clocks_out 6144

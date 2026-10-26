@@ -1,0 +1,36 @@
+# A tempo change while playing (Transport.setTempo, INT) binds on the next bar line of the render head, which runs up
+# to 100 ms and a window ahead of the sounding tick: the clock takes the new rate from that line on, never earlier,
+# and the MIDI clock out follows it (a pulse every 40 ticks). The Full ensemble: 96 BPM (1.536 ticks per ms), tick 0
+# 100 ms after PLAY is seen (ms 101), bar N is tick N x 3840.
+tap PLAY
+wait 3500
+expect tick 5343
+expect bpm 96
+expect tick_rate 1536
+# mid-bar 1: to 120 BPM from bar 2 (tick 7680)
+rt tempo 120
+expect bpm 96
+wait 1400
+expect tick 7494
+expect head 7680
+expect bpm 120
+expect tempo_tick -1
+expect tick_rate 1536
+wait 200
+expect tempo_tick 7680
+expect tick_rate 1920
+expect tick 7831
+# 56 ticks before bar 3's line (11520) the head is past it already: to 60 BPM from bar 4 (tick 15360)
+wait 1892
+expect tick 11464
+expect head 11760
+rt tempo 60
+wait 100
+expect tick 11656
+expect tick_rate 1920
+wait 1950
+expect tick 15380
+expect tempo_tick 15360
+expect tick_rate 960
+expect bpm 60
+expect clocks_out 385
