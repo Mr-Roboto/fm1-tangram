@@ -43,7 +43,8 @@ On Linux x86-64 the toolchain runs natively and no container is needed.
 
 `JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations (`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`),
 `PYTHON` the Python that runs the build. The build also checks the image, RAM and pool sizes, that register access
-stays in felucca-bsp, and that no double-precision code is linked.
+stays in felucca-bsp, that no double-precision code is linked, and that no 64-bit multiply runs beside a load
+(felucca-bsp `docs/CPU.md`: the engine's products are `bl_mul32`'s, `app/engine/f64.h`).
 
 ## Tests
 
@@ -52,7 +53,10 @@ sh tests/run_tests.sh             # Berlinan's
 sh base/tests/run_tests.sh        # fm1-base's own
 ```
 
-Berlinan's: the whole app in the simulator (`tests/scenarios/*.bln`), with screenshots in `app/build/scenarios/`.
+Berlinan's: the engine against Berlinan's (`tests/host/engine_test.c`, `tests/host/equiv_test.c` over
+`tests/equiv/`), the firmware's own libc (`tests/host/libc_test.c`), the update path against `app/build/berlinan.fwsc`
+(after `./build.sh`; skipped without it), and the whole app in the simulator (`tests/scenarios/*.bln`), with
+screenshots in `app/build/scenarios/`.
 
 `app/build/host/berlinan_host SCRIPT OUTDIR` runs one script. The commands are listed at the top of
 `base/host/plat_host.c`, and Berlinan's own checks at the top of `app/host.c`.

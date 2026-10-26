@@ -8,7 +8,9 @@ usb_audio_in = false           # the FM-1 makes no sound
 usb_audio_out = false
 words = "words.tsv"
 include = ["engine"]
+device_include = ["libc"]      # the firmware's <string.h> and <stdlib.h> for the engine (the toolchain has none)
 o2 = ["engine/*.c", "engine/softfloat/*.c"]   # the engine, each file its own unit at -O2
+vendored = ["engine/softfloat/"]   # SoftFloat's numbers are not addresses: the register check skips it
 # the site
 tagline = "A Berlin School MIDI sequencer for the FM-1"
 licence = "GPL-2.0-or-later"

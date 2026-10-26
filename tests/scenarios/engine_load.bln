@@ -1,0 +1,7 @@
+# The engine inside the app: the Full ensemble on its own seed, 128 bars in windows of 240 ticks, rendered by the
+# app's engine (in the pool) as the transport will render it, gives Berlinan's notes. The count and the notes-hash
+# (FNV-1a 64 over the N lines) are what tests/host/equiv_test.c prints for tests/equiv/live_selfrender.script.
+selfrender full 128
+expect selfnotes 2816
+expect selfhash_hi 0x6efc6f44
+expect selfhash_lo 0xce4d343d

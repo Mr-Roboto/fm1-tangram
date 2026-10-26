@@ -32,3 +32,8 @@ f64 f64_frac1(f64 x);               /* x.truncatingRemainder(dividingBy: 1): x -
 f64 f64_max(f64 x, f64 y);          /* Swift's max(x, y): y >= x ? y : x */
 f64 f64_min(f64 x, f64 y);          /* Swift's min(x, y): y < x ? y : x */
 f64 bl_sin(f64 x);                  /* sin(x) for |x| < 2^20 pi/2 (the lanes need [0, 2pi)); beyond: a trap */
+
+/* a * b, the full 32 x 32 -> 64-bit product, in a function of its own that loads nothing: the FM-1's CPU may leave
+ * a register a bit off when such a multiply runs beside a load (felucca-bsp docs/CPU.md), so the engine's and
+ * SoftFloat's wider products (rng.c, f64.c's bl_mul128) are made of these */
+uint64_t bl_mul32(uint32_t a, uint32_t b);

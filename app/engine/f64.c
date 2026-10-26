@@ -5,6 +5,7 @@
 #pragma GCC diagnostic push             /* platform.h relaxes two warnings for SoftFloat's files, not for this one */
 #include "softfloat/platform.h"
 #include "softfloat/softfloat.h"
+#include "softfloat/primitiveTypes.h"
 #pragma GCC diagnostic pop
 /* (platform.h renames SoftFloat's f64_add ... to sf_f64_add ...: the names below are this file's own) */
 #undef f64_add
@@ -30,6 +31,26 @@ static f64 of(float64_t x)
     f64 r;
     r.bits = x.v;
     return r;
+}
+
+/* ------------------------------------------------------ the products --- */
+__attribute__((noinline)) uint64_t bl_mul32(uint32_t a, uint32_t b) { return (uint64_t)a * b; }
+
+/* softfloat_mul64To128 (platform.h): s_mul64To128.c's code with its products from bl_mul32 */
+struct uint128 bl_mul128(uint64_t a, uint64_t b)
+{
+    uint32_t a32 = (uint32_t)(a >> 32), a0 = (uint32_t)a, b32 = (uint32_t)(b >> 32), b0 = (uint32_t)b;
+    struct uint128 z;
+    uint64_t mid1, mid;
+    z.v0 = bl_mul32(a0, b0);
+    mid1 = bl_mul32(a32, b0);
+    mid = mid1 + bl_mul32(a0, b32);
+    z.v64 = bl_mul32(a32, b32);
+    z.v64 += (uint64_t)(mid < mid1) << 32 | mid >> 32;
+    mid <<= 32;
+    z.v0 += mid;
+    z.v64 += (z.v0 < mid);
+    return z;
 }
 
 /* ------------------------------------------------------------ arithmetic --- */

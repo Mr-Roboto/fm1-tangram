@@ -1,0 +1,5 @@
+# The full template on its own seed, 128 bars in windows of 240 ticks, no actions: what the app renders inside
+# fm1-base's simulator (tests/scenarios/engine_load.bln, selfrender full 128), whose notes-hash that scenario expects.
+template full
+window 240
+bars 128

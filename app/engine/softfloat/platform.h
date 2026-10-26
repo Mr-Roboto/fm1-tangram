@@ -3,6 +3,7 @@
 /* SoftFloat's build configuration for Berlinan (the file each of SoftFloat's build/<target>/ directories supplies;
  * SOURCE.md says why each choice). Every vendored file includes it first, f64.c too. */
 #pragma once
+#include <stdint.h>
 
 #define LITTLEENDIAN 1          /* the FM-1's pi32v2 and the hosts */
 #define SOFTFLOAT_FAST_INT64    /* uint64_t is native code on the pi32v2: shifts and adds in register pairs */
@@ -22,6 +23,14 @@
 #define f64_le sf_f64_le
 #define f64_eq sf_f64_eq
 #define f64_to_i64 sf_f64_to_i64
+
+/* SoftFloat's 64 x 64 -> 128-bit product is f64.c's bl_mul128 (the same sums, on bl_mul32's products), not
+ * s_mul64To128.c's, whose four multiplies the compiler put beside loads of its arguments, which the FM-1's CPU may
+ * get wrong (felucca-bsp docs/CPU.md). The macro is SoftFloat's own hook: primitives.h declares the function only
+ * while the name is not a macro */
+struct uint128;
+#define softfloat_mul64To128 bl_mul128
+struct uint128 bl_mul128(uint64_t a, uint64_t b);
 
 /* SoftFloat's code as it is: the host tests' -Wall -Wextra -Werror find a signed/unsigned comparison in
  * f64_to_i64_r_minMag.c that is correct there (f64.c restores the warnings for its own code) */

@@ -131,10 +131,11 @@ and hash the result. `equiv_test --text FILE` writes the C engine's lines the sa
 `tests/host/equiv_test.c` plays every `live_*.script` on the C engine (`app/engine/live.c`) through
 `tests/host/script.c`, the same run in C, and compares its lines with the `.ref`. Per script it prints `ok` or `FAIL`
 and `notes-hash <16 hex digits>`, FNV-1a 64 (as the state hash) over the script's `N` lines, each with its `\n`; the
-app's own render (Task 12) is checked against that value. On the first difference it prints the line number, both
-lines and the last `H` line that matched. Each script is there three times, in windows of 240, 960 and 37 ticks (the
-suffix `_240`, `_960`, `_37`): the notes and the state are the same, the windows split differently (37 splits every
-change and every bar line inside a window).
+app's own render (`tests/scenarios/engine_load.bln`) is checked against that value for `live_selfrender`. On the
+first difference it prints the line number, both lines and the last `H` line that matched. Each script but
+`live_selfrender` is there three times, in windows of 240, 960 and 37 ticks (the suffix `_240`, `_960`, `_37`): the
+notes and the state are the same, the windows split differently (37 splits every change and every bar line inside a
+window).
 
 | Scripts | What they play |
 | --- | --- |
@@ -143,6 +144,7 @@ change and every bar line inside a window).
 | `live_actions_{demo,full,ambient}` | Every action three times or more over 400 bars, on and off bar lines, some pending at a 16-bar line (in an `H` state), `bpart` twice in a bar, keys to other modes (pentatonic too: another scale size) and back, densities 35, 100, 0 and 100, saves and recalls, reseeds, the arranger on and off, ids the running engine lacks, and three loads (the last back to the template). |
 | `live_arranger_{classic,slow,ambient}` | The full ensemble under the arranger preset, 800 bars, to the ending and its stop. |
 | `live_arranger_toggle` | The full ensemble, the arranger switched on at bar 20 (it adopts the ensemble: the bed), three advances, the bass locked after a nudge, the arranger off at bar 128 and on again at bar 208 (over the voices left playing: a build). Off at 128 and not later: left on, the arranger reaches its ending at bar 175. |
+| `live_selfrender` | The full ensemble on its own seed, 128 bars, no actions, in windows of 240 only: what `tests/scenarios/engine_load.bln` has the app render (`selfrender full 128`), expecting this script's notes-hash. |
 
 The C engine's queues are bounded (`app/engine/live.h`) and the run's buffers too (`script.c`); a script that goes
 past them is a failure of the run (`the engine's queue is full`), never a silent difference.

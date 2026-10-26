@@ -7,12 +7,12 @@
 
 void bl_rng_seed(bl_rng_t *r, uint64_t seed) { r->state = seed; }
 
-/* the 64-bit multiplies of the FM-1's CPU live in noinline functions (felucca-bsp docs/CPU.md): wrapping a * b */
+/* the 64-bit multiplies of the FM-1's CPU are bl_mul32's (f64.h; felucca-bsp docs/CPU.md): wrapping a * b */
 __attribute__((noinline)) static uint64_t mul64(uint64_t a, uint64_t b)
 {
     uint32_t al = (uint32_t)a, ah = (uint32_t)(a >> 32), bl = (uint32_t)b, bh = (uint32_t)(b >> 32);
-    uint64_t lo = (uint64_t)al * bl;
-    uint64_t cross = (uint64_t)al * bh + (uint64_t)ah * bl;     /* only the low 32 bits of this reach the result */
+    uint64_t lo = bl_mul32(al, bl);
+    uint64_t cross = bl_mul32(al, bh) + bl_mul32(ah, bl);       /* only the low 32 bits of this reach the result */
     return lo + (cross << 32);
 }
 
@@ -20,7 +20,7 @@ __attribute__((noinline)) static uint64_t mul64(uint64_t a, uint64_t b)
 __attribute__((noinline)) static void mul64x64(uint64_t a, uint64_t b, uint64_t *hi, uint64_t *lo)
 {
     uint32_t al = (uint32_t)a, ah = (uint32_t)(a >> 32), bl = (uint32_t)b, bh = (uint32_t)(b >> 32);
-    uint64_t ll = (uint64_t)al * bl, lh = (uint64_t)al * bh, hl = (uint64_t)ah * bl, hh = (uint64_t)ah * bh;
+    uint64_t ll = bl_mul32(al, bl), lh = bl_mul32(al, bh), hl = bl_mul32(ah, bl), hh = bl_mul32(ah, bh);
     uint64_t mid = (ll >> 32) + (uint32_t)lh + (uint32_t)hl;    /* at most 3 * (2^32 - 1): no overflow */
     *lo = (mid << 32) | (uint32_t)ll;
     *hi = hh + (lh >> 32) + (hl >> 32) + (mid >> 32);
