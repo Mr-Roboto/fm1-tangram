@@ -794,6 +794,232 @@ static void test_legit_lifecycle(void)
     CHECK(!bl_is_mutable(&p), "locked");
 }
 
+/* ---------------------------------------------------------------- harmony --- */
+/* tests/equiv/harmony.ref: each sched line merged in two parts (old + add, split where the line's index says) and
+ * queried; each bar and vel line; each voice rendered in every window of its window lines, the windows no w line
+ * names being empty, and every note's velocity through bl_velocity at its loop position */
+#define HARMONY_TOTAL (64 * BL_TICKS_PER_BAR)
+
+static int harmony_line, harmony_windows, harmony_notes;
+
+/* the voice's windows from *cursor up to end, each of them empty */
+static void harmony_empty(const bl_voice_t *v, uint8_t index, const bl_sched_t *s, const bl_key_t *key,
+                          bl_tick_t *cursor, bl_tick_t window, bl_tick_t end, const char *what)
+{
+    static bl_note_t out[1];
+    for (; *cursor < end; *cursor += window) {
+        bl_tick_t hi = *cursor + window < HARMONY_TOTAL ? *cursor + window : HARMONY_TOTAL;
+        int n = bl_render_voice(v, index, s, key, *cursor, hi, out, 1);
+        CHECK(n == 0, "harmony.ref:%d %s: window %lld..<%lld has %d notes, want none", harmony_line, what,
+              (long long)*cursor, (long long)hi, n);
+        harmony_windows++;
+    }
+}
+
+static void test_harmony_vectors(void)
+{
+    char *text = read_file("tests/equiv/harmony.ref");
+    CHECK(text != NULL, "tests/equiv/harmony.ref: cannot read");
+    if (!text) return;
+    static bl_sched_t s, sched;
+    static bl_voice_t v;
+    static bl_tev_t ev[64];
+    static bl_note_t out[256], one[2];
+    static char id[32];
+    bl_key_t key = {0, {0}};
+    bl_tick_t window = 0, cursor = HARMONY_TOTAL;
+    uint8_t index = 0;
+    int scheds = 0, bars = 0, vels = 0, voices = 0, clamped = 0;
+    char *save = text, what[96] = "";
+    harmony_line = harmony_windows = harmony_notes = 0;
+    for (char *l = text; l; l = save) {
+        char *nl = strchr(l, '\n');
+        save = nl ? nl + 1 : NULL;
+        if (nl) *nl = 0;
+        harmony_line++;
+        int line = harmony_line;
+        if (!*l || *l == '#') continue;
+        char *p = l, *word = next_word(&p);
+        /* a line other than w ends the windows of the voice before */
+        if (strcmp(word, "w")) harmony_empty(&v, index, &sched, &key, &cursor, window, HARMONY_TOTAL, what);
+        if (!strcmp(word, "sched")) {
+            int n = (int)next_int(&p), k = scheds % (n + 1);
+            for (int i = 0; i < n; i++) {
+                ev[i].bar = (int32_t)next_int(&p);
+                ev[i].offset = (int32_t)next_int(&p);
+            }
+            s.n = 0;
+            CHECK(bl_sched_merge(&s, ev, k, 0) == 0 && bl_sched_merge(&s, ev + k, n - k, 0) == 0,
+                  "harmony.ref:%d: merge refused", line);
+            int m = (int)next_int(&p);
+            CHECK(s.n == m, "harmony.ref:%d: %d events, want %d", line, s.n, m);
+            for (int i = 0; i < m; i++) {
+                int32_t bar = (int32_t)next_int(&p), off = (int32_t)next_int(&p);
+                CHECK(i >= s.n || (s.ev[i].bar == bar && s.ev[i].offset == off),
+                      "harmony.ref:%d: event %d %d %d, want %d %d", line, i, s.ev[i].bar, s.ev[i].offset, bar, off);
+            }
+            for (int32_t bar = 0; bar <= 200; bar++) {
+                int32_t want = (int32_t)next_int(&p), got = bl_sched_offset(&s, bar);
+                CHECK(got == want, "harmony.ref:%d: offset at bar %d %d, want %d", line, bar, got, want);
+            }
+            scheds++;
+        } else if (!strcmp(word, "bar")) {
+            bl_tick_t tick = next_int(&p);
+            int32_t want = (int32_t)next_int(&p), got = bl_quantized_bar(tick);
+            CHECK(got == want, "harmony.ref:%d: quantized bar of %lld %d, want %d", line, (long long)tick, got, want);
+            bars++;
+        } else if (!strcmp(word, "vel")) {
+            int vel = (int)next_int(&p), accent = (int)next_int(&p);
+            uint64_t seed = strtoull(next_word(&p), NULL, 10);
+            bl_tick_t local = next_int(&p);
+            int want = (int)next_int(&p), got = bl_velocity((uint8_t)vel, accent, seed, local);
+            CHECK(got == want, "harmony.ref:%d: velocity %d %d %llu %lld: %d, want %d", line, vel, accent,
+                  (unsigned long long)seed, (long long)local, got, want);
+            if (want == 1 || want == 127) clamped++;
+            vels++;
+        } else if (!strcmp(word, "schedule")) {
+            next_word(&p);
+            int n = (int)next_int(&p);
+            sched.n = 0;
+            for (int i = 0; i < n; i++) {
+                bl_tev_t e;
+                e.bar = (int32_t)next_int(&p);
+                e.offset = (int32_t)next_int(&p);
+                CHECK(bl_sched_merge(&sched, &e, 1, 0) == 0, "harmony.ref:%d: merge refused", line);
+            }
+            CHECK(sched.n == n, "harmony.ref:%d: %d events, want %d", line, sched.n, n);
+        } else if (!strcmp(word, "key")) {
+            key.root = (int32_t)next_int(&p);
+            bl_scale_preset(name_index(BL_MODE_RAW, BL_NMODES, next_word(&p)), &key.scale);
+        } else if (!strcmp(word, "voice")) {
+            index = (uint8_t)next_int(&p);
+            snprintf(id, sizeof id, "%s", next_word(&p));
+            v.id = id;
+            v.reg_low = (uint8_t)next_int(&p);
+            v.reg_high = (uint8_t)next_int(&p);
+            v.ref_c = (int32_t)next_int(&p);
+            v.participates = (uint8_t)next_int(&p);
+            v.pat.seed = strtoull(next_word(&p), NULL, 10);
+            v.pat.length = next_int(&p);
+            v.pat.start_offset = next_int(&p);
+            v.pat.n = (uint8_t)next_int(&p);
+            for (int i = 0; i < v.pat.n; i++) {
+                bl_pnote_t *q = &v.pat.note[i];
+                q->position = next_int(&p);
+                q->gate = next_int(&p);
+                q->pitch.degree = (int32_t)next_int(&p);
+                q->pitch.octave = (int32_t)next_int(&p);
+                q->pitch.accidental = (int32_t)next_int(&p);
+                q->velocity = (uint8_t)next_int(&p);
+                q->accent = (uint8_t)next_int(&p);
+                q->ratchet = (uint8_t)next_int(&p);
+            }
+            voices++;
+        } else if (!strcmp(word, "window")) {
+            window = next_int(&p);
+            cursor = 0;
+            snprintf(what, sizeof what, "%s (voice %d) window %lld", id, index, (long long)window);
+        } else if (!strcmp(word, "w")) {
+            bl_tick_t lo = next_int(&p), hi = lo + window < HARMONY_TOTAL ? lo + window : HARMONY_TOTAL;
+            harmony_empty(&v, index, &sched, &key, &cursor, window, lo, what);
+            int want = (int)next_int(&p), got = bl_render_voice(&v, index, &sched, &key, lo, hi, out, 256);
+            CHECK(got == want, "harmony.ref:%d %s: window %lld: %d notes, want %d", line, what, (long long)lo, got,
+                  want);
+            for (int i = 0; i < want && i < got; i++) {
+                const bl_note_t *g = &out[i];
+                int64_t w[7];
+                for (int k = 0; k < 7; k++) w[k] = next_int(&p);
+                /* LiveEngine.renderVoice's velocity: at the note's position in the loop */
+                uint8_t vel = bl_velocity(g->velocity, g->accent, v.pat.seed,
+                                          bl_floor_mod(g->at + v.pat.start_offset, v.pat.length));
+                int same = g->voice == index && g->at == w[0] && g->midi == w[1] && g->velocity == w[2] &&
+                           vel == w[3] && g->gate == w[4] && g->accent == w[5] && g->ratchet == w[6];
+                CHECK(same, "harmony.ref:%d %s: window %lld note %d: %d %lld %d %d %d %lld %d %d, want %lld %lld %lld "
+                      "%lld %lld %lld %lld", line, what, (long long)lo, i, g->voice, (long long)g->at, g->midi,
+                      g->velocity, vel, (long long)g->gate, g->accent, g->ratchet, (long long)w[0], (long long)w[1],
+                      (long long)w[2], (long long)w[3], (long long)w[4], (long long)w[5], (long long)w[6]);
+                if (!same) break;
+                harmony_notes++;
+            }
+            /* the buffer contract: a short buffer gets the first notes and the whole count, and nothing past it */
+            if (want >= 2) {
+                one[1].at = -1;
+                got = bl_render_voice(&v, index, &sched, &key, lo, hi, one, 1);
+                CHECK(got == want && one[0].at == out[0].at && one[0].midi == out[0].midi && one[1].at == -1,
+                      "harmony.ref:%d %s: window %lld into one note: %d", line, what, (long long)lo, got);
+            }
+            harmony_windows++;
+            cursor = lo + window;
+        } else {
+            CHECK(0, "harmony.ref:%d: unknown line %s", line, word);
+        }
+    }
+    harmony_empty(&v, index, &sched, &key, &cursor, window, HARMONY_TOTAL, what);
+    CHECK(scheds == 100 && bars == 50 && vels == 300 && voices == 19 && harmony_notes > 0 && clamped > 0,
+          "harmony.ref: %d schedules, %d bars, %d velocities (%d clamped), %d voices, %d notes", scheds, bars, vels,
+          clamped, voices, harmony_notes);
+    printf("harmony: %d schedules, %d bars, %d velocities (%d clamped), %d voices, %d notes in %d windows\n", scheds,
+           bars, vels, clamped, voices, harmony_notes, harmony_windows);
+    free(text);
+}
+
+/* the schedule's bound: 2,000 merges of one event at increasing bars (every 7th again at the bar before, which it
+ * replaces), now_bar 5 behind, against Swift's unbounded schedule kept here in an array, for bars 0-15 and now_bar
+ * ... now_bar + 64; then a schedule full of events still to come, which refuses what would not fit and takes what
+ * replaces */
+static int32_t ref_offset(const bl_tev_t *ev, int n, int32_t bar)
+{
+    int32_t result = 0;
+    for (int i = 0; i < n && ev[i].bar <= bar; i++) result = ev[i].offset;
+    return result;
+}
+
+static void test_sched_compaction(void)
+{
+    static bl_tev_t ref[2000];
+    static bl_sched_t s, before;
+    int nref = 0, bad = 0, most = 0;
+    int32_t bar = 0;
+    s.n = 0;
+    sm_state = 0x5C4ED;
+    for (int i = 0; i < 2000 && bad < 5; i++) {
+        if (i % 7 != 6) bar = i + i / 3;
+        int32_t now_bar = bar < 5 ? 0 : bar - 5;
+        bl_tev_t e = {bar, (int32_t)(sm_next() % 15) - 7};
+        if (nref > 0 && ref[nref - 1].bar == bar)
+            ref[nref - 1] = e;
+        else
+            ref[nref++] = e;
+        int r = bl_sched_merge(&s, &e, 1, now_bar);
+        CHECK(r == 0 && s.n <= BL_MAX_EVENTS, "merge %d (bar %d, now %d): %d, %d events", i, bar, now_bar, r, s.n);
+        for (int k = 1; k < s.n; k++) CHECK(s.ev[k - 1].bar < s.ev[k].bar, "merge %d: not sorted at %d", i, k);
+        for (int32_t q = 0; q <= now_bar + 64; q = q == 15 && now_bar > 16 ? now_bar : q + 1) {
+            int32_t got = bl_sched_offset(&s, q), want = ref_offset(ref, nref, q);
+            if (got != want) bad++;
+            CHECK(got == want, "merge %d (bar %d, now %d): offset at bar %d %d, want %d", i, bar, now_bar, q, got,
+                  want);
+        }
+        if (s.n > most) most = s.n;
+    }
+    CHECK(nref > BL_MAX_EVENTS && most == BL_MAX_EVENTS, "never compacted: %d events, at most %d kept", nref, most);
+
+    /* full of events after now_bar: nothing to drop */
+    s.n = 0;
+    for (int32_t b = 1; b <= BL_MAX_EVENTS; b++) {
+        bl_tev_t e = {b, b % 7};
+        CHECK(bl_sched_merge(&s, &e, 1, 0) == 0, "fill: bar %d refused", b);
+    }
+    before = s;
+    bl_tev_t two[2] = {{0, 3}, {BL_MAX_EVENTS + 1, 4}};
+    CHECK(bl_sched_merge(&s, two, 2, 0) == -1 && !memcmp(&s, &before, sizeof s), "full: two new events taken");
+    CHECK(bl_sched_merge(&s, two + 1, 1, 0) == -1 && !memcmp(&s, &before, sizeof s), "full: a new event taken");
+    two[0].bar = 7;
+    two[1].bar = 7;
+    CHECK(bl_sched_merge(&s, two, 2, 0) == 0 && s.n == BL_MAX_EVENTS && bl_sched_offset(&s, 7) == 4 &&
+              bl_sched_offset(&s, 8) == 1,
+          "full: a replacement refused");
+}
+
 int main(void)
 {
     test_f64_ops();
@@ -805,6 +1031,8 @@ int main(void)
     test_gen_max_notes();
     test_mut_vectors();
     test_legit_lifecycle();
+    test_harmony_vectors();
+    test_sched_compaction();
     printf(fails ? "engine: %d FAILED\n" : "engine: ok\n", fails);
     return fails != 0;
 }

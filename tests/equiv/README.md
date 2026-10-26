@@ -294,3 +294,43 @@ made. Then 20 `life` lines, each followed by its `advance`: the lifecycle from `
 | `advance <count> <lifecycle> <mutable>…` | `count` successive `advanceAtLoopBoundary`, each followed by its lifecycle and `isMutable` |
 | `lock <0/1>` | the pattern's `locked` set so |
 | `life <lifecycle> <locked> <mutable>` | the voice's pattern given that lifecycle and lock, and its `isMutable` |
+
+## The schedule and the note pipeline
+
+`tests/equiv/harmony.ref` is `RefTool harmony` (`tools/reference/Sources/RefTool/Harmony.swift`): the transposition
+schedule (`TranspositionSchedule(events:)`, `offset(atBar:)`), `HarmonyEngine.quantizedEventBar`, the default
+`VelocityPolicy`'s `apply`, and the note pipeline of one voice as `LiveEngine.renderVoice` runs it with the density at 1
+(`PatternOps.applyTies`, the identity here, then `HarmonyEngine.render(voices: [voice])`, then the velocity policy at
+the note's loop position `floorMod(at + startOffset, length)` with the pattern's `provenance.seed`), for
+`app/engine/harmony.c`. Integers are decimal (seeds unsigned), booleans `0`/`1`, `<notes>` as in gen.ref; `#` lines
+are comments. Meter 4/4 throughout; the draws come from one `SplitMix64(seed: 0xBE1271A9)`.
+
+The schedules: 100 event lists, list i of `i mod 41` events, each bar drawn from `0...8`, `0...40` or `0...200` (i mod
+3: the narrower, the more bars come twice or more), each offset from `-7...7`. The quantized bars: 15 ticks on and
+around bar lines, then 35 from `0..<2^40`. The velocities: 300 inputs, input i with the velocity i for i < 256 (every
+`UInt8`, so both clamps are reached), else a drawn one, a drawn accent and seed, and a loop position from
+`0..<61440` (every tenth one negative, from `-5000...-1`).
+
+The pipeline: four passes, each a `schedule` line, a `key` line, then per voice in project order a `voice` line and,
+for each window size 37, 960 and 3840 ticks, a `window` line followed by one `w` line per window of the voice that has
+notes (the windows `lo..<min(lo + size, 64 bars)`, lo = 0, size, 2 size, …; a window without a `w` line renders
+nothing). The passes: `demo`, `full` and `ambient`, each template's voices as `LiveEngine(project:)` materializes them
+(`voiceState(id:).voice`: the gen0 pattern from the project's seed, A natural minor; the engine's own
+`OfflineRenderer.materialize`, not a copy of it) against the template's schedule
+(`HarmonyScheduler.resolve(project:).schedule`; the ambient's is empty, the pedal); then `busy`, the full ensemble's
+voices against 64 events, one a bar, offsets drawn from `-7...7`, with the lead's `participatesInTransposition` set
+false (no template has a voice left out).
+
+| Line | Content |
+| --- | --- |
+| `sched <n> <bar> <offset>… <m> <bar> <offset>… <o0> … <o200>` | the input list (in order), then the schedule's `events` (sorted by bar), then `offset(atBar:)` for the bars 0…200 |
+| `bar <tick> <bar>` | `quantizedEventBar(requestTick: tick, meter: .fourFour)` |
+| `vel <velocity> <accent> <seed> <local> <result>` | `VelocityPolicy().apply(velocity:accent:patternSeed:localPosition:)` |
+| `schedule <name> <n> <bar> <offset>…` | the pass's schedule, sorted by bar |
+| `key <root> <mode>` | the pass's key, `mode` its raw value |
+| `voice <index> <id> <low> <high> <referenceC> <participates> <seed> <length> <startOffset> <notes>` | a voice: its place in the project, its register, reference C and participation, its pattern's `provenance.seed`, length, start offset and notes |
+| `window <size>` | the `w` lines that follow are that voice's windows of this size |
+| `w <lo> <count> (<at> <midi> <velocity> <humanized> <gate> <accent> <ratchet>)…` | `HarmonyEngine.render` of the window starting at lo, `count` notes in order: `RenderedNote`'s `at`, `midiNote`, `velocity` (the pattern's), then the velocity policy's result, `gate`, `accent`, `ratchet` |
+
+The C schedule is bounded (`BL_MAX_EVENTS`, Swift's is not); its compaction is checked in `test_sched_compaction`
+against an unbounded schedule in the test itself, not against this file.
