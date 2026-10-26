@@ -28,7 +28,8 @@ typedef struct {
 
 struct bl_sched;                /* harmony.h */
 
-/* PatternFactory.make(id:config:role:key:meter:seed:); the bass melody here walks over the pedal */
-void bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint64_t seed, bl_pattern_t *out);
+/* PatternFactory.make(id:config:role:key:meter:seed:); the bass melody here walks over the pedal. Both return the
+ * number of notes that did not fit in BL_MAX_NOTES and were left out: 0 for every config the templates use */
+int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint64_t seed, bl_pattern_t *out);
 /* PatternFactory.makeBassMelody(id:bars:schedule:meter:seed:); a NULL schedule is the pedal */
-void bl_make_bass_melody(int bars, const struct bl_sched *sched, uint64_t seed, bl_pattern_t *out);
+int bl_make_bass_melody(int bars, const struct bl_sched *sched, uint64_t seed, bl_pattern_t *out);

@@ -10,31 +10,31 @@
 __attribute__((noinline)) static bl_tick_t tick_mul(bl_tick_t a, bl_tick_t b) { return a * b; }
 
 /* ------------------------------------------------------------ loop cursor --- */
-/* Pattern.occurrences(in:): a note at loop position p sounds at g = p - startOffset + k * length */
+/* Pattern.occurrences(in:): a note at loop position p sounds at g = p - startOffset + k * length. Each onset is
+ * inserted after every one it does not sort before (as Swift's stable sort of the notes' onsets in note order); one
+ * that falls past the buffer's end is counted, not written, so the buffer holds the first max of the sorted result */
 int bl_occurrences(const bl_pattern_t *p, bl_tick_t lo, bl_tick_t hi, bl_occ_t *out, int max)
 {
-    int n = 0;
+    int total = 0, n = 0;
     if (p->n == 0 || lo >= hi) return 0;
     for (int i = 0; i < p->n; i++) {
-        bl_tick_t base = p->note[i].position - p->start_offset;
+        bl_tick_t base = p->note[i].position - p->start_offset, pos = p->note[i].position;
         /* the least k with base + k * length >= lo */
         bl_tick_t g = base + tick_mul(bl_floor_div(lo - base + p->length - 1, p->length), p->length);
-        for (; g < hi; g += p->length)
-            if (g >= lo && n < max) out[n++] = (bl_occ_t){g, (uint8_t)i};
-    }
-    /* result.sort { at, then the note's position } */
-    for (int i = 1; i < n; i++) {
-        bl_occ_t o = out[i];
-        bl_tick_t pos = p->note[o.index].position;
-        int j = i;
-        for (; j > 0; j--) {
-            const bl_occ_t *e = &out[j - 1];
-            if (!(o.at < e->at || (o.at == e->at && pos < p->note[e->index].position))) break;
-            out[j] = *e;
+        for (; g < hi; g += p->length) {
+            if (g < lo) continue;
+            total++;
+            /* result.sort { at, then the note's position } */
+            int j = n;
+            while (j > 0 && (g < out[j - 1].at || (g == out[j - 1].at && pos < p->note[out[j - 1].index].position)))
+                j--;
+            if (j >= max) continue;
+            for (int k = n < max ? n : max - 1; k > j; k--) out[k] = out[k - 1];
+            out[j] = (bl_occ_t){g, (uint8_t)i};
+            if (n < max) n++;
         }
-        out[j] = o;
     }
-    return n;
+    return total;
 }
 
 /* Pattern.hasOnset(atGlobalTick:) */
@@ -55,15 +55,17 @@ int bl_first_sounding(const bl_pattern_t *p)
     return best;
 }
 
-/* Pattern.withLength(_:) */
-void bl_with_length(bl_pattern_t *p, bl_tick_t new_len)
+/* Pattern.withLength(_:); Swift's precondition newLength > 0 is the -1 */
+int bl_with_length(bl_pattern_t *p, bl_tick_t new_len)
 {
     int n = 0;
+    if (new_len <= 0) return -1;
     p->length = new_len;
     for (int i = 0; i < p->n; i++)
         if (p->note[i].position < new_len) p->note[n++] = p->note[i];
     p->n = (uint8_t)n;
     p->start_offset = bl_floor_mod(p->start_offset, new_len);
+    return 0;
 }
 
 /* ------------------------------------------------------------ pattern ops --- */

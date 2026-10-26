@@ -32,16 +32,18 @@ typedef struct {
     uint8_t index;
 } bl_occ_t;
 
-/* Pattern.occurrences(in: lo..<hi): sorted by at, then by the note's position (stable: equal ones in note order);
- * the count is returned; max must hold them all (beyond it, onsets are dropped before the sort) */
+/* Pattern.occurrences(in: lo..<hi): sorted by at, then by the note's position (stable: equal ones in note order).
+ * Returns the number of onsets in the window and writes the first max of them (as snprintf: a return above max
+ * means the buffer was too small and the rest are missing) */
 int bl_occurrences(const bl_pattern_t *p, bl_tick_t lo, bl_tick_t hi, bl_occ_t *out, int max);
 /* Pattern.hasOnset(atGlobalTick:) */
 int bl_has_onset(const bl_pattern_t *p, bl_tick_t global);
 /* Pattern.firstSoundingNote: the index of the first note with the least position, -1 when there is none */
 int bl_first_sounding(const bl_pattern_t *p);
 
-/* Pattern.withLength(_:), in place: the notes at or beyond the new end are dropped */
-void bl_with_length(bl_pattern_t *p, bl_tick_t new_len);
+/* Pattern.withLength(_:), in place: the notes at or beyond the new end are dropped. new_len <= 0 (Swift traps)
+ * leaves the pattern unchanged and returns -1; else 0 */
+int bl_with_length(bl_pattern_t *p, bl_tick_t new_len);
 
 /* PatternOps.densityCap(_:density:meter:) in 4/4; out may be in */
 void bl_density_cap(const bl_pattern_t *in, f64 density, bl_pattern_t *out);

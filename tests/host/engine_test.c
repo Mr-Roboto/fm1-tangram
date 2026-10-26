@@ -410,7 +410,6 @@ static void test_music(void)
 static const char *const GEN_NAME[] = {"seedProcedure", "pulsingBass", "stagedPluck", "bassMelody", "chordLayer",
                                        "heartbeat", "drone"};
 static const char *const ROLE_NAME[] = {"bedPluck1", "bedPluck2", "bass", "pad", "lead", "drone", "rhythm", "aux"};
-static int gen_max_n, gen_lines;
 
 static int name_index(const char *const *names, int count, const char *w)
 {
@@ -458,7 +457,7 @@ static void test_gen_vectors(void)
     static bl_pattern_t cur, q;
     static bl_sched_t sched;
     static bl_occ_t occ[1024];
-    int line = 0, ops = 0;
+    int line = 0, ops = 0, patterns = 0;
     char *save = text;
     for (char *l = text; l; l = save) {
         char *nl = strchr(l, '\n');
@@ -482,7 +481,7 @@ static void test_gen_vectors(void)
                 uint64_t seed = strtoull(next_word(&p), NULL, 10);
                 snprintf(what, sizeof what, "%s %d %d %s %d %llu", kind, cfg.a, cfg.b, role_w, key.root,
                          (unsigned long long)seed);
-                bl_make_pattern(&cfg, role, &key, seed, &cur);
+                CHECK(bl_make_pattern(&cfg, role, &key, seed, &cur) == 0, "gen.ref:%d %s: notes dropped", line, what);
                 CHECK(cur.seed == seed && cur.generator == cfg.kind, "gen.ref:%d %s: provenance", line, what);
             } else {
                 int bars = (int)next_int(&p);
@@ -493,7 +492,7 @@ static void test_gen_vectors(void)
                 }
                 uint64_t seed = strtoull(next_word(&p), NULL, 10);
                 snprintf(what, sizeof what, "walk %d (%d events) %llu", bars, sched.n, (unsigned long long)seed);
-                bl_make_bass_melody(bars, &sched, seed, &cur);
+                CHECK(bl_make_bass_melody(bars, &sched, seed, &cur) == 0, "gen.ref:%d %s: notes dropped", line, what);
                 CHECK(cur.seed == seed && cur.generator == BL_GEN_BASS_MELODY, "gen.ref:%d %s: provenance", line, what);
             }
             int64_t length = next_int(&p);
@@ -511,8 +510,7 @@ static void test_gen_vectors(void)
                 CHECK(cur.start_offset == 0 && cur.remaining == 4 && !cur.locked, "gen.ref:%d %s: header", line, what);
             }
             check_notes(&cur, &p, line, what);
-            if (cur.n > gen_max_n) gen_max_n = cur.n;
-            gen_lines++;
+            patterns++;
         } else if (!strcmp(word, "cap")) {
             f64 d = {strtoull(next_word(&p), NULL, 16)};
             bl_density_cap(&cur, d, &q);
@@ -536,7 +534,7 @@ static void test_gen_vectors(void)
             /* withLength(newLength).rotated(by: rotate) */
             bl_tick_t len = next_int(&p), rotate = next_int(&p), lo = next_int(&p);
             q = cur;
-            bl_with_length(&q, len);
+            CHECK(bl_with_length(&q, len) == 0, "gen.ref:%d: withLength %lld", line, (long long)len);
             q.start_offset = bl_floor_mod(q.start_offset + rotate, q.length);
             if (*word == 'o' && word[1] == 'c') {
                 bl_tick_t hi = next_int(&p), offset = next_int(&p);
@@ -550,6 +548,14 @@ static void test_gen_vectors(void)
                     CHECK(occ[i].at == at && occ[i].index == index, "gen.ref:%d occ %d: %lld %d, want %lld %d", line, i,
                           (long long)occ[i].at, occ[i].index, (long long)at, index);
                     if (occ[i].at != at || occ[i].index != index) break;
+                }
+                /* a buffer too small: the total still returned, the first ones of the sorted result written */
+                static bl_occ_t part[1024];
+                for (int max = 0; max <= n; max += n / 3 + 1) {
+                    int ret = bl_occurrences(&q, lo, hi, part, max), same = ret == got;
+                    for (int i = 0; i < max && i < got; i++)
+                        same &= part[i].at == occ[i].at && part[i].index == occ[i].index;
+                    CHECK(same, "gen.ref:%d occ into %d: %d returned, want %d and the prefix", line, max, ret, got);
                 }
             } else {
                 bl_tick_t step = next_int(&p);
@@ -565,31 +571,78 @@ static void test_gen_vectors(void)
             CHECK(0, "gen.ref:%d: unknown line %s", line, word);
         }
     }
-    CHECK(gen_lines == 5200 && ops == 700, "gen.ref: %d patterns, %d ops", gen_lines, ops);
-    printf("gen: %d patterns, %d ops, at most %d notes\n", gen_lines, ops, gen_max_n);
+    CHECK(patterns == 5600 && ops == 756, "gen.ref: %d patterns, %d ops", patterns, ops);
+    printf("gen: %d patterns, %d ops\n", patterns, ops);
     free(text);
 }
 
-/* the most notes a template's generator makes fits a pattern: over gen.ref's cases, and the bass melody's worst case
- * (a change of 14 degrees every bar: three passing tones in each of its 16 bars) */
+/* the most notes a template's generator makes fits a pattern, none dropped: every template config in both keys with
+ * gen.ref's 200 seeds, the bass melody over the demo's schedule, and its worst case (a change of 14 degrees every
+ * bar: three passing tones in each of its 16 bars, 64 notes); a config beyond the cap reports what it dropped */
 static void test_gen_max_notes(void)
 {
-    CHECK(gen_max_n > 0 && gen_max_n <= BL_MAX_NOTES, "gen.ref: %d notes", gen_max_n);
-    static bl_sched_t zigzag;
+    static const bl_gencfg_t CFG[] = {
+        {BL_GEN_SEED_PROCEDURE, 1, 4}, {BL_GEN_SEED_PROCEDURE, 1, 3}, {BL_GEN_PULSING_BASS, 3, 0},
+        {BL_GEN_STAGED_PLUCK, 2, 0},   {BL_GEN_BASS_MELODY, 16, 0},   {BL_GEN_CHORD_LAYER, 7, 0},
+        {BL_GEN_HEARTBEAT, 0, 0},      {BL_GEN_DRONE, 8, 0},
+    };
+    static const int ROLE[] = {BL_ROLE_BED1, BL_ROLE_BED1, BL_ROLE_BASS, BL_ROLE_LEAD,
+                               BL_ROLE_BASS, BL_ROLE_PAD,  BL_ROLE_RHYTHM, BL_ROLE_DRONE};
+    static bl_sched_t demo, zigzag;
     static bl_pattern_t p;
+    demo.n = 5;
+    demo.ev[0] = (bl_tev_t){8, 5};
+    demo.ev[1] = (bl_tev_t){12, 3};
+    demo.ev[2] = (bl_tev_t){16, 0};
+    demo.ev[3] = (bl_tev_t){24, 4};
+    demo.ev[4] = (bl_tev_t){28, 0};
     zigzag.n = 16;
     for (int i = 0; i < 16; i++) zigzag.ev[i] = (bl_tev_t){i, i & 1 ? -7 : 7};
-    for (uint64_t seed = 0; seed < 500; seed++) {
-        bl_make_bass_melody(16, &zigzag, seed, &p);
-        CHECK(p.n == BL_MAX_NOTES, "bass melody over a zigzag, seed %llu: %d notes", (unsigned long long)seed, p.n);
+    int most = 0, dropped = 0;
+    for (int root = 0; root <= 9; root += 9) {
+        bl_key_t key = {root, {0}};
+        bl_scale_preset(BL_MODE_NATURAL_MINOR, &key.scale);
+        for (uint64_t k = 0; k < 200; k++) {
+            uint64_t seed = bl_seed_derive(k, "gen", (const char *)NULL);
+            for (int c = 0; c < 8; c++) {
+                dropped += bl_make_pattern(&CFG[c], ROLE[c], &key, seed, &p);
+                if (p.n > most) most = p.n;
+            }
+            dropped += bl_make_bass_melody(16, &demo, seed, &p);
+            if (p.n > most) most = p.n;
+        }
     }
+    CHECK(most > 0 && most <= BL_MAX_NOTES && dropped == 0, "templates' generators: %d notes, %d dropped", most,
+          dropped);
+    for (uint64_t seed = 0; seed < 500; seed++) {
+        int d = bl_make_bass_melody(16, &zigzag, seed, &p);
+        CHECK(p.n == BL_MAX_NOTES && d == 0, "bass melody over a zigzag, seed %llu: %d notes, %d dropped",
+              (unsigned long long)seed, p.n, d);
+    }
+    printf("gen: the templates' generators make at most %d notes, the zigzag bass melody %d\n", most, p.n);
+    /* 17 bars of the unmutated seed procedure are 68 notes: 4 dropped, and said so */
+    bl_key_t a = {9, {0}};
+    bl_scale_preset(BL_MODE_NATURAL_MINOR, &a.scale);
+    bl_gencfg_t big = {BL_GEN_SEED_PROCEDURE, 17, 0};
+    int d = bl_make_pattern(&big, BL_ROLE_BED1, &a, 1, &p);
+    CHECK(d == 4 && p.n == BL_MAX_NOTES, "seedProcedure(17, 0): %d notes, %d dropped", p.n, d);
+    /* a kind that is not ported: an empty bar */
+    bl_gencfg_t none = {BL_GEN_DRONE + 1, 8, 0};
+    CHECK(bl_make_pattern(&none, BL_ROLE_AUX, &a, 1, &p) == 0 && p.n == 0 && p.length == BL_TICKS_PER_BAR,
+          "unported kind: %d notes, length %lld", p.n, (long long)p.length);
+
+    /* withLength(0) or less is Swift's trap: the pattern stays as it was */
+    bl_gencfg_t drone = {BL_GEN_DRONE, 8, 0};
+    bl_make_pattern(&drone, BL_ROLE_DRONE, &a, 1, &p);
+    CHECK(bl_with_length(&p, 0) == -1 && bl_with_length(&p, -240) == -1 && p.length == 8 * BL_TICKS_PER_BAR &&
+              p.n == 2,
+          "withLength <= 0");
+
     bl_sched_t *s = &zigzag;
     CHECK(bl_sched_offset(s, 0) == 7 && bl_sched_offset(s, 1) == -7 && bl_sched_offset(s, 99) == -7, "sched offset");
-    s->n = 2;
-    s->ev[0] = (bl_tev_t){8, 5};
-    s->ev[1] = (bl_tev_t){12, 3};
+    s = &demo;
     CHECK(bl_sched_offset(s, 7) == 0 && bl_sched_offset(s, 8) == 5 && bl_sched_offset(s, 11) == 5 &&
-              bl_sched_offset(s, 12) == 3,
+              bl_sched_offset(s, 12) == 3 && bl_sched_offset(s, 100) == 0,
           "sched offset before, at and after events");
     /* firstSoundingNote: the first of the least positions */
     p.n = 3;

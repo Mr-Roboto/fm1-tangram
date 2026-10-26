@@ -238,7 +238,8 @@ other branch; the two beds give the same patterns), then `seedProcedure(1, 3)` t
 `bass`, `stagedPluck(2)` as `lead`, `bassMelody(16)` as `bass` (through `make`: the pedal), `chordLayer(7)` as `pad`,
 `heartbeat` as `rhythm`, `drone(8)` as `drone`; each in A natural minor (`Key(root: 9, scale: .preset(.naturalMinor))`),
 then in C natural minor (`Key.default`); each with the 200 seeds `SeedStream.derive(master: k, "gen")`, k = 0..<200.
-Then `makeBassMelody(bars: 16)` over two schedules, with the same 200 seeds each: the full ensemble's
+Then two configs no template uses, in A minor only, as `bedPluck1`: `seedProcedure(1, 16)` and `seedProcedure(2, 8)`
+(more mutations, so that a degree move reaches the clamp at 4). Then `makeBassMelody(bars: 16)` over two schedules, with the same 200 seeds each: the full ensemble's
 (`HarmonyScheduler.resolve(project: .fullEnsemble).schedule`, the demo's transposition) and a busy one, a change every
 bar of up to 14 degrees, so that the walk also takes its fallback steps. Meter 4/4 throughout.
 
@@ -255,6 +256,6 @@ bar of up to 14 degrees, so that the walk also takes its fallback steps. Meter 4
 | `occ <length> <rotate> <lo> <hi> <startOffset> <count> <at> <index>…` | `q = p.withLength(length).rotated(by: rotate)` of it: `q.startOffset`, then `q.occurrences(in: lo..<hi)`, each its tick and its note's index in `q.notes` |
 | `onset <length> <rotate> <from> <step> <bits>` | for the same `q`, `q.hasOnset(atGlobalTick:)` at `from`, `from + step`, … up to the `occ` line's `hi`, one `0`/`1` character each |
 
-The ops follow every 104th pattern of the file (the 0th, the 104th, …: 50 of the 5,200), each with a `cap` line per
+The ops follow every 104th pattern of the file (the 0th, the 104th, …: 54 of the 5,600), each with a `cap` line per
 density, one `roots` and one `accents` line, and two `occ`/`onset` pairs: the length 240 ticks shorter with no rotation
 from tick 1234, and 480 ticks longer rotated by -1000 from tick -3000, both over two loops and 777 ticks.

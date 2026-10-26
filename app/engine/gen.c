@@ -13,11 +13,17 @@
 static const bl_meter_t M = {4, 4};                 /* Meter.fourFour */
 static const int8_t STEPS[4] = {-2, -1, 1, 2};      /* the [-2, -1, 1, 2] the moves draw from */
 
+/* the notes of the pattern being made that did not fit (begin() clears it; the make functions return it) */
+static int dropped;
+
 /* PatternNote(position:pitch:velocity:gate:accent:), ratchet 1; beyond BL_MAX_NOTES (no template config gets there)
- * a note is dropped */
+ * a note is dropped and counted */
 static void add_note(bl_pattern_t *p, bl_tick_t position, bl_pitch_t pitch, int velocity, bl_tick_t gate, int accent)
 {
-    if (p->n >= BL_MAX_NOTES) return;
+    if (p->n >= BL_MAX_NOTES) {
+        dropped++;
+        return;
+    }
     p->note[p->n++] = (bl_pnote_t){position, gate, pitch, (uint8_t)velocity, (uint8_t)accent, 1};
 }
 
@@ -230,10 +236,11 @@ static void begin(bl_pattern_t *p, int generator, bl_tick_t length, uint64_t see
     p->locked = 0;
     p->remaining = 4;           /* .repeating(remaining: 4) */
     p->seed = seed;
+    dropped = 0;
 }
 
 /* PatternFactory.make */
-void bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint64_t seed, bl_pattern_t *out)
+int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint64_t seed, bl_pattern_t *out)
 {
     bl_rng_t r;
     bl_rng_seed(&r, seed);
@@ -251,8 +258,7 @@ void bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint
         staged_pluck(cfg->a, &r, out);
         break;
     case BL_GEN_BASS_MELODY:
-        bl_make_bass_melody(cfg->a, NULL, seed, out);
-        break;
+        return bl_make_bass_melody(cfg->a, NULL, seed, out);
     case BL_GEN_CHORD_LAYER:
         begin(out, cfg->kind, cfg->a * bl_ticks_per_bar(M), seed);
         chord_layer(out->length, key, &r, out);
@@ -262,12 +268,16 @@ void bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint
         for (int b = 0; b < M.beats; b++)
             add_note(out, b * bl_ticks_per_beat(M), degree(0), 92, bl_ticks_per_beat(M) / 2, 0);
         break;
-    default:                    /* BL_GEN_DRONE: root and fifth for the whole loop */
-        begin(out, BL_GEN_DRONE, cfg->a * bl_ticks_per_bar(M), seed);
+    case BL_GEN_DRONE:          /* root and fifth for the whole loop */
+        begin(out, cfg->kind, cfg->a * bl_ticks_per_bar(M), seed);
         add_note(out, 0, degree(0), 64, out->length, 0);
         add_note(out, 0, degree(4), 60, out->length, 0);
         break;
+    default:                    /* not a ported generator: an empty bar */
+        begin(out, cfg->kind, bl_ticks_per_bar(M), seed);
+        break;
     }
+    return dropped;
 }
 
 /* ------------------------------------------------------- the bass melody --- */
@@ -275,7 +285,7 @@ static int32_t offset_at(const struct bl_sched *s, int32_t bar) { return s ? bl_
 
 /* PatternFactory.makeBassMelody: each bar's root on beat 1, then a seeded walk of passing tones (steps of at most
  * 2 degrees) toward the next bar's root, some pushed off the beat, some an octave down */
-void bl_make_bass_melody(int bars, const struct bl_sched *sched, uint64_t seed, bl_pattern_t *out)
+int bl_make_bass_melody(int bars, const struct bl_sched *sched, uint64_t seed, bl_pattern_t *out)
 {
     static const int8_t HOLD[4] = {0, 1, 1, 2};
     bl_rng_t r;
@@ -348,4 +358,5 @@ void bl_make_bass_melody(int bars, const struct bl_sched *sched, uint64_t seed, 
             add_note(out, position, pitch, 100, gate, 0);
         }
     }
+    return dropped;
 }

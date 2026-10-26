@@ -53,7 +53,11 @@ func genMode(_ args: [String]) throws -> Int32 {
             out.line("onset \(q.length) \(rotate) \(from) \(step) " + onsets.joined())
         }
     }
-    for (config, role) in configs {
+    // and two that no template uses, in A minor only: more mutations, so the degree moves reach the clamp at 4
+    let extra: [(GeneratorConfig, VoiceRole)] = [
+        (.seedProcedure(bars: 1, mutations: 16), .bedPluck1), (.seedProcedure(bars: 2, mutations: 8), .bedPluck1),
+    ]
+    for (config, role, keys) in configs.map({ ($0.0, $0.1, keys) }) + extra.map({ ($0.0, $0.1, [keys[0]]) }) {
         for key in keys {
             for seed in seeds {
                 let p = PatternFactory.make(id: "gen", config: config, role: role, key: key, meter: .fourFour,
