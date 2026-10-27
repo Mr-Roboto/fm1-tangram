@@ -12,7 +12,23 @@ unchanged Swift engine. It starts from Berlinan's built-in templates and a seed;
 Mac and the FM-1. The FM-1 is the MIDI clock master (clock, Start and Stop over USB), or follows an incoming
 clock from USB or the TRS jack. SAVE keeps the state across power-off.
 
-Status: the skeleton. It builds, boots and draws its name; the engine and the panel come next.
+Status: complete for its first version: the engine, the panel and the seven pages, MIDI out over USB, the clock
+(INT and EXT), SAVE and the six slots. What it leaves out (harmony modes, melody, the MIDI echo, Link, capture) is
+listed in the manual.
+
+## Where to read
+
+- [docs/MANUAL.md](docs/MANUAL.md): installing it, the controls, the pages, saving, sync, and how it differs from
+  Berlinan on the Mac.
+- [The design](docs/superpowers/specs/2026-10-26-berlinan-fm1-design.md) (the spec) and
+  [the plan](docs/superpowers/plans/2026-10-26-berlinan-fm1.md).
+- [tools/reference](tools/reference): RefTool, a small Swift program over the unchanged Berlinan engine (the pinned
+  commit, fetched with `git archive`), which writes the reference renders. `tools/reference/make_refs.sh` regenerates
+  them; nothing is written into the Berlinan checkout.
+- [tests/equiv/README.md](tests/equiv/README.md): how equivalence is tested. A script (a template, a seed, actions at
+  ticks) is played by the C engine and compared, line by line, with what the Swift engine rendered for it
+  (`tests/equiv/*.ref`, committed, so the tests need no Swift). The runtime's MIDI is compared the same way.
+- [BUILDING.md](BUILDING.md): prerequisites, the build, the tests.
 
 ## Building and testing
 
