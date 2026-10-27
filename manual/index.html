@@ -1,0 +1,168 @@
+<!doctype html>
+<!-- made by tools/site_pages.py from docs/MANUAL.md: edit that, not this -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual · Berlinan for the FM-1</title>
+<meta name="description" content="The manual of Berlinan for the M-VAVE FM-1: installing it, the controls, the seven pages, saving, sync, and how it differs from Berlinan for macOS.">
+<meta name="theme-color" content="#131418">
+<link rel="alternate" hreflang="en" href="https://jiripisa.github.io/fm1-berlinan/manual/">
+<link rel="alternate" hreflang="cs" href="https://jiripisa.github.io/fm1-berlinan/cs/manual/">
+<link rel="alternate" hreflang="x-default" href="https://jiripisa.github.io/fm1-berlinan/manual/">
+<link rel="icon" href="../assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/manual.css">
+<link rel="stylesheet" href="../assets/fm1.css">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="wrap masthead">
+  <a class="brand" href="../"><img src="../assets/icon.png" alt="" width="32" height="32">Berlinan FM-1</a>
+  <nav aria-label="Site">
+    <a href="../">Overview</a>
+    <a href="./" aria-current="page">Manual</a>
+    <a href="../install/">Install</a>
+    <a href="../emu/">Try it</a>
+    <a href="https://github.com/jiripisa/fm1-berlinan">GitHub</a>
+    <a class="lang" href="../cs/manual/" hreflang="cs" lang="cs">Česky</a>
+  </nav>
+</header>
+
+<main id="content" tabindex="-1">
+  <div class="wrap title">
+    <h1>Manual</h1>
+    <p>Berlinan turns the M-VAVE FM-1 into a standalone Berlin School MIDI sequencer, the firmware version of Berlinan for macOS. A small ensemble of voices (two plucks, a bass, a pad, a lead, a drone, a heartbeat) repeats, phases against itself on loops of unequal length, and earns its mutations over time. The FM-1 makes no sound of its own: plug it by USB into a MIDI router, and each voice goes out on its own MIDI channel to your synthesizers. You play it from the panel: the keys, the buttons, the encoders and the screen. No laptop is needed once it is running.</p>
+  </div>
+
+  <div class="wrap layout">
+    <nav class="toc" aria-label="Contents">
+      <p>Contents</p>
+      <ol>
+        <li><a href="#s1"><span class="num">1</span>Install</a></li>
+<li><a href="#s2"><span class="num">2</span>Getting started</a></li>
+<li><a href="#s3"><span class="num">3</span>Controls</a><ol><li><a href="#keys">Keys</a></li><li><a href="#buttons">Buttons</a></li><li><a href="#encoders-and-master">Encoders and MASTER</a></li><li><a href="#help">Help</a></li></ol></li>
+<li><a href="#s4"><span class="num">4</span>The pages</a><ol><li><a href="#home-perform">HOME: Perform</a></li><li><a href="#env-voice">ENV: Voice</a></li><li><a href="#arp-pattern">ARP: Pattern</a></li><li><a href="#lfo-cc">LFO: CC</a></li><li><a href="#seq-arranger">SEQ: Arranger</a></li><li><a href="#fx-delay">FX: Delay</a></li><li><a href="#glo-setup">GLO: Setup</a></li><li><a href="#the-screen">The screen</a></li></ol></li>
+<li><a href="#s5"><span class="num">5</span>Saving</a></li>
+<li><a href="#s6"><span class="num">6</span>Sync</a></li>
+<li><a href="#s7"><span class="num">7</span>MASTER, the density fader</a></li>
+<li><a href="#s8"><span class="num">8</span>Berlinan on the Mac</a></li>
+<li><a href="#s9"><span class="num">9</span>Differences from Berlinan on the Mac</a></li>
+<li><a href="#s10"><span class="num">10</span>Troubleshooting</a><ol><li><a href="#recovering-an-fm-1-that-won-t-start">Recovering an FM-1 that won't start</a></li></ol></li>
+<li><a href="#s11"><span class="num">11</span>Credits</a></li>
+      </ol>
+    </nav>
+
+    <article>
+<section aria-labelledby="s1">
+<h2 id="s1"><span class="num">1</span>Install</h2>
+<p><strong>From the browser.</strong> Open the <a href="https://jiripisa.github.io/fm1-berlinan/install/">install page</a> in Chrome or Edge, connect the FM-1 by USB (a data cable, straight to the computer) and press Install. The browser asks once to allow MIDI: allow it. Nothing is installed on the computer.</p>
+<p><strong>From the command line.</strong> You need the firmware package (the site's download, <code>berlinan-X.Y.fwsc</code>, or <code>app/build/berlinan.fwsc</code> from <code>./build.sh</code>; see <a href="https://github.com/jiripisa/fm1-berlinan/blob/main/BUILDING.md">BUILDING.md</a>), a USB data cable and Python 3 with <code>mido</code> and <code>python-rtmidi</code> (<code>pip3 install mido python-rtmidi</code>). Connect the FM-1 and run, from the source folder:</p>
+<pre tabindex="0" role="region" aria-label="Command: Install"><code>python3 base/tools/fm1_install.py app/build/berlinan.fwsc</code></pre>
+<p>Either way, don't unplug it while it is writing. When it finishes the FM-1 restarts into Berlinan, and the page or the script checks that it reports the version written.</p>
+<p><strong>Go back:</strong> the install page's "Back to the stock firmware" writes M-VAVE's own firmware (FM-1 V15) again: you download the file from M-VAVE, the page checks it before it writes. M-VAVE's updater, M-UPGRADE, does it too, and so does the script (<code>fm1_install.py FM-1.fwsc</code>).</p>
+<div class="callout"><p>Installing other firmware is at your own risk. If the FM-1 ever won't start, see <a href="#recovering-an-fm-1-that-won-t-start">Recovering an FM-1 that won't start</a>.</p></div>
+</section>
+<section aria-labelledby="s2">
+<h2 id="s2"><span class="num">2</span>Getting started</h2>
+<ol><li><strong>Connect.</strong> Plug the FM-1 into the router with USB. The router sees a MIDI device, "FM-Berlinan". Route its output to your synthesizers: each voice has its own channel (the Perform page shows them; the Voice page changes one).</li><li><strong>Play.</strong> Press PLAY. The first piece is the Demo trio (Pluck 1, Pluck 2, Bass) in A natural minor, from bar 1, with a new seed. The FM-1 sends MIDI Start and clock (INT sync).</li><li><strong>Mute and unmute.</strong> Tap a voice key (F3 to B3): that voice goes quiet and its key goes dark. Tap again.</li><li><strong>Move the harmony.</strong> Press a white key from C4: degrees 1 to 7, at the next bar.</li><li><strong>Change the piece.</strong> Turn PRESETS: Demo trio, Full ensemble, Ambient drift. While playing it takes over at the next bar. EDIT re-rolls every unlocked voice; OCT+ is Dice, a new seed.</li><li><strong>Thin it out.</strong> MASTER is the density: down thins the ensemble, the top is 100 %.</li><li><strong>Stop.</strong> PLAY again. Every sounding note gets its note-off.</li></ol>
+<p>Not sure what a button does? Hold it for a second: a card says. Let go and nothing happens.</p>
+</section>
+<section aria-labelledby="s3">
+<h2 id="s3"><span class="num">3</span>Controls</h2>
+<div class="figs"><figure class="wide"><img src="../img/fm1-panel.svg" alt="A drawing of the FM-1 running Berlinan, each control labelled with what it does: the tables below say the same in words" loading="lazy"><figcaption>The FM-1 (a drawing), running Berlinan</figcaption></figure></div>
+<h3 id="keys">Keys</h3>
+<div class="table" tabindex="0" role="region" aria-label="Table: Keys (Keys, What they do)"><table><thead><tr><th>Keys</th><th>What they do</th></tr></thead><tbody><tr><td>F3 F#3 G3 G#3 A3 A#3 B3</td><td>The voices: Pluck 1, Pluck 2, Bass, Pad, Lead, Drone, Heartbeat. A press selects it. <strong>Tap</strong> (shorter than 1 s): also mute or unmute it. A voice the arranger holds back (it shows WAITS): the tap brings it in. <strong>Hold</strong> (1 s or more): selects it without muting, and EDIT, REC or SEL pressed meanwhile act on that voice (below). Lit: playing. Blinking: WAITS. Dark: muted, or not in this template.</td></tr><tr><td>C4 D4 E4 F4 G4 A4 B4 (white)</td><td>The degrees 1 to 7: the harmony moves diatonically at the next bar. The degree in force is lit; one that is coming blinks.</td></tr><tr><td>C#4 D#4 F#4 G#4 A#4</td><td>CC scenes 1 to 5: the controllers morph toward the template's scene over 8 bars. Only the scenes the template has (Ambient drift: two; the others none; keys past them do nothing). The template's scenes are dim, the one the morph heads for is lit.</td></tr><tr><td>C5 C#5 D5 D#5 E5 F5</td><td>Snapshot slots 1 to 6. Tap: recall it at the next bar (an empty slot says EMPTY). SAVE held + a slot: store the state there. Stored slots are lit.</td></tr><tr><td>F#5</td><td><code>&gt;&gt;</code>: the arranger's next change, at the next bar.</td></tr><tr><td>G5</td><td>One unit of tension (on the pad voice, else the first voice). Lit while some is left.</td></tr></tbody></table></div>
+<h3 id="buttons">Buttons</h3>
+<div class="table" tabindex="0" role="region" aria-label="Table: Buttons (Button, What it does)"><table><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td>PLAY</td><td>Play and stop. It acts on the press and has no help card. INT: also MIDI Start, Stop and clock. Lit green while playing.</td></tr><tr><td>REC</td><td>The B part. With a voice key held: a blank cycle for that voice.</td></tr><tr><td>EDIT</td><td>Re-roll every unlocked voice. With a voice key held: regenerate that voice.</td></tr><tr><td>SEL</td><td>With a voice key held, or on the Voice page: lock or unlock the voice.</td></tr><tr><td>SAVE</td><td>Save the project and the six slots (see <a href="#s5">Saving</a>). SAVE held + a slot key: store that slot.</td></tr><tr><td>OCT-</td><td>Undo: the last 20 states, one pushed before every destructive action.</td></tr><tr><td>OCT+</td><td>Dice: a new master seed, swapped in at the next bar while playing.</td></tr><tr><td>HOME ENV ARP LFO SEQ FX GLO</td><td>The pages: Perform, Voice, Pattern, CC, Arranger, Delay, Setup. The lit button shows the page.</td></tr></tbody></table></div>
+<p>Hold OCT- and OCT+ together for five seconds for the update mode (see Troubleshooting).</p>
+<h3 id="encoders-and-master">Encoders and MASTER</h3>
+<div class="table" tabindex="0" role="region" aria-label="Table: Encoders and MASTER (Control, What it does)"><table><thead><tr><th>Control</th><th>What it does</th></tr></thead><tbody><tr><td>MASTER</td><td>Density, 0 to 100 % (see <a href="#s7">section 7</a>).</td></tr><tr><td>SELECT</td><td>The selected voice, to the next voice the template has. HOME held + SELECT: the tempo, from any page.</td></tr><tr><td>ALGORITHM</td><td>The mode: natural minor, Dorian, Phrygian, Mixolydian, Lydian, Lydian dominant, harmonic minor, minor pentatonic, Locrian, major. The root is set on the Setup page.</td></tr><tr><td>PRESETS</td><td>The template. While playing it takes over at the next bar. A new template gets a new seed.</td></tr><tr><td>KNOB 1 to 4</td><td>The four values of the page, shown at the bottom of the screen. A few clicks are single steps; a quick turn speeds up.</td></tr></tbody></table></div>
+<h3 id="help">Help</h3>
+<p>Hold any button but PLAY for a second and a card says what it does. A key, a knob or another button puts the card away; letting go after it does nothing else. (A button pressed while a voice key is held takes that voice's job and has no card.)</p>
+<div class="figs"><figure class="shot"><img src="../img/screen-help.png" alt="FX&#x27;s card over the Perform page: DELAY TIMES FOR YOUR EFFECTS AT THE TEMPO" loading="lazy"><figcaption>FX's card</figcaption></figure></div>
+<p>Everything the keys and buttons do to the music binds as on the Mac: at the next bar while playing, with the engine's own queue. While the FM-1 is stopped, an action that needs a running piece (degrees, scenes, B part, re-roll, tension and the like) says WHEN PLAYING and does nothing. A full queue or schedule says so (QUEUE FULL, SCHEDULE FULL) instead of dropping silently.</p>
+</section>
+<section aria-labelledby="s4">
+<h2 id="s4"><span class="num">4</span>The pages</h2>
+<p>Seven pages, a button each. A page's four values sit on KNOB 1 to 4. Only what the Mac can change is editable, and the ratchet (the FM-1's own); the other values are shown, and their knobs do nothing.</p>
+<h3 id="home-perform">HOME: Perform</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-perform.png" alt="The Perform page: the voice lanes, the horizon, the convergence" loading="lazy"><figcaption>Perform</figcaption></figure></div>
+<p>A lane per voice: its name, MIDI channel (CH), its pattern as a strip with a playhead, the loop length in steps, the legitimization dots (the plays left before the pattern is established), and its marks: WAITS, MUTE, LOCK, BLANK. Under them, the HORIZON: what is coming (a pending degree, a template taking over, the arranger's next change, bar-bound changes, the nearest mutation). Then LCM, the convergence (how long until the loops line up again, in bars and seconds at the tempo shown), the degree in force (DEG) and the tension left.</p>
+<p>Knobs: <strong>Tempo</strong> (40 to 220), <strong>Auto</strong> (the arranger on or off), <strong>Form</strong> (classic arc, slow build, ambient plateau; stopped only), <strong>Ambient</strong> (ambient mode; stopped only).</p>
+<h3 id="env-voice">ENV: Voice</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-voice.png" alt="The Voice page" loading="lazy"><figcaption>Voice</figcaption></figure></div>
+<p>The selected voice: its strip, generation, lifecycle (plays left or established, locked), what waits for its loop (regenerate, a blank cycle) and its CC. Knobs: <strong>Channel</strong> (editable, 1 to 16), and shown only: Loop, Register, Generator. Registers are named with C3 = 60 (as Ableton and Logic): middle C is C3.</p>
+<h3 id="arp-pattern">ARP: Pattern</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-pattern.png" alt="The Pattern page" loading="lazy"><figcaption>Pattern</figcaption></figure></div>
+<p>The selected voice's pattern in steps, a bar a row: the onsets, their scale degrees, accents, what each gate holds, the playhead.</p>
+<p>Knobs: <strong>Ratchet</strong> (OFF, 5 to 50 % in steps of 5), and shown only: Steps, Generation, Plays left. The ratchet is the chance that a mutation gives one note of the pattern a ratchet, a 2- or 3-fold retrigger, for the pattern's next legitimization cycle (Berlinan's intermittent ratchet). It is the project's, for every voice whichever is selected, and saved with it. OFF, the default, no note ratchets. Stopped, a change holds from the next Play; while playing it goes into the project and the screen says AT NEXT PLAY: the running piece keeps its own until you stop and play again (the Mac has no live control for it), or until a template you load meanwhile takes over at its bar line: the new piece starts with the ratchet set.</p>
+<h3 id="lfo-cc">LFO: CC</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-cc.png" alt="The CC page" loading="lazy"><figcaption>CC and modulation</figcaption></figure></div>
+<p>The selected voice's CC lanes (a cycle of each, with its playhead) and the template's scenes. Shown only: Target, Cycle, Depth, Scene.</p>
+<h3 id="seq-arranger">SEQ: Arranger</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-arranger.png" alt="The Arranger page" loading="lazy"><figcaption>Arranger</figcaption></figure></div>
+<p>AUTO and the form, the seven phases (the one now lit), the bar in the phase and the bars to the next change, the voices the arranger has in, the density and the form's settings. Shown only: Phase, Length, Bed drop, Reprise.</p>
+<h3 id="fx-delay">FX: Delay</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-delay.png" alt="The Delay page" loading="lazy"><figcaption>Delay cheat sheet</figcaption></figure></div>
+<p>The delay cheat sheet: for each voice, a note division and its time in ms at the tempo, for the delays and echoes of your own effects. The tempo is the live one (the one the header shows); in EXT, where the header shows EXT, the followed one.</p>
+<h3 id="glo-setup">GLO: Setup</h3>
+<div class="figs"><figure class="shot"><img src="../img/screen-setup.png" alt="The Setup page" loading="lazy"><figcaption>Setup</figcaption></figure></div>
+<p>The template, the key, the clock (INT, or EXT and from where), MIDI out (USB), the version and the <strong>seed</strong> in 16 hex digits: with it, a run can be reproduced on the Mac. Before the first Play of a fresh project it says that a new seed comes at the first Play. Knobs: <strong>Root</strong> (the key's root), <strong>Sync</strong> (INT or EXT; stopped only), <strong>EXT input</strong> (USB, TRS or both), <strong>Lights</strong> (off, on, keys only).</p>
+<h3 id="the-screen">The screen</h3>
+<p>The header has the template, the key, the tempo (EXT while following), a beat light (a play triangle while stopped) and a dot while a SAVE waits for the stop. Messages take its place for a moment.</p>
+</section>
+<section aria-labelledby="s5">
+<h2 id="s5"><span class="num">5</span>Saving</h2>
+<p>SAVE writes the project (the template, its seed, key and mode, tempo, density, the arranger's settings, the ratchet, the voices' channels) and the six slots to the FM-1's memory, as a Berlinan document on the Mac. The undo stack and the running engine are not saved. After power-on the saved project is loaded and PLAY starts it from bar 1, as every Play does.</p>
+<ul><li><strong>SAVE while stopped</strong> writes at once.</li><li><strong>SAVE while playing</strong> is written at the next stop (the button, MIDI Stop or the arranger's end), a moment after the stop's MIDI Stop and note-offs have gone out: writing flash stops everything for a moment, the MIDI clock too. The SAVE button blinks and the header shows a dot until then, and the screen says AT THE STOP.</li><li><strong>Slots:</strong> SAVE held + a slot key (C5 to F5) stores the state at that moment; a tap recalls it at the next bar. The slots are saved with SAVE.</li><li><strong>Undo:</strong> OCT-, 20 deep; a recall or Dice can be undone. Loading a project empties it.</li><li>A record the firmware does not recognise (another firmware's, or damaged) is ignored: the Demo trio with a fresh seed. A project saved by an earlier Berlinan firmware, before the ratchet, loads as it was, with the ratchet OFF.</li></ul>
+<p>With nothing saved, the first piece is the Demo trio in A minor, and its seed is drawn at the first Play, so each power-on is a new universe.</p>
+</section>
+<section aria-labelledby="s6">
+<h2 id="s6"><span class="num">6</span>Sync</h2>
+<ul><li><strong>INT</strong> (the default): the FM-1 is the clock master. It sends MIDI Start at tick 0, a clock pulse 24 times a beat and Stop over USB. The tempo is the project's (40 to 220, changed from the next bar).</li><li><strong>EXT:</strong> it follows MIDI clock from USB, the TRS jack or both (EXT input). The header shows EXT; the Delay page and the convergence use the followed tempo. It sends nothing. Sync and the input are set on the Setup page while stopped. Back on INT it keeps the tempo followed last, shown and played, until you change the tempo or choose a template, as the Mac does. - <strong>PLAY in EXT</strong> starts at once, at the tempo in store, and locks to the pulses as they arrive. - <strong>MIDI Start (FA)</strong> from the master waits for its first pulse (at most one clock) and that pulse is tick 0. - <strong>MIDI Stop</strong> stops it. If the pulses stop without a Stop (the router unplugged, the DAW paused), it holds the last tempo and plays on; it never jumps, and stops only on MIDI Stop, PLAY or the arranger's end.</li><li>Notes go out on USB only: the FM-1's TRS jack is an input.</li></ul>
+</section>
+<section aria-labelledby="s7">
+<h2 id="s7"><span class="num">7</span>MASTER, the density fader</h2>
+<p>The FM-1 makes no sound, so MASTER is not a volume: it is the density, 0 to 100 %, a physical fader on how many notes the ensemble plays. The top is 100 % (density 1.0, Berlinan's default), the bottom 0 %. While playing, a change binds at the next bar.</p>
+<p>At power-on the saved density holds: MASTER takes over only after it has moved, so switching on never overwrites the saved project.</p>
+</section>
+<section aria-labelledby="s8">
+<h2 id="s8"><span class="num">8</span>Berlinan on the Mac</h2>
+<p>The FM-1 plays what Berlinan for macOS plays: the same template, the same seed and the same actions at the same bars give the same notes and the same CC, event for event, tick for tick (tested against the unchanged Swift engine, see <code>tests/equiv/README.md</code>). The FM-1 shows the seed on the Setup page; to repeat a run on the Mac, use the same template in A minor, the same seed and the same actions at the same bars, with the FM-1's ratchet at 15 % (the Mac's, which it has no control for; see <a href="#s9">Differences</a>).</p>
+<p>Projects do not move between the two: the FM-1 starts from Berlinan's three built-in templates and a seed.</p>
+</section>
+<section aria-labelledby="s9">
+<h2 id="s9"><span class="num">9</span>Differences from Berlinan on the Mac</h2>
+<p>Notes and CC are the same; these are where the behaviour differs on purpose.</p>
+<ul><li><strong>Edits while playing (Y).</strong> Changes made while playing that the Mac applies only when stopped reach the next Play after any stop, including MIDI Stop and the arranger's end. The Mac rebuilds only after its own stop button and would replay the old project after an external stop.</li><li><strong>Ratchet.</strong> The FM-1 has a control for the legitimization's ratchet probability (the Pattern page's KNOB 1, 0 to 50 %) and starts with it OFF: no note ratchets until you turn it up. The Mac has no control for it and always plays 15 % (Berlinan's default). The notes are the Mac engine's at the value set (tested at OFF and 50 %); a change while playing waits for the next Play, as the edits above, or for a template loaded while playing, which takes over at its bar line with the value set. A template keeps the value set; on the Mac a template comes with the 15 %.</li><li><strong>Actions while stopped (AC).</strong> The Mac drops them silently; the FM-1 says WHEN PLAYING. PLAY has no help card.</li><li><strong>Delay page and convergence (AF).</strong> They use the tempo shown (live, or followed in EXT), not the project's tempo; the Mac's lag a tempo change by one bar.</li><li><strong>Register names (AE).</strong> C3 = 60, as in Ableton and Logic.</li><li><strong>EXT clock (S, T).</strong> The follower is simpler than the Mac's smoothing: 40 ticks a pulse, never past the next pulse, held after 500 ms without one. Timing is not part of the note equivalence. PLAY in EXT starts at once.</li><li><strong>SAVE (Z).</strong> Written at the next stop when playing.</li><li><strong>First seed (X).</strong> Without a saved project the seed is drawn at the first Play from the clock.</li><li><strong>Default project (AA).</strong> The Demo trio, as the Mac starts each launch.</li><li><strong>Template switch (R).</strong> A template switch while playing does not flush: the old engine's note-offs still go out. Stop, mute and a channel change do flush.</li><li><strong>Arranger settings (W).</strong> AUTO, the form and ambient mode are separate, as the Mac keeps them; AUTO off keeps the form.</li><li><strong>MASTER (AB, AD).</strong> The whole travel, with end zones, and the saved density at boot.</li><li><strong>MIDI rate (U).</strong> At most 16 packets a millisecond; the rest wait for the next. A burst (a flush) may take a few ms.</li><li><strong>Reader.</strong> fm1-base's words apply: "CC" is read as "controller".</li><li><strong>Not in this version:</strong> harmony modes (progressions), melody extraction and the lead's promotion, the MIDI echo, Ableton Link, take and capture, <code>.mid</code> export, the CC map editor. The page values the Mac edits elsewhere (loop length, register, generator, CC lanes, arranger phases) are shown, not editable.</li></ul>
+</section>
+<section aria-labelledby="s10">
+<h2 id="s10"><span class="num">10</span>Troubleshooting</h2>
+<p><strong>Update mode:</strong> hold OCT- and OCT+ together for five seconds. A countdown appears; let go before it ends to cancel.</p>
+<p><strong>Calibration:</strong> if a button or knob does the wrong thing, hold OCT- and OCT+ while you switch the FM-1 on, and press each button and turn each knob when asked.</p>
+<p><strong>After a crash:</strong> a red CRASH screen, then a restart. The next start shows an address (PC ...); include it if you report the problem.</p>
+<p><strong>Safe mode:</strong> if the app crashes twice in a row while starting, the FM-1 starts in SAFE MODE: no app, but USB works, so you can reinstall. If even that fails twice, the chip's own update mode takes over, and only the rescue below can reach it.</p>
+<h3 id="recovering-an-fm-1-that-won-t-start">Recovering an FM-1 that won't start</h3>
+<p>An FM-1 in the chip's own update mode shows a blank screen and neither M-UPGRADE nor <code>fm1_install.py</code> can see it. A script puts M-VAVE's firmware back, on a Mac with Apple's command line tools (it offers to install them) and an internet connection (it downloads its tools and the firmware), with the USB cable you have. From the source folder:</p>
+<pre tabindex="0" role="region" aria-label="Command: Recovering an FM-1 that won&#x27;t start"><code>bash base/bsp/tools/fm1_rescue.sh</code></pre>
+<p>Plug the FM-1 in and switch it on when it waits. It catches the chip, saves a backup of the memory in <code>~/fm1-rescue</code>, and asks before it writes: type <strong>yes</strong>. It writes only the firmware area, never the bootloader or the FM-1's own settings, and checks what it writes; running it again is safe. Afterwards install Berlinan again.</p>
+</section>
+<section aria-labelledby="s11">
+<h2 id="s11"><span class="num">11</span>Credits</h2>
+<p>Berlinan is free software under the GNU General Public License, version 2 or later; if you share the firmware, share its source. The engine is a translation of Berlinan for macOS. The platform (hardware layer, USB, update loader, installer and storage) is <a href="https://github.com/charlesvestal/fm1-base">fm1-base</a> and <a href="https://github.com/hugelton/felucca-bsp">felucca-bsp</a>, from <strong>Felucca</strong> by Leo Kuroshita, Hügelton Instruments. The software double is Berkeley SoftFloat. M-VAVE and FM-1 are trademarks of their owners; Berlinan is not connected with M-VAVE or Hügelton Instruments.</p>
+</section>
+    </article>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Berlinan for the FM-1 by Jiří Píša. GPL-2.0-or-later. The manual for version 0.5.1.</span>
+    <span><a href="../">Overview</a> · <a href="https://github.com/jiripisa/fm1-berlinan">Source on GitHub</a></span>
+  </div>
+</footer>
+</body>
+</html>

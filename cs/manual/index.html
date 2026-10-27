@@ -1,0 +1,169 @@
+<!doctype html>
+<!-- made by tools/site_pages.py from docs/MANUAL.cs.md: edit that, not this -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manuál · Berlinan pro FM-1</title>
+<meta name="description" content="Manuál Berlinanu pro M-VAVE FM-1: instalace, ovládání, sedm stránek, ukládání, synchronizace a čím se liší od Berlinanu pro macOS.">
+<meta name="theme-color" content="#131418">
+<link rel="alternate" hreflang="en" href="https://jiripisa.github.io/fm1-berlinan/manual/">
+<link rel="alternate" hreflang="cs" href="https://jiripisa.github.io/fm1-berlinan/cs/manual/">
+<link rel="alternate" hreflang="x-default" href="https://jiripisa.github.io/fm1-berlinan/manual/">
+<link rel="icon" href="../../assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/manual.css">
+<link rel="stylesheet" href="../../assets/fm1.css">
+</head>
+<body>
+<a class="skip" href="#content">Přeskočit na obsah</a>
+<header class="wrap masthead">
+  <a class="brand" href="../"><img src="../../assets/icon.png" alt="" width="32" height="32">Berlinan FM-1</a>
+  <nav aria-label="Web">
+    <a href="../">Přehled</a>
+    <a href="./" aria-current="page">Manuál</a>
+    <a href="../install/">Instalace</a>
+    <a href="../../emu/">Vyzkoušet</a>
+    <a href="https://github.com/jiripisa/fm1-berlinan">GitHub</a>
+    <a class="lang" href="../../manual/" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+
+<main id="content" tabindex="-1">
+  <div class="wrap title">
+    <h1>Manuál</h1>
+    <p>Berlinan udělá z M-VAVE FM-1 samostatný MIDI sekvencer Berlínské školy, firmwarovou verzi Berlinanu pro macOS. Malý soubor hlasů (dva plucky, bas, pad, lead, drón a heartbeat) se opakuje, na smyčkách různé délky se sám vůči sobě posouvá a mutace si postupně zaslouží. FM-1 sám nevydává žádný zvuk: připojte ho přes USB k MIDI routeru a každý hlas půjde na vlastním MIDI kanálu do vašich syntezátorů. Hrajete na něj z panelu: klávesami, tlačítky, enkodéry a obrazovkou. Jakmile hraje, notebook nepotřebuje.</p>
+<p>Firmware je v angličtině, proto názvy tlačítek, stránek a texty na obrazovce uvádíme tak, jak je uvidíte.</p>
+  </div>
+
+  <div class="wrap layout">
+    <nav class="toc" aria-label="Obsah">
+      <p>Obsah</p>
+      <ol>
+        <li><a href="#s1"><span class="num">1</span>Instalace</a></li>
+<li><a href="#s2"><span class="num">2</span>Začínáme</a></li>
+<li><a href="#s3"><span class="num">3</span>Ovládání</a><ol><li><a href="#kl-vesy">Klávesy</a></li><li><a href="#tla-tka">Tlačítka</a></li><li><a href="#enkod-ry-a-master">Enkodéry a MASTER</a></li><li><a href="#n-pov-da">Nápověda</a></li></ol></li>
+<li><a href="#s4"><span class="num">4</span>Stránky</a><ol><li><a href="#home-perform">HOME: Perform</a></li><li><a href="#env-voice">ENV: Voice</a></li><li><a href="#arp-pattern">ARP: Pattern</a></li><li><a href="#lfo-cc">LFO: CC</a></li><li><a href="#seq-arranger">SEQ: Arranger</a></li><li><a href="#fx-delay">FX: Delay</a></li><li><a href="#glo-setup">GLO: Setup</a></li><li><a href="#obrazovka">Obrazovka</a></li></ol></li>
+<li><a href="#s5"><span class="num">5</span>Ukládání</a></li>
+<li><a href="#s6"><span class="num">6</span>Synchronizace</a></li>
+<li><a href="#s7"><span class="num">7</span>MASTER, fader hustoty</a></li>
+<li><a href="#s8"><span class="num">8</span>Berlinan na Macu</a></li>
+<li><a href="#s9"><span class="num">9</span>Rozdíly oproti Berlinanu na Macu</a></li>
+<li><a href="#s10"><span class="num">10</span>Řešení problémů</a><ol><li><a href="#z-chrana-fm-1-kter-nenastartuje">Záchrana FM-1, který nenastartuje</a></li></ol></li>
+<li><a href="#s11"><span class="num">11</span>Autoři a licence</a></li>
+      </ol>
+    </nav>
+
+    <article>
+<section aria-labelledby="s1">
+<h2 id="s1"><span class="num">1</span>Instalace</h2>
+<p><strong>Z prohlížeče.</strong> Otevřete <a href="https://jiripisa.github.io/fm1-berlinan/cs/install/">instalační stránku</a> v Chromu nebo Edgi, připojte FM-1 přes USB (datovým kabelem, přímo do počítače) a stiskněte Instalovat. Prohlížeč se jednou zeptá, jestli smí používat MIDI: povolte to. Do počítače se nic neinstaluje.</p>
+<p><strong>Z příkazové řádky.</strong> Potřebujete balíček firmwaru (ke stažení na webu, <code>berlinan-X.Y.fwsc</code>, nebo <code>app/build/berlinan.fwsc</code> z <code>./build.sh</code>; viz <a href="https://github.com/jiripisa/fm1-berlinan/blob/main/BUILDING.md">BUILDING.md</a>), datový USB kabel a Python 3 s <code>mido</code> a <code>python-rtmidi</code> (<code>pip3 install mido python-rtmidi</code>). Připojte FM-1 a ve složce se zdrojovým kódem spusťte:</p>
+<pre tabindex="0" role="region" aria-label="Příkaz: Instalace"><code>python3 base/tools/fm1_install.py app/build/berlinan.fwsc</code></pre>
+<p>Ať tak, či onak, během zápisu kabel neodpojujte. Po dokončení se FM-1 restartuje do Berlinanu a stránka nebo skript ověří, že hlásí zapsanou verzi.</p>
+<p><strong>Návrat:</strong> „Zpět k původnímu firmwaru“ na instalační stránce zapíše zpátky vlastní firmware M-VAVE (FM-1 V15): soubor si stáhnete od M-VAVE a stránka ho před zápisem zkontroluje. Totéž udělá updater od M-VAVE, M-UPGRADE, i skript (<code>fm1_install.py FM-1.fwsc</code>).</p>
+<div class="callout"><p>Instalace jiného firmwaru je na vlastní riziko. Kdyby FM-1 někdy nenastartoval, viz <a href="#z-chrana-fm-1-kter-nenastartuje">Záchrana FM-1, který nenastartuje</a>.</p></div>
+</section>
+<section aria-labelledby="s2">
+<h2 id="s2"><span class="num">2</span>Začínáme</h2>
+<ol><li><strong>Připojte.</strong> Zapojte FM-1 přes USB do routeru. Router uvidí MIDI zařízení „FM-Berlinan“. Jeho výstup nasměrujte do syntezátorů: každý hlas má svůj kanál (ukazuje je stránka Perform, změníte ho na stránce Voice).</li><li><strong>Hrajte.</strong> Stiskněte PLAY. První skladba je Demo trio (Pluck 1, Pluck 2, Bass) v A přirozené moll, od 1. taktu, s novým seedem. FM-1 pošle MIDI Start a clock (synchronizace INT).</li><li><strong>Ztlumte a zase zapněte.</strong> Ťukněte na klávesu hlasu (F3 až B3): hlas ztichne a jeho klávesa zhasne. Ťukněte znovu.</li><li><strong>Posuňte harmonii.</strong> Stiskněte bílou klávesu od C4: stupně 1 až 7, na začátku dalšího taktu.</li><li><strong>Změňte skladbu.</strong> Otočte PRESETS: Demo trio, Full ensemble, Ambient drift. Během hraní nastoupí na začátku dalšího taktu. EDIT přegeneruje každý nezamčený hlas (re-roll); OCT+ je Dice, nový seed.</li><li><strong>Prořeďte ji.</strong> MASTER je hustota: dolů soubor proředí, nahoře je 100 %.</li><li><strong>Zastavte.</strong> Znovu PLAY. Každý znějící tón dostane svůj note-off.</li></ol>
+<p>Nevíte, co tlačítko dělá? Podržte ho vteřinu: ukáže se karta, která to řekne. Pak ho pusťte a nic dalšího se nestane.</p>
+</section>
+<section aria-labelledby="s3">
+<h2 id="s3"><span class="num">3</span>Ovládání</h2>
+<div class="figs"><figure class="wide"><img src="../../img/fm1-panel.cs.svg" alt="Kresba FM-1 s Berlinanem, u každého ovládacího prvku, co dělá: tabulky níže říkají totéž slovy" loading="lazy"><figcaption>FM-1 (kresba) s Berlinanem</figcaption></figure></div>
+<h3 id="kl-vesy">Klávesy</h3>
+<div class="table" tabindex="0" role="region" aria-label="Tabulka: Klávesy (Klávesy, Co dělají)"><table><thead><tr><th>Klávesy</th><th>Co dělají</th></tr></thead><tbody><tr><td>F3 F#3 G3 G#3 A3 A#3 B3</td><td>Hlasy: Pluck 1, Pluck 2, Bass, Pad, Lead, Drone, Heartbeat. Stisk hlas vybere. <strong>Ťuknutí</strong> (kratší než 1 s): navíc ho ztlumí nebo zase zapne. Hlas, který aranžér drží zpátky (ukazuje WAITS), ťuknutí přivede do hry. <strong>Podržení</strong> (1 s a déle): hlas vybere bez ztlumení a EDIT, REC nebo SEL stisknuté mezitím působí na tento hlas (viz níže). Svítí: hraje. Bliká: WAITS. Nesvítí: ztlumený, nebo v této šabloně není.</td></tr><tr><td>C4 D4 E4 F4 G4 A4 B4 (bílé)</td><td>Stupně 1 až 7: harmonie se na začátku dalšího taktu posune diatonicky. Platný stupeň svítí, chystaný bliká.</td></tr><tr><td>C#4 D#4 F#4 G#4 A#4</td><td>CC scény 1 až 5: ovladače se během 8 taktů plynule přesunou ke scéně šablony. Jen scény, které šablona má (Ambient drift dvě, ostatní žádnou; klávesy za nimi nedělají nic). Scény šablony svítí slabě, ta, ke které přesun směřuje, svítí naplno.</td></tr><tr><td>C5 C#5 D5 D#5 E5 F5</td><td>Sloty snapshotů 1 až 6. Ťuknutí: vyvolá slot na začátku dalšího taktu (prázdný slot hlásí EMPTY). Podržený SAVE + slot: uloží do něj aktuální stav. Obsazené sloty svítí.</td></tr><tr><td>F#5</td><td><code>&gt;&gt;</code>: další změna aranžéra, na začátku dalšího taktu.</td></tr><tr><td>G5</td><td>Jedna jednotka napětí (na hlasu pad, jinak na prvním hlasu). Svítí, dokud nějaké zbývá.</td></tr></tbody></table></div>
+<h3 id="tla-tka">Tlačítka</h3>
+<div class="table" tabindex="0" role="region" aria-label="Tabulka: Tlačítka (Tlačítko, Co dělá)"><table><thead><tr><th>Tlačítko</th><th>Co dělá</th></tr></thead><tbody><tr><td>PLAY</td><td>Spustí a zastaví přehrávání. Reaguje na stisk a nemá kartu nápovědy. V INT navíc posílá MIDI Start, Stop a clock. Během hraní svítí zeleně.</td></tr><tr><td>REC</td><td>B-díl. S podrženou klávesou hlasu: prázdný cyklus pro tento hlas.</td></tr><tr><td>EDIT</td><td>Re-roll každého nezamčeného hlasu. S podrženou klávesou hlasu: přegeneruje tento hlas.</td></tr><tr><td>SEL</td><td>S podrženou klávesou hlasu nebo na stránce Voice: zamkne nebo odemkne hlas.</td></tr><tr><td>SAVE</td><td>Uloží projekt a šest slotů (viz <a href="#s5">Ukládání</a>). Podržený SAVE + klávesa slotu: uloží ten slot.</td></tr><tr><td>OCT-</td><td>Zpět (undo): posledních 20 stavů, jeden se uloží před každou destruktivní akcí.</td></tr><tr><td>OCT+</td><td>Dice: nový hlavní seed, během hraní nastoupí na začátku dalšího taktu.</td></tr><tr><td>HOME ENV ARP LFO SEQ FX GLO</td><td>Stránky: Perform, Voice, Pattern, CC, Arranger, Delay, Setup. Rozsvícené tlačítko ukazuje aktuální stránku.</td></tr></tbody></table></div>
+<p>Podržením OCT- a OCT+ současně na pět sekund přejdete do režimu aktualizace (viz Řešení problémů).</p>
+<h3 id="enkod-ry-a-master">Enkodéry a MASTER</h3>
+<div class="table" tabindex="0" role="region" aria-label="Tabulka: Enkodéry a MASTER (Ovládací prvek, Co dělá)"><table><thead><tr><th>Ovládací prvek</th><th>Co dělá</th></tr></thead><tbody><tr><td>MASTER</td><td>Hustota, 0 až 100 % (viz <a href="#s7">kapitola 7</a>).</td></tr><tr><td>SELECT</td><td>Vybraný hlas, na další hlas, který šablona má. Podržený HOME + SELECT: tempo, z kterékoli stránky.</td></tr><tr><td>ALGORITHM</td><td>Mód: přirozená moll (natural minor), dórský, frygický, mixolydický, lydický, lydický dominantní, harmonická moll, mollová pentatonika, lokrický, dur. Základní tón se nastavuje na stránce Setup.</td></tr><tr><td>PRESETS</td><td>Šablona. Během hraní nastoupí na začátku dalšího taktu. Nová šablona dostane nový seed.</td></tr><tr><td>KNOB 1 až 4</td><td>Čtyři hodnoty stránky, ukázané dole na obrazovce. Pár cvaknutí jsou jednotlivé kroky; rychlé otočení zrychluje.</td></tr></tbody></table></div>
+<h3 id="n-pov-da">Nápověda</h3>
+<p>Podržte kterékoli tlačítko kromě PLAY na vteřinu a karta řekne, co dělá. Klávesa, knoflík nebo jiné tlačítko kartu schová; puštění tlačítka potom už nic dalšího neudělá. (Tlačítko stisknuté při podržené klávese hlasu dělá práci pro ten hlas a kartu nemá.)</p>
+<div class="figs"><figure class="shot"><img src="../../img/screen-help.png" alt="Karta tlačítka FX nad stránkou Perform: DELAY TIMES FOR YOUR EFFECTS AT THE TEMPO" loading="lazy"><figcaption>Karta tlačítka FX</figcaption></figure></div>
+<p>Všechno, co klávesy a tlačítka dělají s hudbou, se váže stejně jako na Macu: během hraní na začátek dalšího taktu, vlastní frontou enginu. Když FM-1 stojí, akce, která potřebuje běžící skladbu (stupně, scény, B-díl, re-roll, napětí a podobně), hlásí WHEN PLAYING a nic neudělá. Plná fronta nebo plán to řeknou (QUEUE FULL, SCHEDULE FULL), místo aby akci potichu zahodily.</p>
+</section>
+<section aria-labelledby="s4">
+<h2 id="s4"><span class="num">4</span>Stránky</h2>
+<p>Sedm stránek, pro každou jedno tlačítko. Čtyři hodnoty stránky leží na KNOB 1 až 4. Upravit jde jen to, co jde změnit i na Macu, a ratchet (vlastní ovládání FM-1); ostatní hodnoty se jen ukazují a jejich knoflíky nedělají nic.</p>
+<h3 id="home-perform">HOME: Perform</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-perform.png" alt="Stránka Perform: řádky hlasů, horizont, sbíhání smyček" loading="lazy"><figcaption>Perform</figcaption></figure></div>
+<p>Jeden řádek na hlas: jeho název, MIDI kanál (CH), pattern jako pás s ukazatelem přehrávání, délka smyčky v krocích, tečky opakování (kolikrát ještě pattern zazní, než se ustálí) a jeho značky: WAITS, MUTE, LOCK, BLANK. Pod nimi HORIZON, horizont: co se chystá (čekající stupeň, nastupující šablona, další změna aranžéra, změny vázané na takt, nejbližší mutace). Pak LCM, sbíhání smyček (za jak dlouho se smyčky znovu sejdou, v taktech a v sekundách při ukázaném tempu), platný stupeň (DEG) a zbývající napětí.</p>
+<p>Knoflíky: <strong>Tempo</strong> (40 až 220), <strong>Auto</strong> (aranžér zapnutý, nebo vypnutý), <strong>Form</strong> (classic arc, slow build, ambient plateau; jen při zastavení), <strong>Ambient</strong> (ambientní režim; jen při zastavení).</p>
+<h3 id="env-voice">ENV: Voice</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-voice.png" alt="Stránka Voice" loading="lazy"><figcaption>Voice</figcaption></figure></div>
+<p>Vybraný hlas: jeho pás, generace, životní cyklus (kolikrát ještě zazní, nebo ustálený, zamčený), co čeká na konec jeho smyčky (přegenerování, prázdný cyklus) a jeho CC. Knoflíky: <strong>Channel</strong> (lze upravit, 1 až 16) a jen ukázané: Loop, Register, Generator. Rejstříky jsou pojmenované s C3 = 60 (jako v Abletonu a Logicu): střední C je C3.</p>
+<h3 id="arp-pattern">ARP: Pattern</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-pattern.png" alt="Stránka Pattern" loading="lazy"><figcaption>Pattern</figcaption></figure></div>
+<p>Pattern vybraného hlasu v krocích, takt na řádek: nástupy tónů, jejich stupně, akcenty, co drží každá brána (gate), ukazatel přehrávání.</p>
+<p>Knoflíky: <strong>Ratchet</strong> (OFF, 5 až 50 % po 5) a jen ukázané: Steps, Generation, Plays left. Ratchet je šance, že mutace dá jednomu tónu patternu ratchet, dvoj- nebo trojnásobné opakování úderu, na příští cyklus legitimizace patternu (občasný ratchet Berlinanu). Patří projektu, platí pro všechny hlasy bez ohledu na to, který je vybraný, a ukládá se s ním. OFF, výchozí hodnota: žádný tón ratchet nedostane. Při zastavení platí změna od dalšího Play; během hraní se zapíše do projektu a obrazovka hlásí AT NEXT PLAY: běžící skladba si nechá svůj, dokud nezastavíte a znovu nespustíte (Mac pro to nemá ovládání za běhu), nebo dokud mezitím načtená šablona nenastoupí na svém taktu: nová skladba začne s nastaveným ratchetem.</p>
+<h3 id="lfo-cc">LFO: CC</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-cc.png" alt="Stránka CC" loading="lazy"><figcaption>CC a modulace</figcaption></figure></div>
+<p>CC pásy vybraného hlasu (jeden cyklus každého, s ukazatelem přehrávání) a scény šablony. Jen ukázané: Target, Cycle, Depth, Scene.</p>
+<h3 id="seq-arranger">SEQ: Arranger</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-arranger.png" alt="Stránka Arranger" loading="lazy"><figcaption>Arranger</figcaption></figure></div>
+<p>AUTO a forma, sedm fází (aktuální svítí), takt ve fázi a počet taktů do další změny, hlasy, které aranžér pustil do hry, hustota a nastavení formy. Jen ukázané: Phase, Length, Bed drop, Reprise.</p>
+<h3 id="fx-delay">FX: Delay</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-delay.png" alt="Stránka Delay" loading="lazy"><figcaption>Delay cheat sheet</figcaption></figure></div>
+<p>Delay cheat sheet, tahák k delayi: pro každý hlas dělení noty a jeho čas v ms při tempu, pro delaye a ozvěny vašich vlastních efektů. Tempo je to živé (to, které ukazuje záhlaví); v EXT, kde záhlaví ukazuje EXT, to sledované.</p>
+<h3 id="glo-setup">GLO: Setup</h3>
+<div class="figs"><figure class="shot"><img src="../../img/screen-setup.png" alt="Stránka Setup" loading="lazy"><figcaption>Setup</figcaption></figure></div>
+<p>Šablona, tónina, hodiny (INT, nebo EXT a odkud), MIDI výstup (USB), verze a <strong>seed</strong> v 16 šestnáctkových číslicích: s ním jde běh zopakovat na Macu. Před prvním Play nového projektu stránka říká, že nový seed přijde při prvním Play. Knoflíky: <strong>Root</strong> (základní tón tóniny), <strong>Sync</strong> (INT, nebo EXT; jen při zastavení), <strong>EXT input</strong> (USB, TRS nebo obojí), <strong>Lights</strong> (vypnuto, zapnuto, jen klávesy).</p>
+<h3 id="obrazovka">Obrazovka</h3>
+<p>Záhlaví ukazuje šablonu, tóninu, tempo (EXT, když se řídí externími hodinami), světlo doby (při zastavení trojúhelník play) a tečku, dokud SAVE čeká na zastavení. Zprávy ho na chvíli nahradí.</p>
+</section>
+<section aria-labelledby="s5">
+<h2 id="s5"><span class="num">5</span>Ukládání</h2>
+<p>SAVE zapíše projekt (šablonu, její seed, tóninu a mód, tempo, hustotu, nastavení aranžéra, ratchet, kanály hlasů) a šest slotů do paměti FM-1, jako dokument Berlinanu na Macu. Zásobník undo a běžící engine se neukládají. Po zapnutí se načte uložený projekt a PLAY ho spustí od 1. taktu, jako každé Play.</p>
+<ul><li><strong>SAVE při zastavení</strong> zapíše hned.</li><li><strong>SAVE během hraní</strong> se zapíše při dalším zastavení (tlačítkem, MIDI Stop nebo koncem aranžéra), chvíli poté, co odejde MIDI Stop a note-offy zastavení: zápis do flash na okamžik zastaví všechno, i MIDI clock. Do té doby tlačítko SAVE bliká, v záhlaví je tečka a obrazovka hlásí AT THE STOP.</li><li><strong>Sloty:</strong> podržený SAVE + klávesa slotu (C5 až F5) uloží stav v tu chvíli; ťuknutí ho vyvolá na začátku dalšího taktu. Sloty se ukládají se SAVE.</li><li><strong>Undo:</strong> OCT-, 20 kroků zpět; vyvolání slotu i Dice jde vrátit. Načtení projektu zásobník vyprázdní.</li><li>Záznam, který firmware nepozná (z jiného firmwaru nebo poškozený), se ignoruje: Demo trio s novým seedem. Projekt uložený dřívějším firmwarem Berlinanu, ještě bez ratchetu, se načte, jak byl, s ratchetem OFF.</li></ul>
+<p>Když není nic uložené, první skladba je Demo trio v A moll a její seed se vylosuje při prvním Play, takže každé zapnutí je nový vesmír.</p>
+</section>
+<section aria-labelledby="s6">
+<h2 id="s6"><span class="num">6</span>Synchronizace</h2>
+<ul><li><strong>INT</strong> (výchozí): FM-1 je zdrojem hodin (clock master). Na tiku 0 pošle MIDI Start, 24 pulzů clocku na dobu a Stop, vše přes USB. Tempo je projektové (40 až 220, mění se od dalšího taktu).</li><li><strong>EXT:</strong> řídí se MIDI clockem z USB, z jacku TRS nebo z obou (EXT input). Záhlaví ukazuje EXT; stránka Delay a sbíhání smyček používají sledované tempo. Nic neposílá. Sync a vstup se nastavují na stránce Setup při zastavení. Po návratu na INT zůstane naposledy sledované tempo, ukázané i hrané, dokud tempo nezměníte nebo nevyberete šablonu, stejně jako na Macu. - <strong>PLAY v EXT</strong> začne hned, s uloženým tempem, a na pulzy se zamkne, jak přicházejí. - <strong>MIDI Start (FA)</strong> od řídicího zařízení počká na první pulz (nanejvýš jeden clock) a ten pulz je tik 0. - <strong>MIDI Stop</strong> ho zastaví. Když pulzy přestanou chodit bez Stopu (router odpojený, DAW pozastavená), drží poslední tempo a hraje dál; nikdy neskočí a zastaví se jen na MIDI Stop, PLAY nebo konec aranžéra.</li><li>Noty jdou ven jen přes USB: jack TRS na FM-1 je vstup.</li></ul>
+</section>
+<section aria-labelledby="s7">
+<h2 id="s7"><span class="num">7</span>MASTER, fader hustoty</h2>
+<p>FM-1 nevydává zvuk, takže MASTER není hlasitost: je to hustota, 0 až 100 %, fyzický fader na to, kolik not soubor zahraje. Nahoře je 100 % (hustota 1,0, výchozí hodnota Berlinanu), dole 0 %. Během hraní se změna projeví na začátku dalšího taktu.</p>
+<p>Po zapnutí platí uložená hustota: MASTER převezme řízení, až když se jím pohne, takže zapnutí nikdy nepřepíše uložený projekt.</p>
+</section>
+<section aria-labelledby="s8">
+<h2 id="s8"><span class="num">8</span>Berlinan na Macu</h2>
+<p>FM-1 hraje totéž, co Berlinan pro macOS: stejná šablona, stejný seed a stejné akce ve stejných taktech dají stejné noty a stejné CC, událost po události, tik po tiku (testováno proti nezměněnému enginu ve Swiftu, viz <code>tests/equiv/README.md</code>). FM-1 ukazuje seed na stránce Setup; chcete-li běh zopakovat na Macu, použijte stejnou šablonu v A moll, stejný seed a stejné akce ve stejných taktech, s ratchetem FM-1 na 15 % (hodnota Macu, pro kterou Mac nemá ovládání; viz <a href="#s9">Rozdíly</a>).</p>
+<p>Projekty se mezi nimi nepřenášejí: FM-1 začíná ze tří vestavěných šablon Berlinanu a seedu.</p>
+</section>
+<section aria-labelledby="s9">
+<h2 id="s9"><span class="num">9</span>Rozdíly oproti Berlinanu na Macu</h2>
+<p>Noty a CC jsou stejné; tady se chování liší záměrně.</p>
+<ul><li><strong>Úpravy během hraní (Y).</strong> Změny udělané během hraní, které Mac použije až při zastavení, se projeví při dalším Play po jakémkoli zastavení, i po MIDI Stop a konci aranžéra. Mac projekt přestaví jen po stisku vlastního tlačítka stop a po externím zastavení by přehrál starý projekt.</li><li><strong>Ratchet.</strong> FM-1 má ovládání pravděpodobnosti ratchetu při legitimizaci (KNOB 1 na stránce Pattern, 0 až 50 %) a začíná s OFF: žádný tón ratchet nedostane, dokud ho nezvýšíte. Mac pro něj ovládání nemá a hraje vždy 15 % (výchozí hodnota Berlinanu). Noty jsou noty enginu z Macu při nastavené hodnotě (testováno při OFF a 50 %); změna během hraní počká na další Play, jako úpravy výše, nebo na šablonu načtenou během hraní, která nastoupí na svém taktu s nastavenou hodnotou. Šablona si nastavenou hodnotu ponechá; na Macu šablona přijde s 15 %.</li><li><strong>Akce při zastavení (AC).</strong> Mac je potichu zahodí; FM-1 hlásí WHEN PLAYING. PLAY nemá kartu nápovědy.</li><li><strong>Stránka Delay a sbíhání smyček (AF).</strong> Používají ukázané tempo (živé, nebo v EXT sledované), ne tempo projektu; na Macu se o takt zpožďují za změnou tempa.</li><li><strong>Názvy rejstříků (AE).</strong> C3 = 60, jako v Abletonu a Logicu.</li><li><strong>Hodiny EXT (S, T).</strong> Sledování je jednodušší než vyhlazování na Macu: 40 tiků na pulz, nikdy za další pulz, drží se po 500 ms bez pulzu. Načasování není součástí shody not. PLAY v EXT začne hned.</li><li><strong>SAVE (Z).</strong> Během hraní se zapíše při dalším zastavení.</li><li><strong>První seed (X).</strong> Bez uloženého projektu se seed vylosuje při prvním Play z hodin.</li><li><strong>Výchozí projekt (AA).</strong> Demo trio, jako Mac při každém spuštění.</li><li><strong>Přepnutí šablony (R).</strong> Přepnutí šablony během hraní nic neutiší: note-offy starého enginu ještě odejdou. Stop, ztlumení a změna kanálu utiší.</li><li><strong>Nastavení aranžéra (W).</strong> AUTO, forma a ambientní režim jsou oddělené, jak je drží Mac; vypnuté AUTO formu ponechá.</li><li><strong>MASTER (AB, AD).</strong> Celý rozsah dráhy, s koncovými zónami, a uložená hustota při startu.</li><li><strong>Rychlost MIDI (U).</strong> Nanejvýš 16 paketů za milisekundu; zbytek počká na další. Dávka (utišení) může trvat pár ms.</li><li><strong>Čtečka obrazovky.</strong> Platí slova fm1-base: „CC“ se čte jako „controller“.</li><li><strong>V této verzi není:</strong> harmonické režimy (progrese), extrakce melodie a povýšení na lead, MIDI echo, Ableton Link, záznam (take a capture), export <code>.mid</code>, editor mapy CC. Hodnoty stránek, které Mac upravuje jinde (délka smyčky, rejstřík, generátor, CC pásy, fáze aranžéra), se jen ukazují, upravit nejdou.</li></ul>
+</section>
+<section aria-labelledby="s10">
+<h2 id="s10"><span class="num">10</span>Řešení problémů</h2>
+<p><strong>Režim aktualizace:</strong> podržte OCT- a OCT+ současně na pět sekund. Objeví se odpočet; pusťte je dřív, než skončí, a režim se zruší.</p>
+<p><strong>Kalibrace:</strong> když tlačítko nebo knoflík dělá něco jiného, podržte OCT- a OCT+ při zapínání FM-1 a pak stiskněte každé tlačítko a otočte každým knoflíkem, jak vás vyzve.</p>
+<p><strong>Po pádu:</strong> červená obrazovka CRASH, pak restart. Další start ukáže adresu (PC ...); připojte ji, když problém hlásíte.</p>
+<p><strong>Nouzový režim:</strong> když aplikace spadne dvakrát po sobě při startu, FM-1 nastartuje v SAFE MODE: bez aplikace, ale USB funguje, takže můžete firmware nainstalovat znovu. Když selže dvakrát i ten, převezme řízení vlastní režim aktualizace čipu a dosáhne na něj jen záchrana níže.</p>
+<h3 id="z-chrana-fm-1-kter-nenastartuje">Záchrana FM-1, který nenastartuje</h3>
+<p>FM-1 ve vlastním režimu aktualizace čipu má prázdnou obrazovku a nevidí ho ani M-UPGRADE, ani <code>fm1_install.py</code>. Firmware M-VAVE vrátí skript na Macu s nástroji příkazové řádky od Applu (nabídne jejich instalaci) a připojením k internetu (stáhne si nástroje a firmware), s USB kabelem, který máte. Ve složce se zdrojovým kódem:</p>
+<pre tabindex="0" role="region" aria-label="Příkaz: Záchrana FM-1, který nenastartuje"><code>bash base/bsp/tools/fm1_rescue.sh</code></pre>
+<p>Zapojte FM-1 a zapněte ho, až na to skript čeká. Zachytí čip, uloží zálohu paměti do <code>~/fm1-rescue</code> a před zápisem se zeptá: napište <strong>yes</strong>. Zapisuje jen oblast firmwaru, nikdy bootloader ani vlastní nastavení FM-1, a zapsané kontroluje; spustit ho znovu je bezpečné. Potom Berlinan nainstalujte znovu.</p>
+</section>
+<section aria-labelledby="s11">
+<h2 id="s11"><span class="num">11</span>Autoři a licence</h2>
+<p>Berlinan je svobodný software pod licencí GNU General Public License, verze 2 nebo novější; když firmware sdílíte, sdílejte i jeho zdrojový kód. Engine je překladem Berlinanu pro macOS. Platforma (hardwarová vrstva, USB, zavaděč aktualizací, instalátor a úložiště) je <a href="https://github.com/charlesvestal/fm1-base">fm1-base</a> a <a href="https://github.com/hugelton/felucca-bsp">felucca-bsp</a>, z <strong>Feluccy</strong> od Leo Kuroshity, Hügelton Instruments. Softwarová aritmetika double je Berkeley SoftFloat. M-VAVE a FM-1 jsou ochranné známky svých vlastníků; Berlinan nemá s M-VAVE ani s Hügelton Instruments nic společného.</p>
+</section>
+    </article>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Berlinan pro FM-1, autor Jiří Píša. GPL-2.0-or-later. Manuál pro verzi 0.5.1.</span>
+    <span><a href="../">Přehled</a> · <a href="https://github.com/jiripisa/fm1-berlinan">Zdrojový kód na GitHubu</a></span>
+  </div>
+</footer>
+</body>
+</html>

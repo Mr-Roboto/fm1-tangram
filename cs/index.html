@@ -1,0 +1,288 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 Jiří Píša
+     The site's front page in Czech (../index.html's), in Berlinan for macOS's design (../assets/site.css).
+     tools/site_pages.py fills in the version (0.5.1) and the package's file name (berlinan-0.5.1.fwsc). -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Berlinan pro FM-1 — firmware sekvenceru Berlínské školy pro M-VAVE FM-1</title>
+<meta name="description" content="Berlinan, generativní MIDI sekvencer Berlínské školy, jako firmware pro M-VAVE FM-1: krátké melodické smyčky, které se opakují, pomalu se vůči sobě posouvají a mění se jen po malých krocích, a hrajete je z panelu FM-1. Instalace z Chromu nebo Edge. Zdarma a open source.">
+<meta property="og:title" content="Berlinan pro FM-1">
+<meta property="og:description" content="Generativní sekvencer Berlínské školy jako firmware pro M-VAVE FM-1. Zdarma a open source.">
+<meta property="og:image" content="https://jiripisa.github.io/fm1-berlinan/img/screen-perform.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="cs_CZ">
+<meta name="theme-color" content="#131418">
+<link rel="alternate" hreflang="en" href="https://jiripisa.github.io/fm1-berlinan/">
+<link rel="alternate" hreflang="cs" href="https://jiripisa.github.io/fm1-berlinan/cs/">
+<link rel="alternate" hreflang="x-default" href="https://jiripisa.github.io/fm1-berlinan/">
+<link rel="icon" href="../assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/fm1.css">
+</head>
+<body>
+
+<header class="wrap masthead">
+  <a class="brand" href="#top"><img src="../assets/icon.png" alt="" width="32" height="32">Berlinan FM-1</a>
+  <nav aria-label="Stránka">
+    <a href="#how">Jak funguje</a>
+    <a href="manual/">Manuál</a>
+    <a href="#get">Instalace</a>
+    <a href="https://github.com/jiripisa/fm1-berlinan">GitHub</a>
+    <a class="lang" href="../" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <h1>Berlinan <span class="tag">FM-1</span></h1>
+    <p class="lede">
+      Generativní sekvencer Berlínské školy jako firmware pro M-VAVE FM-1.
+      Krátké melodické smyčky se opakují, pomalu se vůči sobě posouvají a mění
+      se jen po malých krocích, a celý soubor hlasů hrajete klávesami, tlačítky
+      a knoflíky FM-1. Notebook není potřeba.
+    </p>
+    <div class="actions">
+      <a class="button" href="install/">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Instalovat z Chromu nebo Edge
+      </a>
+      <a class="button secondary" href="../emu/" hreflang="en">Vyzkoušet v prohlížeči</a>
+      <span class="meta">Verze 0.5.1. Zdarma a <a href="https://github.com/jiripisa/fm1-berlinan">open source</a>. <a href="manual/">Přečtěte si manuál</a>.</span>
+    </div>
+
+    <div class="machine" aria-label="Animovaná ukázka tří smyček různé délky, které se vůči sobě pomalu posouvají"
+         data-aligned="všechny tři se sešly" data-aligned-in="znovu se sejdou za {n} kroků"
+         data-play="Spustit" data-pause="Pozastavit">
+      <div class="lane" data-voice="0"><span class="lane-name">7 kroků</span><div class="cells"></div></div>
+      <div class="lane" data-voice="1"><span class="lane-name">5 kroků</span><div class="cells"></div></div>
+      <div class="lane" data-voice="2"><span class="lane-name">6 kroků</span><div class="cells"></div></div>
+      <div class="machine-foot">
+        <span>Tři smyčky různé délky. Stále stejné tóny, ale nikdy stejná kombinace, dokud se znovu nesejdou.</span>
+        <span>
+          <span class="counter" id="counter" aria-live="off">znovu se sejdou za 210 kroků</span>
+          <button type="button" id="toggle" aria-pressed="false">Pozastavit</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap shot">
+    <figure>
+      <img class="panel" src="../img/fm1-panel.cs.svg" width="1000" height="790"
+           alt="Kresba FM-1 s Berlinanem, na obrazovce stránka Perform šablony Full ensemble. U každého ovládacího prvku je napsáno, co dělá: MASTER je hustota, SELECT hlas, PRESETS šablona, ALGORITHM mód; tlačítka otevírají sedm stránek, SAVE ukládá, OCT- vrací zpět, OCT+ je Dice; klávesy jsou hlasy, stupně 1 až 7 se scénami, šest slotů snapshotů, další změna aranžéra a napětí.">
+      <figcaption>
+        Každý ovládací prvek má jednu práci. Klávesy vybírají a ztlumují hlasy,
+        posouvají harmonii po stupních, přepínají scény a vyvolávají snapshoty;
+        obrazovka ukazuje smyčku každého hlasu a to, co se chystá.
+      </figcaption>
+    </figure>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>Drží se pravidel žánru</h2>
+      <p class="intro">
+        Engine je Berlinanův: stylový manuál sestavený z asi 225 videolekcí
+        jednoho praktika Berlínské školy, převedený do čtyř zákonů, které odvedou
+        většinu práce.
+      </p>
+      <dl class="laws">
+        <div>
+          <dt>Opakování si změnu zaslouží</dt>
+          <dd>Pattern několikrát zazní beze změny, než smí mutovat, a každá mutace si své místo musí znovu vysloužit. Tečky na stránce Perform počítají, kolikrát ještě zazní.</dd>
+        </div>
+        <div>
+          <dt>Jedna stupnice pro všechny</dt>
+          <dd>Všechny hlasy sdílejí jednu stupnici. Bílé klávesy posouvají celý soubor po stupních, takže mění harmonii společně a nikdy neopustí tóninu.</dd>
+        </div>
+        <div>
+          <dt>Fázování, ne náhoda</dt>
+          <dd>Hlasy hrají smyčky různé délky a pomalu se vůči sobě posouvají. LCM na obrazovce říká, za kolik taktů se znovu sejdou.</dd>
+        </div>
+        <div>
+          <dt>Změna na taktu</dt>
+          <dd>Co stisknete, přijde na začátku dalšího taktu; nový pattern hlasu počká na konec jeho smyčky. Stiskněte o chvilku dřív a změna stejně přijde do rytmu.</dd>
+        </div>
+      </dl>
+
+      <div class="same">
+        <h3>Hraje přesně to, co Berlinan pro Mac</h3>
+        <p>Engine je engine Berlinanu pro macOS, přeložený do C. Stejná šablona, stejný seed a stejné akce ve
+        stejných taktech dají stejné noty a stejné CC, událost po události, tik po tiku: testy to ověřují proti
+        nezměněnému enginu ve Swiftu. Stránka Setup ukazuje seed, takže běh z FM-1 jde zopakovat na Macu.</p>
+        <p><a href="https://jiripisa.github.io/berlinan/cs/">Berlinan pro macOS</a>, aplikace, ze které vychází,
+        má navíc harmonické režimy, extrakci melodie, Ableton Link, záznam a export MIDI.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Tři šablony na začátek</h2>
+      <p class="intro">
+        Vyberete je otočením PRESETS; během hraní nastoupí na začátku dalšího
+        taktu. Každá začíná v A moll z nového seedu. ALGORITHM volí mód, stránka
+        Setup základní tón a na stránce Voice přesunete kterýkoli hlas na jiný kanál.
+      </p>
+      <div class="templates">
+        <div>
+          <h3>Demo trio <span class="bpm">90 BPM</span></h3>
+          <p>Dva plucky, které se posouvají 16 proti 15 krokům, nad pulzujícím basem. První skladba po zapnutí.</p>
+          <ul class="flow">
+            <li><span><span class="dot" style="--c: var(--cyan)"></span>Pluck 1</span><span class="ch">ch 1</span></li>
+            <li><span><span class="dot" style="--c: #5F9EC9"></span>Pluck 2</span><span class="ch">ch 2</span></li>
+            <li><span><span class="dot" style="--c: var(--amber)"></span>Bass</span><span class="ch">ch 3</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Full ensemble <span class="bpm">96 BPM</span></h3>
+          <p>Trio rozšířené na šest hlasů: basová melodie, akordový pad, lead a pravidelný kopák (heartbeat).</p>
+          <ul class="flow">
+            <li><span><span class="dot" style="--c: var(--cyan)"></span>Pluck 1</span><span class="ch">ch 1</span></li>
+            <li><span><span class="dot" style="--c: #5F9EC9"></span>Pluck 2</span><span class="ch">ch 2</span></li>
+            <li><span><span class="dot" style="--c: var(--amber)"></span>Bass</span><span class="ch">ch 3</span></li>
+            <li><span><span class="dot" style="--c: var(--violet)"></span>Pad</span><span class="ch">ch 4</span></li>
+            <li><span><span class="dot" style="--c: #D9DDE3"></span>Lead</span><span class="ch">ch 5</span></li>
+            <li><span><span class="dot" style="--c: #C96F6F"></span>Heartbeat</span><span class="ch">ch 10</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Ambient drift <span class="bpm">72 BPM</span></h3>
+          <p>Postavený na drženém drónu, zhruba jedna změna za minutu, se zapnutým aranžérem a dvěma CC scénami, které pomalu zavírají a otevírají filtry syntezátorů.</p>
+          <ul class="flow">
+            <li><span><span class="dot" style="--c: #7FA6C9"></span>Drone</span><span class="ch">ch 1</span></li>
+            <li><span><span class="dot" style="--c: var(--cyan)"></span>Pluck 1</span><span class="ch">ch 2</span></li>
+            <li><span><span class="dot" style="--c: #5F9EC9"></span>Pluck 2</span><span class="ch">ch 3</span></li>
+            <li><span><span class="dot" style="--c: var(--violet)"></span>Pad</span><span class="ch">ch 4</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap routing">
+      <div>
+        <h2>Hraje na vaše syntezátory</h2>
+        <p class="intro">
+          FM-1 sám nevydává žádný zvuk. Připojte ho přes USB k MIDI routeru
+          (krabičce s USB MIDI hostem, nebo k počítači, který MIDI předá dál);
+          ohlásí se jako <b>FM-Berlinan</b>. Každý hlas jde na vlastním MIDI kanálu,
+          takže každý syntezátor hraje svůj part.
+        </p>
+        <div class="sync">
+          <p><b>INT</b> FM-1 je zdrojem hodin (clock master): MIDI Start, clock a Stop přes USB.</p>
+          <p><b>EXT</b> Řídí se MIDI clockem z USB nebo z jacku TRS, a když clock vypadne, drží tempo.</p>
+          <p><b>SAVE</b> Projekt a šest slotů snapshotů přežijí vypnutí.</p>
+        </div>
+      </div>
+      <ul class="screens" aria-label="Obrazovka FM-1 s Berlinanem">
+        <li><figure><img src="../img/screen-perform.png" width="240" height="240" alt="Stránka Perform: šest řádků hlasů s kanály, smyčkami a zbývajícími opakováními, horizont hlásí, že Pluck 2 může zhruba za 2 takty mutovat, a LCM 1680 taktů"><figcaption>Perform: smyčka každého hlasu</figcaption></figure></li>
+        <li><figure><img src="../img/screen-pattern.png" width="240" height="240" alt="Stránka Pattern: pattern padu v krocích, takt na řádek, knoflík ratchetu na OFF"><figcaption>Pattern: kroky a ratchet</figcaption></figure></li>
+        <li><figure><img src="../img/screen-arranger.png" width="240" height="240" alt="Stránka Arranger: sedm fází BUILD, BED, VAR, B-PART, PAYOFF, SUBTR a END"><figcaption>Arranger: fáze skladby</figcaption></figure></li>
+        <li><figure><img src="../img/screen-delay.png" width="240" height="240" alt="Delay cheat sheet: dělení noty a jeho čas v milisekundách pro každý hlas při 96 BPM"><figcaption>Delay: časy pro vaše efekty</figcaption></figure></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Stavěný pro živé hraní</h2>
+      <p class="intro">
+        Stisknete PLAY a soubor hned začne hrát. Odtud je každý tah jedno
+        stisknutí a přijde na začátku dalšího taktu.
+      </p>
+      <ul class="features">
+        <li><b>Klávesy hlasů</b>Ťuknutí ztlumí, podržení vybere. Hlas, který aranžér drží zpátky, přivedete ťuknutím.</li>
+        <li><b>Klávesy stupňů</b>Bílé klávesy přesunou celý soubor na stupně 1 až 7.</li>
+        <li><b>B-díl</b>REC: kontrastní druhý díl jedním stiskem. S podrženou klávesou hlasu: prázdný cyklus toho hlasu.</li>
+        <li><b>Autopilot aranžéra</b>Staví skladbu hlas po hlasu, obměňuje ji, vrací téma a ukončí ji. <code>&gt;&gt;</code> ho posune dál.</li>
+        <li><b>Fader hustoty</b>MASTER soubor proředí nebo zahustí, od 0 do 100 %.</li>
+        <li><b>Scény a napětí</b>Černé klávesy během osmi taktů plynule přesunou ovladače syntezátorů ke scénám šablony; G5 přidá chvilku napětí.</li>
+        <li><b>Snapshoty, Dice a undo</b>Šest slotů vyvolaných na taktu, nový seed na OCT+, 20 kroků zpět na OCT-.</li>
+        <li><b>Nápověda na každém tlačítku</b>Podržte tlačítko na vteřinu a karta řekne, co dělá. Pusťte ho a nic se nestane.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="get" id="get">
+    <div class="wrap">
+      <h2>Získejte Berlinan pro FM-1</h2>
+      <div class="get-grid">
+        <div>
+          <h3>Instalace z prohlížeče</h3>
+          <p>
+            Otevřete instalační stránku v Chromu nebo Edgi, připojte FM-1 přes USB
+            a stiskněte Instalovat; když se prohlížeč zeptá, povolte MIDI. Stránka
+            firmware před zápisem zkontroluje a FM-1 po restartu ohlásí svou verzi.
+            Do počítače se nic neinstaluje.
+          </p>
+          <div class="actions" style="margin-top: 1.25rem">
+            <a class="button" href="install/">Instalovat verzi 0.5.1</a>
+          </div>
+          <p class="small" style="margin-top: 1.25rem">Instalace firmwaru je na vlastní riziko. <a href="manual/#s10">Když FM-1 nenastartuje</a>, Mac umí vrátit původní firmware.</p>
+        </div>
+        <div>
+          <h3>Zpět k firmwaru M-VAVE</h3>
+          <p>
+            Stejná stránka vrátí vlastní firmware M-VAVE (FM-1 V15): soubor si
+            stáhněte od M-VAVE, vyberte ho na stránce a stiskněte tlačítko. Stránka
+            před zápisem ověří, že je opravdu od M-VAVE. Totéž umí i updater od
+            M-VAVE, M-UPGRADE.
+          </p>
+          <p><a href="install/">Zpět k původnímu firmwaru</a> · <a href="https://www.m-vave.com/download">m-vave.com/download</a></p>
+        </div>
+      </div>
+      <div class="get-grid">
+        <div>
+          <h3>Z příkazové řádky</h3>
+          <p><a href="../firmware/berlinan-0.5.1.fwsc">Stáhněte berlinan-0.5.1.fwsc</a> a pak ho nainstalujte instalátorem fm1-base ze zdrojového kódu:</p>
+<pre><code>pip3 install mido python-rtmidi
+python3 base/tools/fm1_install.py berlinan-0.5.1.fwsc</code></pre>
+        </div>
+        <div>
+          <h3>Sestavení ze zdrojového kódu</h3>
+          <p>
+            Svobodný software pod licencí GPL 2.0 nebo novější. Sestavení potřebuje
+            Docker (nebo podman) a toolchain od JieLi; podrobnosti jsou v
+            <a href="https://github.com/jiripisa/fm1-berlinan/blob/main/BUILDING.md">BUILDING.md</a> (anglicky).
+          </p>
+<pre><code>git clone --recursive https://github.com/jiripisa/fm1-berlinan.git
+cd fm1-berlinan
+./build.sh</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Autoři</h2>
+      <ul class="credits">
+        <li><b>Berlinan</b> pro macOS i pro FM-1, autor Jiří Píša, GPL-2.0-or-later.</li>
+        <li><b><a href="https://github.com/charlesvestal/fm1-base">fm1-base</a></b> od Charlese Vestala (MPL-2.0): platforma, od hardwarové vrstvy, USB a úložiště po zavaděč aktualizací, tento instalátor a emulátor.</li>
+        <li><b><a href="https://github.com/hugelton/felucca-bsp">felucca-bsp</a></b> a <b>Felucca</b> od Leo Kuroshity (@kurogedelic), <a href="https://hugelton.com">Hügelton Instruments</a>: firmware, ze kterého fm1-base vyrostl.</li>
+        <li><b>Berkeley SoftFloat</b> od Johna R. Hausera (BSD): aritmetika enginu ve dvojité přesnosti, bit po bitu stejná jako na Macu. Sinus je z <b>msun</b> FreeBSD (fdlibm od Sun Microsystems).</li>
+        <li>Písma na obrazovce: <b>Barlow</b> (SIL OFL 1.1).</li>
+      </ul>
+      <p class="small" style="margin-top: 1.5rem">M-VAVE a FM-1 jsou ochranné známky svých vlastníků. Berlinan nemá s M-VAVE ani s Hügelton Instruments nic společného.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Berlinan pro FM-1, autor Jiří Píša. GPL-2.0-or-later.</span>
+    <span><a href="manual/">Manuál</a> · <a href="../emu/" hreflang="en">Emulátor</a> · <a href="https://github.com/jiripisa/fm1-berlinan">Zdrojový kód na GitHubu</a> · <a href="https://jiripisa.github.io/berlinan/cs/">Berlinan pro macOS</a></span>
+  </div>
+</footer>
+
+<script src="../assets/phasing.js"></script>
+</body>
+</html>
