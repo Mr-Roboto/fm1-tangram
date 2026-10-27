@@ -48,7 +48,7 @@ same script (`fm1_install.py V15.fwsc`).
 
 ## 2. Getting started
 
-1. **Connect.** Plug the FM-1 into the router with USB. The router sees a MIDI device, "Berlinan FM-1". Route its
+1. **Connect.** Plug the FM-1 into the router with USB. The router sees a MIDI device, "FM-Berlinan". Route its
    output to your synthesizers: each voice has its own channel (the Perform page shows them; the Voice page changes
    one).
 2. **Play.** Press PLAY. The first piece is the Demo trio (Pluck 1, Bass, Pad) in A natural minor, from bar 1, with a

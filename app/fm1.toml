@@ -2,7 +2,7 @@
 name = "BERLINAN"              # the build's files: berlinan.fwsc, berlinan-X.Y.fwsc
 id_prefix = "FM-1_8"           # package identity: dev FM-1_800, releases FM-1_8XXYYZZ
 usb_manufacturer = "Berlinan"
-usb_product = "Berlinan FM-1"
+usb_product = "FM-Berlinan"
 ble = false                    # MIDI goes out over USB only
 usb_audio_in = false           # the FM-1 makes no sound
 usb_audio_out = false
