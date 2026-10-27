@@ -46,7 +46,7 @@
  *                            against Swift's (60000.0 / bpm * beats).rounded() in f64, every tempo 40-220 and each
  *                            division: how many differ
  * The speakdump: every page (the Voice, Pattern and CC pages with each voice selected), knob value, help card and
- * message, as ui.c's speak_dump prints them.
+ * message, as screen.c's speak_dump prints them.
  * Its commands:
  *   selfrender TEMPLATE BARS (stopped) the template on its own seed, rendered by the app's engine for BARS bars in
  *                            windows of 240 ticks, from tick 0 to the end or the arranger's ending; selfnotes its

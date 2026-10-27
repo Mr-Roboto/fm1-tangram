@@ -87,7 +87,7 @@ int undo_pop(void);                      /* the last undo point recalled at the 
                                           * undo; UNDO_FULL the engine's queue full (the point kept) */
 int undo_depth(void);                    /* the undo points held (UIState.canUndo: more than none) */
 
-/* the panel and the screen (ui.c) */
+/* the panel (ui.c) and the screen (screen.c) */
 void ui_init(void);
 void ui_frame(void);
 void ui_input_only(void);

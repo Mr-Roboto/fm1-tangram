@@ -4,7 +4,7 @@
  * fm1-base's contract (app.h) and Berlinan's parts. The FM-1 makes no sound: the transport (runtime.c) sends the
  * engine's MIDI over USB, clocked by the 1 kHz tick (app_tick) and rendered ahead in the main loop (app_loop).
  * The engine (engine/) is compiled apart, each file its own unit (fm1.toml o2); the transport (runtime.c), the
- * project (project.c) and the panel and the pages (ui.c) are added to this unit. */
+ * project (project.c), the panel (ui.c) and the screen (screen.c) are added to this unit. */
 #include "live.h"
 #include "project.h"
 
@@ -14,6 +14,7 @@
 #include "runtime.c"
 #include "project.c"
 #include "ui.c"
+#include "screen.c"
 
 /* ---- the contract */
 void app_init(void)                      /* the transport, then the saved project (or the defaults) on it */
