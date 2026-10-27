@@ -230,7 +230,8 @@ power-on is a new universe.
   Stop over USB. The tempo is the project's (40 to 220, changed from the next bar).
 - **EXT:** it follows MIDI clock from USB, the TRS jack or both (EXT input). The header shows EXT; the Delay page and
   the convergence use the followed tempo. It sends nothing. Sync and the input are set on the Setup page while
-  stopped.
+  stopped. Back on INT it keeps the tempo followed last, shown and played, until you change the tempo or choose a
+  template, as the Mac does.
   - **PLAY in EXT** starts at once, at the tempo in store, and locks to the pulses as they arrive.
   - **MIDI Start (FA)** from the master waits for its first pulse (at most one clock) and that pulse is tick 0.
   - **MIDI Stop** stops it. If the pulses stop without a Stop (the router unplugged, the DAW paused), it holds the last

@@ -149,7 +149,8 @@ static uint16_t vid_color(int vid) { return vid < BL_NVIDS ? VID_COLOR[vid] : K_
 #define F100 F64(0x4059000000000000)    /* 100.0 */
 #define STEP_TICKS (BL_PPQN / 4)         /* a 16th: the Mac's steps (VoiceLaneView.loopSteps) */
 
-static int32_t bpm_now(void) { return rt_playing() ? rt_bpm() : proj.bpm; }   /* liveBPM ?? project.bpm */
+static int32_t bpm_now(void) { return rt_bpm(); }   /* liveBPM ?? project.bpm: the transport's, stopped too (EXT's
+                                                     * followed tempo, kept by Sync INT, as Transport.currentBPM) */
 
 static void key_now(bl_key_t *k)         /* the key sounding (UIState.liveKey ?? project.key) */
 {

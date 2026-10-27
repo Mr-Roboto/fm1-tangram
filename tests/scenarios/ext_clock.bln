@@ -397,6 +397,14 @@ expect playing 0
 wait 1
 expect sounding 0
 expect clocks_out 0
+# stopped, the tempo shown is the transport's, as on the Mac (UIState's liveBPM, Transport.currentBPM): the 125
+# followed, not the project's 96, and still after Sync INT, which keeps it (Transport.setSyncMode), as PLAY runs it
+expect bpm_shown 125
+proj sync int
+expect bpm 125
+expect bpm_shown 125
+expect tick_rate 2000
+proj sync ext
 # a SAVE made while playing in EXT is written after MIDI Stop, once what the stop sends has gone out (a flash write
 # stops everything for a moment: the offs would wait behind it): 128 notes sounding, their offs 8 ms on the wire
 tap PLAY

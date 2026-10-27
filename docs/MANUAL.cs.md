@@ -229,6 +229,8 @@ je nový vesmír.
   vše přes USB. Tempo je projektové (40 až 220, mění se od dalšího taktu).
 - **EXT:** řídí se MIDI clockem z USB, z jacku TRS nebo z obou (EXT input). Záhlaví ukazuje EXT; stránka Delay
   a sbíhání smyček používají sledované tempo. Nic neposílá. Sync a vstup se nastavují na stránce Setup při zastavení.
+  Po návratu na INT zůstane naposledy sledované tempo, ukázané i hrané, dokud tempo nezměníte nebo nevyberete
+  šablonu, stejně jako na Macu.
   - **PLAY v EXT** začne hned, s uloženým tempem, a na pulzy se zamkne, jak přicházejí.
   - **MIDI Start (FA)** od řídicího zařízení počká na první pulz (nanejvýš jeden clock) a ten pulz je tik 0.
   - **MIDI Stop** ho zastaví. Když pulzy přestanou chodit bez Stopu (router odpojený, DAW pozastavená), drží poslední

@@ -50,6 +50,7 @@
  *                            lcm_secsP: the same for a period of P ticks (-1: Convergence.period's nil)
  *   note_check deg_label_max the note names (C3 = 60) and registers, shown and said, against a table: the misses;
  *                            the Pattern page's highest degree label for the selected voice (in the key sounding)
+ *   bpm_shown                the tempo the pages show and say (UIState's liveBPM ?? project.bpm)
  *   delay_msV delay_check    the Delay page's time for the template's voice V (DelayHint, ms); DelayHint's integers
  *                            against Swift's (60000.0 / bpm * beats).rounded() in f64, every tempo 40-220 and each
  *                            division: how many differ
@@ -686,7 +687,9 @@ static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mi
         lcm_shown(what[4] == 't' ? (what[10] ? strtoll(what + 10, 0, 10) : convergence())
                                  : (what[8] ? strtoll(what + 8, 0, 10) : convergence()), &t, &sec);
         *got = what[4] == 't' ? t : sec;
-    } else if (indexed(what, "delay_ms", BL_MAX_VOICES, &v))   /* the Delay page's time for the template's voice V */
+    } else if (!strcmp(what, "bpm_shown"))     /* the tempo the pages show and say */
+        *got = bpm_now();
+    else if (indexed(what, "delay_ms", BL_MAX_VOICES, &v))   /* the Delay page's time for the template's voice V */
         *got = v < tpl_now()->nvoices ? (int)delay_ms(delay_div(tpl_now()->voice[v].role), bpm_now()) : -1;
     else if (!strcmp(what, "delay_check")) {   /* DelayHint in integers against Swift's sums in binary64: the misses */
         int b, d;
