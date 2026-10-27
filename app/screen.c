@@ -626,7 +626,7 @@ static void disc16(int32_t cx, int32_t cy, int32_t r, uint16_t c)   /* centre an
  * and a round handle */
 #define RING_A0 1536                     /* 7:30, in 4096ths of a turn from 3:00 */
 #define RING_SWEEP 3072
-static void ring(int32_t cx, int32_t cy, int32_t r, int32_t v, uint16_t track, uint16_t fill, uint16_t bg)
+static void knob_ring(int32_t cx, int32_t cy, int32_t r, int32_t v, uint16_t track, uint16_t fill, uint16_t bg)
 {
     int32_t ro = r * 16, ri = ro - 54, rm = ro - 27, x, y, c16x = cx * 16 + 8, c16y = cy * 16 + 8, lim;
     v = v < 0 ? 0 : v > 1024 ? 1024 : v;
@@ -1436,7 +1436,7 @@ static void draw_knobs(void)
             for (j = 0; j < n; j++)
                 cv_round(cx - w0 / 2 + j * (pw + gap), 33, pw, 8, 2, j == c[i].v - c[i].lo ? K_ACC : K_LINE);
         } else {
-            ring(cx, 37, 12, c[i].v < c[i].lo ? 0 : (c[i].v - c[i].lo) * 1024 / (c[i].hi - c[i].lo), K_LINE, K_ACC, bg);
+            knob_ring(cx, 37, 12, c[i].v < c[i].lo ? 0 : (c[i].v - c[i].lo) * 1024 / (c[i].hi - c[i].lo), K_LINE, K_ACC, bg);
         }
         f = fit(&FONT_B, c[i].val, 56);
         text_c(cx, f == &FONT_T ? 52 : 50, f, c[i].val, hot ? K_ACC : K_TEXT);
