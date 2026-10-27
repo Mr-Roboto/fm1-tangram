@@ -40,6 +40,13 @@
  *   key_ledK btn_ledB        key K's light as last set: 0 off, 1 dim, 2 lit; button B's (a B_ number: 0 FX ... 13
  *                            OCT+), 0 or 1
  *   tension_voice            the voice the first pending tension lands on, as its key (-1 none)
+ *   lanes lcm_bars lcm_secs  the pages' voice lanes (the running engine's voices; stopped, the transport's preview);
+ *                            their convergence in whole bars and its seconds at the tempo shown (-1 for both: INF)
+ *   delay_msV delay_check    the Delay page's time for the template's voice V (DelayHint, ms); DelayHint's integers
+ *                            against Swift's (60000.0 / bpm * beats).rounded() in f64, every tempo 40-220 and each
+ *                            division: how many differ
+ * The speakdump: every page (the Voice, Pattern and CC pages with each voice selected), knob value, help card and
+ * message, as ui.c's speak_dump prints them.
  * Its commands:
  *   selfrender TEMPLATE BARS (stopped) the template on its own seed, rendered by the app's engine for BARS bars in
  *                            windows of 240 ticks, from tick 0 to the end or the arranger's ending; selfnotes its
@@ -599,7 +606,26 @@ static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mi
         *got = ui.led_k >> v & 1u ? 2 : (int)(ui.dim_k >> v & 1u);
     else if (indexed(what, "btn_led", NB, &v))
         *got = (int)(ui.led_b >> v & 1u);
-    else if (!strcmp(what, "tension_voice")) {   /* the first pending tension's voice, as its key; -1 none */
+    else if (!strcmp(what, "lanes"))
+        *got = (lanes(), nlanes);
+    else if (!strcmp(what, "lcm_bars")) {      /* the convergence in whole bars, -1 none (INF) */
+        int64_t p = (lanes(), convergence());
+        *got = p < 0 ? -1 : (int)(p / BL_TICKS_PER_BAR);
+    } else if (!strcmp(what, "lcm_secs")) {    /* its seconds at the tempo shown, rounded */
+        int64_t p = (lanes(), convergence()), d = 16 * (int64_t)bpm_now();
+        *got = p < 0 ? -1 : (int)(p / d + (2 * (p % d) >= d));
+    } else if (indexed(what, "delay_ms", BL_MAX_VOICES, &v))   /* the Delay page's time for the template's voice V */
+        *got = v < tpl_now()->nvoices ? (int)delay_ms(delay_div(tpl_now()->voice[v].role), bpm_now()) : -1;
+    else if (!strcmp(what, "delay_check")) {   /* DelayHint in integers against Swift's sums in binary64: the misses */
+        int b, d;
+        *got = 0;
+        for (b = 40; b <= 220; b++)
+            for (d = 0; d < 3; d++) {
+                static const uint64_t BEATS[3] = {0x3FE8000000000000u, 0x3FE0000000000000u, 0x3FF0000000000000u};
+                f64 ms = f64_mul(f64_div(F64(0x40ED4C0000000000), f64_from_i64(b)), (f64){BEATS[d]});   /* 60000.0 */
+                *got += f64_to_i64(f64_round(ms)) != (int64_t)delay_ms(d, b);
+            }
+    } else if (!strcmp(what, "tension_voice")) {   /* the first pending tension's voice, as its key; -1 none */
         int i, k;
         *got = -1;
         for (i = 0; ui.st_ok && i < ui_st.nup && *got < 0; i++)
@@ -732,6 +758,8 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         return 0;
     return 1;
 }
+
+void app_speak_dump(void) { speak_dump(); }
 
 void app_host_reboot(void)               /* what RAM holds is gone: the project, the slots, the undo stack */
 {

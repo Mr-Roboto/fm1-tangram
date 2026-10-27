@@ -53,6 +53,7 @@ int proj_load(void);                     /* the project and the slots; 0 = loade
 int proj_save(void);                     /* the project and the slots: 0 = saved and verified; playing, 1: at the
                                           * next stop (a flash write stops everything, the MIDI clock too); -1 */
 int proj_save_pending(void);             /* a SAVE waits for the stop */
+int proj_seeded(void);                   /* the seed is the project's own (the defaults': 0 until the first Play) */
 void proj_to_engine(bl_project_t *out);  /* the app project as Berlinan's Project */
 void proj_apply(void);                   /* stopped: the project to the transport (the Mac's rebuildTransport) */
 void proj_ready(void);                   /* before a Play: the defaults' seed drawn, the project changed meanwhile
@@ -110,3 +111,5 @@ int app_expect(const char *what, int *got);
 int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d);   /* 1 = handled */
 #define APP_HOST_REBOOT
 void app_host_reboot(void);              /* the project forgotten, as RAM is at a restart */
+#define APP_HOST_SPEAKDUMP
+void app_speak_dump(void);               /* every page, value and message as a screen reader gets them */

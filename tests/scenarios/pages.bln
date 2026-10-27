@@ -1,0 +1,151 @@
+# The seven pages (spec, Controls: Pages), drawn in AMB-1's look: each page's button, a screenshot of each while
+# stopped (the transport's preview: the template's patterns, the project's values) and while the Full ensemble
+# plays. The values the pages work out, checked:
+#   lanes         the Perform page's voice lanes (the running engine's voices; stopped, the preview's)
+#   lcm_bars      the convergence (Convergence.period of every lane's loop length) in bars, -1 when it overflows (the
+#   lcm_secs      screen's "INF"); and its seconds at the tempo shown, rounded (the Mac's "~ N s")
+#   delay_msV     the Delay page's time for the template's voice V: DelayHint (dotted 8th on the plucks and the
+#                 heartbeat, 8th on the bass and the drone, quarter on the pad and the lead), 60000 / bpm x beats,
+#                 rounded to the nearest, ties away
+#   delay_check   the integer DelayHint against Swift's (60000.0 / bpm * beats).rounded() in binary64 (f64.h), every
+#                 tempo 40-220 and each division: the mismatches
+# The Full ensemble at 96 BPM: 6 voices, loops of 16 steps, 15 steps, 16 bars, 7 bars, 2 bars and 1 bar, which meet
+# again after 1680 bars (4200 s); the delays 469 ms (45000 / 96 = 468.75), 313 ms (312.5, a tie: away) and 625 ms.
+# (each shot waits for the header's message to go: 1.3 s)
+# ---- the defaults (nothing saved): the Demo trio, its seed still to be drawn at the first Play
+wait 200
+tap GLO
+wait 100
+expect seeded 0
+shot setup_defaults.png
+tap HOME
+wait 100
+expect lanes 3
+shot perform_defaults.png
+proj template full 0x5EED1234
+wait 200
+expect delay_check 0
+# ---- stopped: the preview
+tap HOME
+wait 100
+expect view 0
+expect lanes 6
+expect lcm_bars 1680
+expect lcm_secs 4200
+shot perform_stopped.png
+tap ENV
+wait 100
+expect view 1
+shot voice_stopped.png
+tap ARP
+wait 100
+expect view 2
+shot pattern_stopped.png
+tap LFO
+wait 100
+expect view 3
+shot cc_stopped.png
+tap SEQ
+wait 100
+expect view 4
+shot arranger_stopped.png
+tap FX
+wait 100
+expect view 5
+expect delay_ms0 469
+expect delay_ms1 469
+expect delay_ms2 313
+expect delay_ms3 625
+expect delay_ms4 625
+expect delay_ms5 469
+shot delay_stopped.png
+tap GLO
+wait 100
+expect view 6
+shot setup_stopped.png
+# ---- playing: the running engine
+tap PLAY
+wait 4300
+tap HOME
+wait 100
+expect view 0
+expect lanes 6
+expect lcm_bars 1680
+shot perform_playing.png
+# the selected voice: the Pad (SELECT steps over the template's voices: Pluck 1, Pluck 2, Bass, Pad)
+turn SELECT 3
+wait 1400
+tap ENV
+wait 100
+expect voice_sel 3
+expect view 1
+shot voice_playing.png
+tap ARP
+wait 100
+expect view 2
+shot pattern_playing.png
+tap LFO
+wait 100
+expect view 3
+shot cc_playing.png
+tap SEQ
+wait 100
+expect view 4
+shot arranger_playing.png
+tap FX
+wait 100
+expect view 5
+expect delay_ms2 313
+shot delay_playing.png
+tap GLO
+wait 100
+expect view 6
+shot setup_playing.png
+# ---- the tempo moves the delays: 120 BPM (HOME + SELECT), from the next bar
+press HOME
+spin SELECT 24
+release HOME
+wait 3000
+tap FX
+wait 100
+expect bpm 120
+expect delay_ms0 375
+expect delay_ms2 250
+expect delay_ms3 500
+expect lcm_secs 3360
+# ---- a template switch while playing: the horizon says it takes over at the next bar
+tap HOME
+turn PRESET 1
+wait 100
+expect tpl 2
+shot perform_switch.png
+# ---- the arranger running: Ambient drift (its arrangement on), the Perform page's horizon and the Arranger page
+tap PLAY
+proj template ambient 0x5EED1234
+tap PLAY
+wait 6000
+tap HOME
+wait 100
+shot perform_ambient.png
+tap SEQ
+wait 100
+shot arranger_ambient.png
+tap LFO
+wait 100
+shot cc_ambient.png
+# ---- a voice muted and one locked: the lanes say so (the Drone plays from the start; Pluck 2 still WAITS)
+tapkey 5
+key 1 down
+tap SEL
+key 1 up
+tap HOME
+wait 1400
+expect muted5 1
+expect locked1 1
+expect active1 0
+shot perform_marks.png
+# ---- a help card in the page's place
+press FX
+wait 1100
+shot help_fx.png
+release FX

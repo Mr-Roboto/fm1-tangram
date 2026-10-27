@@ -12,6 +12,9 @@ void rt_stop(void);                      /* Transport.stop */
 int rt_playing(void);
 bl_tick_t rt_tick(void);                 /* the tick sounding now (0 before tick 0) */
 bl_tick_t rt_head(void);                 /* the render head */
+bl_tick_t rt_play_tick(void);            /* the tick sounding now, in the running engine's ticks (the panel's playheads) */
+int rt_loading(void);                    /* playing: a loaded project waits for the head's next bar line */
+int rt_channel(int vid);                 /* the transport's channel of voice vid (a BL_VID_), 0-15; -1 none */
 const bl_live_t *rt_engine(void);
 void rt_capture(bl_state_t *out);        /* Transport.captureState */
 int rt_muted(int vid);

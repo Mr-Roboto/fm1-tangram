@@ -553,6 +553,21 @@ bl_tick_t rt_tick(void)                  /* the tick sounding now (0 before tick
 }
 
 bl_tick_t rt_head(void) { return rt.head; }
+
+bl_tick_t rt_play_tick(void)             /* the tick sounding now in the running engine's ticks (a template that took
+                                          * over at a bar line: from its origin), 0 before them */
+{
+    bl_tick_t t = rt_tick() - rt.origin;
+    return t < 0 ? 0 : t;
+}
+
+int rt_loading(void) { return rt.playing && rt.has_next; }   /* pendingProject: one waits for its bar line */
+
+int rt_channel(int vid)                  /* channelMap: voice vid's channel 0-15, -1 none */
+{
+    return vid >= 0 && vid < BL_NVIDS && rt.chan[vid] != RT_NONE ? rt.chan[vid] : -1;
+}
+
 const bl_live_t *rt_engine(void) { return &rt_eng; }
 
 /* Transport.captureState: the running engine's state at the render head (stopped, as its last Play left it); before

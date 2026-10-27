@@ -1,0 +1,99 @@
+# The screen reader (fm1-reader, announce.c), AMB-1's way: a reader listens, and each page, knob value, help card and
+# button is said once, in the screen's own words (words.tsv says the short ones in full). A page is said when it
+# settles: its name and its four values; WHERE (or a reader that has just started) the whole screen: the page, the
+# header, then what the page shows.
+proj template full 0x5EED1234
+wait 200
+listen
+wait 100
+said Perform page: Tempo 96, Auto OFF, Form NONE, Ambient OFF. Full ensemble, A NATURAL MINOR, tempo 96, stopped
+# (what the page shows follows: the lanes, the horizon, the convergence)
+listen
+where
+said Pluck 1, channel 1, 16 steps, 4 plays left; Pluck 2, channel 2, 15 steps
+where
+said Horizon: Pluck 1 may mutate, about 4 bars
+where
+said Convergence 1680 bars, about 4200 seconds. Tension 2. Degree 1
+# a page settles before it is said
+tap ENV
+wait 300
+said Voice page: Channel 1, Loop 16 STEPS, Register G3 to G5, Generator SEED PROCEDURE
+# a knob: its name and value, once it settles
+spin K1 2
+wait 300
+said Channel 3
+spin K1 -2
+wait 300
+said Channel 1
+# a knob whose value the Mac does not change: shown, nothing said
+spin K2 1
+wait 300
+unsaid Loop
+tap FX
+wait 300
+said Delay page: Feedback 50%, Wet 50%, Ping-pong ON, Filtered ON
+where
+said Pluck 1 dotted 8th 469 ms, Pluck 2 dotted 8th 469 ms, Bass 8th 313 ms, Pad quarter 625 ms, Lead quarter 625 ms, Heartbeat dotted 8th 469 ms, at 96 BPM
+tap GLO
+wait 300
+said Setup page: Root A, Sync INT, EXT input USB + TRS, Lights ON
+where
+said Seed 0000 0000 5EED 1234
+spin K4 1
+wait 300
+said Lights KEYS
+spin K4 -1
+wait 300
+tap SEQ
+wait 300
+said Arranger page: Phase NONE, Length NONE, Bed drop OFF, Reprise OFF
+tap ARP
+wait 300
+said Pattern page: Voice PLUCK 1, Steps 16, Generation 1, Plays left 4
+tap LFO
+wait 300
+said CC page: Target FILTER CC 74, Cycle 16 BARS, Depth 30%, Scene NONE
+tap HOME
+wait 300
+said Perform page
+# the panel's messages, said once: PLAY, a mute, a degree
+tap PLAY
+said PLAYING FULL ENSEMBLE
+wait 300
+unsaid STOPPED
+tapkey 2
+said BASS MUTED
+tapkey 2
+said BASS ON
+tapkey w4
+said DEGREE 1 NEXT BAR
+# HOME + SELECT: the tempo (the Perform page's first value: said as it settles; elsewhere at once, as a message)
+press HOME
+spin SELECT 2
+release HOME
+wait 300
+said Tempo 98
+tap ENV
+wait 300
+press HOME
+spin SELECT -1
+release HOME
+said TEMPO 97
+tap HOME
+wait 300
+# a help card: its button, then its lines
+press FX
+wait 1100
+said FX button. DELAY TIMES. FOR YOUR EFFECTS AT THE TEMPO
+release FX
+wait 100
+# WHERE while playing: the header says so (the tempo sounding: the new one from the next bar)
+wait 2600
+where
+said Perform page: Tempo 97, Auto OFF, Form NONE, Ambient OFF. Full ensemble, A NATURAL MINOR, tempo 97, playing
+tap PLAY
+said STOPPED
+wait 300
+# everything the reader can be told, for the audit (fm1-reader tools/audit.mjs)
+speakdump

@@ -203,6 +203,7 @@ static void draw_seed(void)              /* the defaults' seed, now (the Mac dra
 }
 
 int proj_save_pending(void) { return proj_saving; }
+int proj_seeded(void) { return !proj_unseeded; }
 
 int proj_save(void)                      /* the project; the slots stored since (the others are on the flash) */
 {

@@ -678,6 +678,8 @@ bl_tick_t bl_live_stop_tick(const bl_live_t *e) { return e->stop; }
 
 int32_t bl_live_offset(const bl_live_t *e, int32_t bar) { return bl_sched_offset(&e->sched, bar); }
 
+const bl_voice_t *bl_live_voice(const bl_live_t *e, int i) { return &e->st[i].voice; }
+
 /* ------------------------------------------------------------ snapshot --- */
 const char *const BL_UP_RAW[BL_NUPS] = {"key", "recall", "density", "bPart", "voiceActive", "tension", "arranger",
                                         "advance", "scene"};

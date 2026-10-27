@@ -187,6 +187,9 @@ typedef struct {
 } bl_status_t;
 
 void bl_live_status(const bl_live_t *e, bl_status_t *out);
+/* Snapshot.VoiceSnapshot.pattern: voice i's (project order, 0 <= i < nvoices), its pattern inside, as the engine
+ * holds it now (the panel's lanes draw it; valid until the engine renders or takes an action) */
+const bl_voice_t *bl_live_voice(const bl_live_t *e, int i);
 
 /* the canonical state text of tests/equiv/README.md ("The state hash"), one call of line per line (without its
  * "\n"), and its FNV-1a 64 (each line with its "\n") */

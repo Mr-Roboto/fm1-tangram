@@ -3,3 +3,28 @@
 # FM-1 sends. Change a line and a new file is made: keep the old ones (devices in the wild point at them).
 # url: https://example.invalid/words/
 BERLINAN	Berlinan
+# "A" is the note: not the article (the reader says a capital A before a word as "a")
+A	A
+Eb	E flat
+Ab	A flat
+Bb	B flat
+EXT	external clock
+INT	internal clock
+EXT input	external clock input
+TRS	T R S
+USB + TRS	U S B and T R S
+Lights KEYS	lights on the keys only
+CH #	channel #
+DEG #	degree #
+LCM	convergence
+DENS	density
+B-PART	B part
+VAR	variation
+SUBTR	subtract
+8th	eighth
+RE-ROLL	re-roll
+>>	advance
+SEL	select
+5 S	5 seconds
+DEV	development build
+SAVE FAILED	not saved: flash error
