@@ -609,23 +609,26 @@ int rt_action(const bl_action_t *a)
     return bl_live_enqueue(&rt_eng, a, rt.head - rt.origin);
 }
 
-void rt_set_tempo(int32_t bpm)           /* Transport.setTempo: playing, from the head's next bar line (INT) */
+static void rt_stored(int32_t bpm)      /* stopped: the next Play's tempo (EXT: until the pulses lead) */
 {
-    uint32_t f;
-    bpm = clamp(bpm, 40, 220);
-    if (rt.playing) {
-        rt.pend_bpm = bpm;
-        return;
-    }
-    f = plat_lock();
-    rt.bpm = bpm;                        /* stopped: the next Play's (EXT: until the pulses lead) */
+    uint32_t f = plat_lock();
+    rt.bpm = bpm;
     if (rt.ext && !rt.ext_run)
         rt.rate = bpm * 16;
     plat_unlock(f);
 }
 
+void rt_set_tempo(int32_t bpm)           /* Transport.setTempo: playing, from the head's next bar line (INT) */
+{
+    bpm = clamp(bpm, 40, 220);
+    if (rt.playing)
+        rt.pend_bpm = bpm;
+    else
+        rt_stored(bpm);
+}
+
 /* playing: Transport.loadProject (from the head's next bar line); stopped: the project the next Play makes (the Mac
- * builds its transport anew: its channels, no mutes, its tempo) */
+ * builds its transport anew: its channels, no mutes, its tempo, EXT's too until the pulses lead) */
 void rt_load(const bl_project_t *p)
 {
     if (rt.playing) {
@@ -636,7 +639,7 @@ void rt_load(const bl_project_t *p)
     rt_proj = *p;
     rt_channels(&rt_proj);
     rt.muted = 0;
-    rt.bpm = rt_proj.bpm;
+    rt_stored(rt_proj.bpm);
     rt.pend_bpm = -1;
     rt.fresh = 1;
 }

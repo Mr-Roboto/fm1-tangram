@@ -413,3 +413,27 @@ expect save_pending 0
 expect store_writes 1
 expect save_unsent 0
 expect sounding 0
+# the tempo in store is the project's after a change that rebuilds the transport (the Mac's rebuildTransport keeps
+# the sync, its new transport has the project's tempo): Sync EXT from the project, then Ambient drift (72 BPM) chosen
+# while stopped; PLAY with no clock runs at 72 (1.152 ticks a ms), not at the 125 followed before
+proj sync ext
+proj template ambient 1
+expect bpm 72
+expect tick_rate 1152
+tap PLAY
+wait 500
+expect playing 1
+expect bpm 72
+expect tick_rate 1152
+tap PLAY
+# saved with EXT, after a restart: the saved tempo, not that of the Full ensemble the transport starts on
+save
+reboot
+expect sync 1
+expect bpm 72
+expect tick_rate 1152
+tap PLAY
+wait 500
+expect playing 1
+expect tick_rate 1152
+tap PLAY
