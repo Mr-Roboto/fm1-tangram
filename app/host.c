@@ -40,8 +40,12 @@
  *   key_ledK btn_ledB        key K's light as last set: 0 off, 1 dim, 2 lit; button B's (a B_ number: 0 FX ... 13
  *                            OCT+), 0 or 1
  *   tension_voice            the voice the first pending tension lands on, as its key (-1 none)
- *   lanes lcm_bars lcm_secs  the pages' voice lanes (the running engine's voices; stopped, the transport's preview);
- *                            their convergence in whole bars and its seconds at the tempo shown (-1 for both: INF)
+ *   lanes lcm_tenths lcm_secs   the pages' voice lanes (the running engine's voices; stopped, the transport's
+ *                            preview); their convergence as the Perform page shows it, read back from its text: the
+ *                            bars in tenths and the seconds at the tempo shown (-1 for both: INF). lcm_tenthsP and
+ *                            lcm_secsP: the same for a period of P ticks (-1: Convergence.period's nil)
+ *   note_check deg_label_max the note names (C3 = 60) and registers, shown and said, against a table: the misses;
+ *                            the Pattern page's highest degree label for the selected voice (in the key sounding)
  *   delay_msV delay_check    the Delay page's time for the template's voice V (DelayHint, ms); DelayHint's integers
  *                            against Swift's (60000.0 / bpm * beats).rounded() in f64, every tempo 40-220 and each
  *                            division: how many differ
@@ -570,6 +574,25 @@ static int indexed(const char *what, const char *name, int max, int *n)
     return 1;
 }
 
+/* the convergence as the Perform page shows it ("1680 bars ~ 4200 s", "0.9 bars ~ 2 s"), read back: the bars in
+ * tenths and the seconds (-1 both: INF) */
+static void lcm_shown(int64_t period, int *tenths, int *secs)
+{
+    char t[40], *e;
+    long w, f = 0;
+    convergence_text(period, t, 0);
+    if (!strncmp(t, "INF", 3)) {
+        *tenths = *secs = -1;
+        return;
+    }
+    w = strtol(t, &e, 10);
+    if (*e == '.')
+        f = strtol(e + 1, &e, 10);
+    *tenths = (int)(w * 10 + f);
+    e = strchr(t, '~');
+    *secs = e ? atoi(e + 1) : -2;
+}
+
 static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mirror refreshed */
 {
     int v;
@@ -608,12 +631,12 @@ static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mi
         *got = (int)(ui.led_b >> v & 1u);
     else if (!strcmp(what, "lanes"))
         *got = (lanes(), nlanes);
-    else if (!strcmp(what, "lcm_bars")) {      /* the convergence in whole bars, -1 none (INF) */
-        int64_t p = (lanes(), convergence());
-        *got = p < 0 ? -1 : (int)(p / BL_TICKS_PER_BAR);
-    } else if (!strcmp(what, "lcm_secs")) {    /* its seconds at the tempo shown, rounded */
-        int64_t p = (lanes(), convergence()), d = 16 * (int64_t)bpm_now();
-        *got = p < 0 ? -1 : (int)(p / d + (2 * (p % d) >= d));
+    else if (!strncmp(what, "lcm_tenths", 10) || !strncmp(what, "lcm_secs", 8)) {   /* the convergence as shown */
+        int t, sec;
+        lanes();
+        lcm_shown(what[4] == 't' ? (what[10] ? strtoll(what + 10, 0, 10) : convergence())
+                                 : (what[8] ? strtoll(what + 8, 0, 10) : convergence()), &t, &sec);
+        *got = what[4] == 't' ? t : sec;
     } else if (indexed(what, "delay_ms", BL_MAX_VOICES, &v))   /* the Delay page's time for the template's voice V */
         *got = v < tpl_now()->nvoices ? (int)delay_ms(delay_div(tpl_now()->voice[v].role), bpm_now()) : -1;
     else if (!strcmp(what, "delay_check")) {   /* DelayHint in integers against Swift's sums in binary64: the misses */
@@ -625,6 +648,31 @@ static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mi
                 f64 ms = f64_mul(f64_div(F64(0x40ED4C0000000000), f64_from_i64(b)), (f64){BEATS[d]});   /* 60000.0 */
                 *got += f64_to_i64(f64_round(ms)) != (int64_t)delay_ms(d, b);
             }
+    } else if (!strcmp(what, "note_check")) {  /* note names (C3 = 60) and registers as shown and said: the misses */
+        static const struct {
+            uint8_t n;
+            const char *name;
+        } N[] = {{0, "C-2"}, {11, "B-2"}, {12, "C-1"}, {23, "B-1"}, {24, "C0"}, {48, "C2"}, {55, "G2"}, {60, "C3"},
+                 {72, "C4"}, {79, "G4"}, {127, "G8"}};
+        char t[24];
+        size_t i;
+        *got = 0;
+        for (i = 0; i < sizeof N / sizeof N[0]; i++) {
+            note_name(N[i].n, t);
+            *got += strcmp(t, N[i].name) != 0;
+        }
+        reg_text(0, 15, t, 1);
+        *got += strcmp(t, "C-2 to Eb-1") != 0;
+        reg_text(55, 79, t, 0);
+        *got += strcmp(t, "G2-G4") != 0;
+    } else if (!strcmp(what, "deg_label_max")) {   /* the Pattern page's highest degree label (the selected voice) */
+        const lane_t *l = (lanes(), sel_lane());
+        bl_key_t k;
+        int i;
+        key_now(&k);
+        *got = 0;
+        for (i = 0; l && i < l->pat->n; i++)
+            *got = degree_label(&l->pat->note[i], &k) > *got ? degree_label(&l->pat->note[i], &k) : *got;
     } else if (!strcmp(what, "tension_voice")) {   /* the first pending tension's voice, as its key; -1 none */
         int i, k;
         *got = -1;

@@ -2,8 +2,12 @@
 # stopped (the transport's preview: the template's patterns, the project's values) and while the Full ensemble
 # plays. The values the pages work out, checked:
 #   lanes         the Perform page's voice lanes (the running engine's voices; stopped, the preview's)
-#   lcm_bars      the convergence (Convergence.period of every lane's loop length) in bars, -1 when it overflows (the
-#   lcm_secs      screen's "INF"); and its seconds at the tempo shown, rounded (the Mac's "~ N s")
+#   lcm_tenths    the convergence (Convergence.period of every lane's loop length) as the page shows it, read back
+#   lcm_secs      from its text: the bars in tenths (whole, or to a tenth as the Mac's %.1f, half to even) and the
+#                 seconds at the tempo shown, rounded (the Mac's "~ N s"); -1 for "INF". lcm_tenthsP / lcm_secsP:
+#                 the same for a period of P ticks
+#   note_check    the register's note names, C3 = 60 (Ableton, Logic: Ruling AE), shown and said: the misses
+#   deg_label_max the Pattern page's highest degree label: 1 up to the key's notes (floor_mod, as bl_resolve)
 #   delay_msV     the Delay page's time for the template's voice V: DelayHint (dotted 8th on the plucks and the
 #                 heartbeat, 8th on the bass and the drone, quarter on the pad and the lead), 60000 / bpm x beats,
 #                 rounded to the nearest, ties away
@@ -25,12 +29,22 @@ shot perform_defaults.png
 proj template full 0x5EED1234
 wait 200
 expect delay_check 0
+expect note_check 0
+# the convergence's text: a loop of 15 steps (0.9375 bars: "0.9"), a quarter (0.25: "0.2", half to even), three
+# quarters ("0.8"), 1.96 bars ("2.0"), nil ("INF"), at 96 BPM
+expect lcm_tenths3600 9
+expect lcm_secs3600 2
+expect lcm_tenths960 2
+expect lcm_tenths2880 8
+expect lcm_tenths7540 20
+expect lcm_tenths-1 -1
+expect lcm_secs-1 -1
 # ---- stopped: the preview
 tap HOME
 wait 100
 expect view 0
 expect lanes 6
-expect lcm_bars 1680
+expect lcm_tenths 16800
 expect lcm_secs 4200
 shot perform_stopped.png
 tap ENV
@@ -70,7 +84,7 @@ tap HOME
 wait 100
 expect view 0
 expect lanes 6
-expect lcm_bars 1680
+expect lcm_tenths 16800
 shot perform_playing.png
 # the selected voice: the Pad (SELECT steps over the template's voices: Pluck 1, Pluck 2, Bass, Pad)
 turn SELECT 3
@@ -113,6 +127,18 @@ expect delay_ms0 375
 expect delay_ms2 250
 expect delay_ms3 500
 expect lcm_secs 3360
+# ---- the Pattern page's degrees in the key sounding: Pluck 1's pattern (a degree 7 in A minor) in A minor
+# pentatonic from the next bar: its degrees counted in the pentatonic's 5 notes
+turn SELECT -3
+tap ARP
+wait 100
+expect voice_sel 0
+expect deg_label_max 7
+proj key 9 minorPentatonic
+wait 3000
+expect deg_label_max <6
+wait 1400
+shot pattern_pentatonic.png
 # ---- a template switch while playing: the horizon says it takes over at the next bar
 tap HOME
 turn PRESET 1

@@ -17,6 +17,11 @@ Lights KEYS	lights on the keys only
 CH #	channel #
 DEG #	degree #
 LCM	convergence
+INF (practically)	infinite, practically
+ms	milliseconds
+BPM	B P M
+CC #	C C #
+CC	C C
 DENS	density
 B-PART	B part
 VAR	variation

@@ -169,13 +169,31 @@ static uint32_t pct(f64 x)               /* 0-1 as a percentage, rounded (to the
 
 static int32_t steps(const bl_pattern_t *p) { return (int32_t)(p->length / STEP_TICKS); }
 
-static void note_name(int n, char *t)    /* MIDI note n as a name, middle C (60) C4 */
+/* MIDI note n (0-127) as a name, middle C (60) C3 as in Ableton and Logic (Ruling AE): 0 C-2, 24 C0, 55 G2 */
+static void note_name(int n, char *t)
 {
+    int o = n / 12 - 2;
     t[0] = 0;
     cat(t, NOTE_NAME[n % 12]);
-    if (n < 12)
+    if (o < 0)
         cat(t, "-");
-    cat_u(t, (uint32_t)(n < 12 ? 1 : n / 12 - 1));
+    cat_u(t, (uint32_t)(o < 0 ? -o : o));
+}
+/* a register low-high as shown ("G2-G4"), or said ("G2 to G4", "C-2 to C-1": a minus stays the octave's) */
+static void reg_text(int lo, int hi, char *t, int words)
+{
+    char a[8], b[8];
+    note_name(lo, a);
+    note_name(hi, b);
+    t[0] = 0;
+    cat(cat(cat(t, a), words ? " to " : "-"), b);
+}
+
+/* a note's scale degree as the Pattern page labels it: 1 up to the key's notes (bl_resolve's floor_mod: in minor
+ * pentatonic, degree 5 is the next octave's 1) */
+static int degree_label(const bl_pnote_t *n, const bl_key_t *k)
+{
+    return (int)bl_floor_mod(n->pitch.degree, k->scale.count) + 1;
 }
 
 /* DelayHint.compute(role:bpm:): the division by role (dotted 8th on the plucks, the heartbeat and aux; 8th on the
@@ -344,11 +362,7 @@ static void cell(int view, int i, cell_t *c)
     case KNS_REGISTER:
         cat(c->val, "-");
         if (vc) {
-            char a[8], b[8];
-            note_name(vc->reg_low, a);
-            note_name(vc->reg_high, b);
-            c->val[0] = 0;
-            cat(cat(cat(c->val, a), "-"), b);
+            reg_text(vc->reg_low, vc->reg_high, c->val, 0);
             cat_u(c->sub, vc->reg_low);
             cat(c->sub, "-");
             cat_u(c->sub, vc->reg_high);
@@ -665,8 +679,8 @@ static int32_t chip(int32_t x, int32_t y, const char *a, const char *b, uint16_t
 }
 
 /* a pattern strip (PatternStripView): the beats, the notes by position, length and pitch (self-scaling to the
- * pattern's range, in the key at C4), the accents' tops tangerine, the voice's own playhead (its loop position:
- * the phasing, visible); dimmed when muted, waiting or blanked */
+ * pattern's range, in the key at MIDI 60, the Mac's referenceC), the accents' tops tangerine, the voice's own
+ * playhead (its loop position: the phasing, visible); dimmed when muted, waiting or blanked */
 static void strip(int32_t x, int32_t y, int32_t w, int32_t h, const lane_t *l, uint16_t c, int dim)
 {
     const bl_pattern_t *p = l->pat;
@@ -1043,10 +1057,12 @@ static void draw_pattern(void)
     uint8_t on[256], acc[256], deg[256];
     uint16_t c;
     char t[24];
+    bl_key_t k;
     voice_title(&FONT_B, 2);
     if (!l)
         return;
     p = l->pat;
+    key_now(&k);
     n = steps(p);
     n = n > 256 ? 256 : n;
     c = vid_color(l->vid);
@@ -1061,7 +1077,7 @@ static void draw_pattern(void)
         if (a < n && on[a] != 1) {       /* (a chord: its first note's degree) */
             on[a] = 1;
             acc[a] = p->note[i].accent;
-            deg[a] = (uint8_t)(((p->note[i].pitch.degree % 7) + 7) % 7 + 1);
+            deg[a] = (uint8_t)degree_label(&p->note[i], &k);
         }
     }
     rows = (n + 15) / 16;
@@ -1480,7 +1496,7 @@ static void sp_item(const char *s, const char *sep)   /* s after what is gathere
 }
 
 /* a cell as it is said: its name, its value, and the line under it where it says what the value is ("Loop 16
- * STEPS"); a range "G3-G5" as "G3 to G5" */
+ * STEPS"); a range as "G2 to G4", "8 to 16" */
 static void sp_knob(int view, int i)
 {
     static const uint8_t WITH_SUB[] = {KNS_LOOP, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_LENGTH, KNS_PHASE, KNS_PLAYS};
@@ -1490,9 +1506,14 @@ static void sp_knob(int view, int i)
     cell(view, i, &c);
     sp_cat(KNOB_LABEL[view][i]);
     sp_cat(" ");
-    for (j = 0; c.val[j]; j++) {
+    if (k == KNS_REGISTER && sel_cfg()) {   /* (its notes may have a minus of their own) */
+        char t[24];
+        reg_text(sel_cfg()->reg_low, sel_cfg()->reg_high, t, 1);
+        sp_cat(t);
+    }
+    for (j = 0; !(k == KNS_REGISTER && sel_cfg()) && c.val[j]; j++) {
         char ch[2] = {c.val[j], 0};
-        if ((k == KNS_REGISTER || k == KNS_LENGTH) && c.val[j] == '-')
+        if (k == KNS_LENGTH && c.val[j] == '-')
             sp_cat(" to ");
         else
             sp_cat(ch);

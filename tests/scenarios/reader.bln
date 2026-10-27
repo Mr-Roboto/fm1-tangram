@@ -18,7 +18,7 @@ said Convergence 1680 bars, about 4200 seconds. Tension 2. Degree 1
 # a page settles before it is said
 tap ENV
 wait 300
-said Voice page: Channel 1, Loop 16 STEPS, Register G3 to G5, Generator SEED PROCEDURE
+said Voice page: Channel 1, Loop 16 STEPS, Register G2 to G4, Generator SEED PROCEDURE
 # a knob: its name and value, once it settles
 spin K1 2
 wait 300
