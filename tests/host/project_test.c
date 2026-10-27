@@ -14,6 +14,7 @@
 
 static uint8_t stub_obj[OBJ_NOBJ][PLAT_STORE_MAX];
 static int stub_len[OBJ_NOBJ], stub_writes, stub_playing, stub_captures, stub_nact, stub_tempo, stub_chan[BL_NVIDS];
+static int stub_busy;                    /* the transport still sending what its stop sends */
 static uint32_t stub_ms = 1000, stub_master = 2048;
 static bl_project_t stub_proj;
 static bl_action_t stub_act;
@@ -37,6 +38,7 @@ int plat_store_save(uint32_t obj, const void *src, uint32_t len)
 uint32_t plat_ms(void) { return stub_ms; }
 uint32_t plat_master(void) { return stub_master; }
 int rt_playing(void) { return stub_playing; }
+int rt_idle(void) { return !stub_playing && !stub_busy; }
 void rt_load(const bl_project_t *p) { stub_proj = *p; }
 int rt_action(const bl_action_t *a)
 {
@@ -56,6 +58,7 @@ void rt_set_sync(int ext) { (void)ext; }
 void rt_set_ext_port(int mask) { (void)mask; }
 
 #include "../../app/project.c"
+static void host_saving(void) {}         /* (the simulator's look at the transport as a SAVE writes) */
 
 static void store_put(uint32_t obj, const void *src, int n)
 {
@@ -276,7 +279,11 @@ static void test_proj_stale(void)
     CHECK(proj_save() == 1 && proj_save_pending() && stub_writes == 0, "SAVE while playing waits");
     CHECK(proj_stopped() == 1 && stub_writes == 0 && stub_proj.bpm == 96, "playing: no rebuild, no write");
     stub_playing = 0;
-    CHECK(proj_stopped() == 0 && stub_writes == 1 && !proj_save_pending(), "the stop: written (%d)", stub_writes);
+    stub_busy = 1;                                      /* the stop's Stop and offs still going out: not yet */
+    CHECK(proj_stopped() == 1 && stub_writes == 0 && proj_save_pending() && stub_proj.bpm == 120,
+          "the stop: the transport rebuilt, the SAVE waiting for the wire (%d)", stub_writes);
+    stub_busy = 0;
+    CHECK(proj_stopped() == 0 && stub_writes == 1 && !proj_save_pending(), "then written (%d)", stub_writes);
     CHECK(stub_proj.bpm == 120 && f64_eq(stub_proj.density, F64(0x3FE0000000000000)) && stub_proj.key.root == 4 &&
           stub_proj.has_arr && stub_proj.arr.enabled, "stopped: the project to the transport");
     stub_proj.bpm = 1;

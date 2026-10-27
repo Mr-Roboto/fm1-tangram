@@ -16,10 +16,11 @@
  *                            the lines that matched
  *   selfnotes selfhash_hi selfhash_lo   the last selfrender
  *   tpl root mode bpm_proj seed_hi seed_lo seeded chanI density_pct has_density arr_has arr_on arr_ambient form
- *      sync ext_ports lights save_pending save_lit
+ *      sync ext_ports lights save_pending save_lit save_unsent
  *                            the app project (proj: seeded 0 while the defaults' seed is still to be drawn; chanI its
  *                            voice I's channel; form proj_form, a FORM_); a SAVE waiting for the stop; the SAVE
- *                            button's LED (blinking while one waits)
+ *                            button's LED (blinking while one waits); what the transport still had to send at once (a
+ *                            stop's Stop and offs) when the last SAVE wrote (-1: none yet)
  *   slot_usedK slot_litK undo_depth stale   slot K (0-5) stored; its key lit; the undo points; a change made while
  *                            playing that the transport has not got yet (transportStale)
  *   pat_hash_hi pat_hash_lo  FNV-1a 64 over the transport's patterns (as captureState gives them: the running
@@ -85,6 +86,7 @@
 #include "../tests/host/script.c"        /* the script parser, equiv_test's */
 
 static int self_notes = -1;              /* the last selfrender's notes, -1 none (or it failed) */
+static int save_unsent = -1;             /* what was still to go out at once when the last SAVE wrote, -1 none yet */
 static uint64_t self_hash;
 
 static uint64_t fnv(uint64_t h, const char *s)
@@ -539,6 +541,8 @@ static int proj_expect(const char *what, int *got)
         *got = proj.arr_ambient;
     else if (!strcmp(what, "save_pending"))
         *got = proj_save_pending();
+    else if (!strcmp(what, "save_unsent"))
+        *got = save_unsent;
     else if (!strcmp(what, "seeded"))
         *got = !proj_unseeded;
     else if (!strcmp(what, "sync"))
@@ -818,6 +822,8 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         return 0;
     return 1;
 }
+
+static void host_saving(void) { save_unsent = rt.nn; }
 
 void app_speak_dump(void) { speak_dump(); }
 

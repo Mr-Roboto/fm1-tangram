@@ -10,6 +10,7 @@ void rt_init(void);                      /* the Full ensemble until the project 
 void rt_play(void);                      /* Transport.play: always from tick 0, a fresh engine */
 void rt_stop(void);                      /* Transport.stop */
 int rt_playing(void);
+int rt_idle(void);                       /* stopped, and what the stop sends gone out: a flash write may come */
 bl_tick_t rt_tick(void);                 /* the tick sounding now (0 before tick 0) */
 bl_tick_t rt_head(void);                 /* the render head */
 bl_tick_t rt_play_tick(void);            /* the tick sounding now, in the running engine's ticks (the panel's playheads) */

@@ -58,8 +58,9 @@ void proj_to_engine(bl_project_t *out);  /* the app project as Berlinan's Projec
 void proj_apply(void);                   /* stopped: the project to the transport (the Mac's rebuildTransport) */
 void proj_ready(void);                   /* before a Play: the defaults' seed drawn, the project changed meanwhile
                                           * to the transport */
-int proj_stopped(void);                  /* stopped: a SAVE that waited (its proj_save result, else 1), what changed
-                                          * while playing to the transport (rebuildTransportIfStale) */
+int proj_stopped(void);                  /* stopped: a SAVE that waited, once the stop's MIDI is out (rt_idle; its
+                                          * proj_save result, else 1), what changed while playing to the transport
+                                          * (rebuildTransportIfStale); every frame */
 /* AppServices' changes: playing, what the Mac does live (0, or -1 when the engine's queue drops it) and the project
  * for the next Play; stopped, the project to the transport. -1 too for what the Mac allows only stopped */
 int proj_set_template(int tpl);          /* applyTemplate: a fresh seed; playing, it takes over at the next bar */

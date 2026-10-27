@@ -46,6 +46,7 @@
 #define RT_QUEUE 1024                    /* timed events (a power of two) */
 #define RT_NOW 256                       /* events to send at once: Stop, a flush (a power of two) */
 #define RT_SEND_MS 16                    /* packets sent a ms at most */
+#define RT_DRAIN_MS 5                    /* after the last packet: the USB-MIDI out ring gone (16 a 1 ms USB frame) */
 #define RT_NOTES 128                     /* a window's notes and CC (240 ticks of the templates: at most 9 and 8) */
 #define RT_CC 128
 #define RT_PULSE 40                      /* ticks per MIDI clock: 960 / 24 */
@@ -84,6 +85,7 @@ static struct {
     uint8_t started, ext_run, pulsed, fa, ext_ports, npm;   /* fa: started by an FA, its first pulse to come */
     uint16_t pre;                        /* INT: ms to tick 0 */
     uint16_t qr, qn, nr, nn;             /* the queue, the at-once one: its first event, how many */
+    uint32_t sent_ms;                    /* the last packet's ms */
     bl_tick_t tick;                      /* the sounding tick (started), and its thousandths */
     int32_t frac, rate;                  /* rate: thousandths of a tick per ms (INT: bpm * 16) */
     bl_tick_t swap_tick, tempo_tick;     /* a tempo's clock segment from swap_tick (-1 none); where the last began */
@@ -120,6 +122,7 @@ static void rt_send(bl_tick_t tick, uint32_t pkt, int all)
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
     uint8_t *k = &rt.snd[st & 15u][n];
     plat_midi_out(pkt);
+    rt.sent_ms = plat_ms();
     if ((st & 0xF0u) == 0x90u && *k < 255u)
         ++*k;
     else if ((st & 0xF0u) == 0x80u && *k)
@@ -547,6 +550,16 @@ void rt_stop(void)                       /* Transport.stop */
 }
 
 int rt_playing(void) { return rt.playing; }
+
+/* stopped, and what the stop sends (MIDI Stop, the flush) gone out, RT_DRAIN_MS since: a flash write, which stops
+ * everything for a moment, may come now */
+int rt_idle(void)
+{
+    uint32_t f = plat_lock();
+    int r = !rt.playing && !rt.nn && plat_ms() - rt.sent_ms >= RT_DRAIN_MS;
+    plat_unlock(f);
+    return r;
+}
 
 bl_tick_t rt_tick(void)                  /* the tick sounding now (0 before tick 0) */
 {

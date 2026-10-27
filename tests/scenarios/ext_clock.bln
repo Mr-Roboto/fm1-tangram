@@ -397,3 +397,19 @@ expect playing 0
 wait 1
 expect sounding 0
 expect clocks_out 0
+# a SAVE made while playing in EXT is written after MIDI Stop, once what the stop sends has gone out (a flash write
+# stops everything for a moment: the offs would wait behind it): 128 notes sounding, their offs 8 ms on the wire
+tap PLAY
+wait 300
+tap SAVE
+expect save_pending 1
+rt burst 128
+wait 8
+expect sounding15 >100
+midi TRS FC
+wait 40
+expect playing 0
+expect save_pending 0
+expect store_writes 1
+expect save_unsent 0
+expect sounding 0

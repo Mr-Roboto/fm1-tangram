@@ -578,7 +578,8 @@ static void button(int b)                /* a button's job, on its release (PLAY
         if (rt_playing()) {
             rt_stop();
             say("STOPPED", 0);
-            saved(proj_stopped());       /* (what changed meanwhile reaches the transport, a SAVE waiting is written) */
+            saved(proj_stopped());       /* (what changed meanwhile reaches the transport; a SAVE waiting is written
+                                          * on a later frame, once the Stop and the offs are out) */
         } else {
             proj_ready();
             rt_play();

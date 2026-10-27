@@ -23,7 +23,8 @@
  *   (loadSlots).
  * Where it is the FM-1's own:
  * - SAVE while playing waits for the stop (proj_stopped: the button's, MIDI Stop, the arranger's ending): a flash
- *   write stops everything for a moment, the MIDI clock too.
+ *   write stops everything for a moment, the MIDI clock too. It is written once what the stop sends (MIDI Stop, the
+ *   offs) has gone out (rt_idle), on a later frame.
  * - A stale project reaches the transport after any stop, not only the PLAY button's (the Mac's rebuild).
  * - A channel is the template's voice i's (the UI's voice i).
  * - The slots and the undo points are kept packed (a bl_state_t is 16.8 KB), the undo points in 32 KB: 20 of the
@@ -57,6 +58,9 @@ static uint8_t proj_saving;              /* a SAVE made while playing, written a
 static bl_state_t proj_st PLAT_POOL;     /* a state captured, unpacked */
 static bl_project_t proj_eng PLAT_POOL;  /* the project as the engine's, a template */
 static uint8_t proj_buf[PLAT_STORE_MAX] PLAT_POOL;   /* a state packed; a record read back */
+#ifdef PLAT_HOST
+static void host_saving(void);           /* host.c: a test's look at the transport as a SAVE writes */
+#endif
 
 static const bl_arrcfg_t *const FORMS[] = {0, &bl_arr_classic, &bl_arr_slow, &bl_arr_ambient};
 static const bl_arrcfg_t ARR_DEFAULT = {0, 0, 0, 8, 16};      /* ArrangementConfig() */
@@ -213,6 +217,9 @@ int proj_save(void)                      /* the project; the slots stored since 
         return 1;
     }
     proj_saving = 0;
+#ifdef PLAT_HOST
+    host_saving();
+#endif
     draw_seed();                         /* (a project saved has its seed) */
     r = save_obj(OBJ_PROJ, &proj, sizeof proj);
     for (k = 0; k < PROJ_SLOTS; k++)
@@ -268,7 +275,7 @@ int proj_stopped(void)
     int r = 1;
     if (rt_playing())
         return 1;
-    if (proj_saving)
+    if (proj_saving && rt_idle())        /* (the stop's Stop and offs out first: the write would hold them) */
         r = proj_save();
     if (proj_stale)
         proj_apply();
