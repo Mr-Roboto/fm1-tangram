@@ -437,3 +437,12 @@ wait 500
 expect playing 1
 expect tick_rate 1152
 tap PLAY
+# an FC that the tick takes between an FA and the main loop's start (its interrupt between app_loop's look and the
+# start's lock) takes the FA back: nothing starts, nothing free-runs while the master is stopped
+racefc
+midi TRS FA
+expect playing 0
+wait 500
+expect playing 0
+expect tick 0
+expect clocks_out 0

@@ -100,6 +100,7 @@ static struct {
 static void host_sent(bl_tick_t tick, uint32_t pkt);   /* host.c: dumpmidi */
 static bl_tick_t (*rt_host_window)(bl_tick_t head);   /* host.c: a test's hook at each window's start (its actions
                                                          * and mutes); a window ends at its answer at the latest */
+static void (*rt_host_start)(void);      /* host.c: a test's tick (the interrupt) just before a start takes the lock */
 #endif
 
 static uint32_t rt_pkt(uint32_t st, uint32_t d1, uint32_t d2)
@@ -506,7 +507,9 @@ void rt_init(void)                       /* the Full ensemble until the saved pr
     rt.fresh = 1;
 }
 
-void rt_play(void)                       /* Transport.play: always from tick 0, a fresh engine */
+/* Transport.play: always from tick 0, a fresh engine. fa: app_loop's, for an FA / FB, which an FC the tick took
+ * since its look (the interrupt before the lock here) has taken back: then nothing starts */
+static void rt_start(int fa)
 {
     uint32_t f;
     if (rt.playing)
@@ -515,7 +518,15 @@ void rt_play(void)                       /* Transport.play: always from tick 0, 
     rt.head = rt.origin = 0;
     rt.has_next = 0;
     rt.clock_out = !rt.ext;
+#ifdef PLAT_HOST
+    if (rt_host_start)
+        rt_host_start();
+#endif
     f = plat_lock();
+    if (fa && !rt.start_req) {
+        plat_unlock(f);
+        return;
+    }
     rt.qn = 0;
     rt.swap_tick = rt.stop_at = -1;
     if (!rt.ext) {
@@ -534,6 +545,8 @@ void rt_play(void)                       /* Transport.play: always from tick 0, 
     plat_unlock(f);
     rt_render();
 }
+
+void rt_play(void) { rt_start(0); }
 
 void rt_stop(void)                       /* Transport.stop */
 {
@@ -712,7 +725,7 @@ void app_loop(void)
 {
     if (rt.start_req && !rt.playing) {   /* an FA / FB (the tick's): the engine is the main loop's to make */
         proj_ready();                    /* (the project's, before any Play: app.h) */
-        rt_play();
+        rt_start(1);
     }
     rt_render();
 }

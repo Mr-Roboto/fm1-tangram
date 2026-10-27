@@ -63,6 +63,8 @@
  *                            save, recall, tension, scene, reseed
  *   muteat VOICE TICK 0|1    a test's mute: for the windows that start at or after TICK, nothing flushed (the rule
  *                            of RefTool's midi mode)
+ *   racefc                   the next start (an FA's: app_loop) meets an FC from TRS, the tick run once (as its
+ *                            interrupt) between app_loop's look and the start's lock
  *   dumpmidi [FILE]          start (FILE) or stop logging "tick status d1 d2" (hex bytes) for every message the
  *                            transport sends, in send order; a flush's messages carry the sounding tick
  *   cmpmidi FILE             the dump so far against FILE (a .midiref), line by line: midicmp, midilines
@@ -369,6 +371,16 @@ static int dump_scan(long st, long d1, long d2, long long tick, int k, char *kth
 }
 
 static long dump_byte(const char *w) { return !strcmp(w, "*") ? -1 : (long)strtoul(w, 0, 16); }   /* "*": any */
+
+/* racefc: the next start meets an FC from the tick (the interrupt) between app_loop's look at an FA and the start's
+ * lock */
+static void race_fc(void)
+{
+    rt_host_start = 0;
+    min_q[mi_w % MQ] = 0x0Fu | 0xFCu << 8;
+    min_port[mi_w++ % MQ] = PORT_TRS;
+    app_tick();
+}
 
 /* ---- the transport's controls */
 static int rt_cmd(const char *a, const char *b, const char *c)
@@ -775,6 +787,8 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
             printf("FAIL dumpmidi %s: cannot write it\n", a);
     } else if (!strcmp(cmd, "cmpmidi"))
         cmpmidi(a);
+    else if (!strcmp(cmd, "racefc"))
+        rt_host_start = race_fc;
     else if (!strcmp(cmd, "dumpcount")) {
         dump_count = dump_scan(dump_byte(a), dump_byte(b), dump_byte(c), d[0] ? strtoll(d, 0, 10) : -1, 0, NULL, 0);
         printf("  dumpcount %s %s %s%s%s: %d\n", a, b, c, d[0] ? " at " : "", d, dump_count);
