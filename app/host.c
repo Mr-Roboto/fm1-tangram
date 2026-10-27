@@ -575,22 +575,32 @@ static int indexed(const char *what, const char *name, int max, int *n)
 }
 
 /* the convergence as the Perform page shows it ("1680 bars ~ 4200 s", "0.9 bars ~ 2 s"), read back: the bars in
- * tenths and the seconds (-1 both: INF) */
+ * tenths and the seconds (-1 both: INF). A text of any other shape is a FAIL line, and INT32_MIN for both (no expect
+ * holds) */
 static void lcm_shown(int64_t period, int *tenths, int *secs)
 {
-    char t[40], *e;
-    long w, f = 0;
+    char t[40], *e, *b;
+    long w, f = 0, sec;
     convergence_text(period, t, 0);
-    if (!strncmp(t, "INF", 3)) {
+    if (!strcmp(t, "INF (practically)")) {
         *tenths = *secs = -1;
         return;
     }
     w = strtol(t, &e, 10);
-    if (*e == '.')
+    if (e != t && *e == '.' && e[1] >= '0' && e[1] <= '9' && !(e[2] >= '0' && e[2] <= '9'))
         f = strtol(e + 1, &e, 10);
-    *tenths = (int)(w * 10 + f);
-    e = strchr(t, '~');
-    *secs = e ? atoi(e + 1) : -2;
+    b = e;
+    if (e != t && (!strncmp(b, " bars ~ ", 8) || !strncmp(b, " bar ~ ", 7))) {
+        b = strchr(b, '~') + 2;
+        sec = strtol(b, &e, 10);
+        if (e != b && !strcmp(e, " s")) {
+            *tenths = (int)(w * 10 + f);
+            *secs = (int)sec;
+            return;
+        }
+    }
+    printf("FAIL the convergence's text \"%s\" (period %lld): not \"N[.T] bars ~ S s\" nor INF\n", t, (long long)period);
+    *tenths = *secs = INT32_MIN;
 }
 
 static int ui_expect(const char *what, int *got)   /* the panel's (ui.c), the mirror refreshed */
