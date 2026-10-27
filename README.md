@@ -16,10 +16,18 @@ Status: complete for its first version: the engine, the panel and the seven page
 (INT and EXT), SAVE and the six slots. What it leaves out (harmony modes, melody, the MIDI echo, Link, capture) is
 listed in the manual.
 
+**Website: <https://jiripisa.github.io/fm1-berlinan/>** (in English and [Czech](https://jiripisa.github.io/fm1-berlinan/cs/)).
+Install it from the browser: open the [install page](https://jiripisa.github.io/fm1-berlinan/install/) in Chrome or
+Edge, connect the FM-1 by USB and press Install; the same page puts M-VAVE's firmware back. You can also
+[try it in the browser](https://jiripisa.github.io/fm1-berlinan/emu/), its MIDI out to your synths over Web MIDI.
+
 ## Where to read
 
 - [docs/MANUAL.md](docs/MANUAL.md): installing it, the controls, the pages, saving, sync, and how it differs from
-  Berlinan on the Mac.
+  Berlinan on the Mac. In Czech: [docs/MANUAL.cs.md](docs/MANUAL.cs.md).
+- The site: `tools/site.sh [VERSION]` builds it in `app/build/site` (the release package, the emulator, fm1-base's
+  installer and Berlinan's own pages, `app/site/`, through `tools/site_pages.py`); `tools/publish.sh VERSION` pushes
+  it to the repository's gh-pages branch. The drawing of the panel is `tools/gen_panel.py`'s.
 - [The design](docs/superpowers/specs/2026-10-26-berlinan-fm1-design.md) (the spec) and
   [the plan](docs/superpowers/plans/2026-10-26-berlinan-fm1.md).
 - [tools/reference](tools/reference): RefTool, a small Swift program over the unchanged Berlinan engine (the pinned

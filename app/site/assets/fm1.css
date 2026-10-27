@@ -1,0 +1,90 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+   Copyright (C) 2026 Jiří Píša
+   Berlinan for the FM-1's site, over Berlinan for macOS's (site.css on the front pages, manual.css on the manuals,
+   both copied unchanged from https://jiripisa.github.io/berlinan/): what the FM-1's pages add. */
+
+/* ---------- Front page ---------- */
+.hero h1 .tag {
+  display: inline-block; vertical-align: .55em; margin-left: .25em; padding: .12em .45em .16em;
+  font-size: .22em; line-height: 1; font-weight: 700; letter-spacing: .04em; font-variation-settings: "wdth" 100;
+  color: #1a1209; background: var(--tangerine); border-radius: .3em;
+}
+.button.secondary { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink3); }
+.button.secondary:hover { background: var(--panel); box-shadow: inset 0 0 0 1px var(--ink2); }
+.shot img.panel { border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+
+.screens {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: 1.25rem; margin: 2.5rem 0 0;
+  padding: 0; list-style: none;
+}
+.screens figure { margin: 0; }
+.screens img {
+  display: block; width: 100%; height: auto; image-rendering: pixelated;
+  border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 0 1px var(--line);
+}
+.screens figcaption { margin-top: .6rem; color: var(--ink3); font-size: .9rem; }
+
+.same {
+  margin-top: 3rem; max-width: 56rem; padding: clamp(1.25rem, 3vw, 2rem);
+  background: var(--panel-deep); border: 1px solid var(--line); border-radius: 10px;
+}
+.same h3 { margin: 0 0 .5rem; font-size: 1.2rem; font-variation-settings: "wdth" 112; }
+.same p { margin: 0 0 .75rem; color: var(--ink2); max-width: var(--measure); }
+.same p:last-child { margin-bottom: 0; }
+
+.templates {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.5rem, 4vw, 3rem); margin: 2.5rem 0 0;
+}
+.templates h3 { margin: 0 0 .4rem; font-size: 1.2rem; font-variation-settings: "wdth" 112; }
+.templates h3 .bpm { color: var(--ink3); font-weight: 500; font-size: .9rem; font-family: "JetBrains Mono", monospace; margin-left: .4rem; }
+.templates p { margin: 0 0 1rem; color: var(--ink2); }
+
+.routing .screens { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+.get-grid + .get-grid { margin-top: clamp(2rem, 5vw, 3.5rem); }
+.get-grid > *, .routing > * { min-width: 0; }           /* a long command scrolls in its box, not the page */
+.get .small { color: var(--ink3); font-size: .92rem; }
+
+.credits { margin: 2rem 0 0; padding: 0; list-style: none; max-width: 56rem; }
+.credits li { padding: .9rem 0; border-top: 1px solid var(--line); color: var(--ink2); }
+.credits b { color: var(--ink); font-weight: 600; }
+.small { color: var(--ink3); font-size: .92rem; max-width: var(--measure); }
+
+@media (max-width: 960px) {
+  .templates { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .routing .screens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Manuals (fm1-base's tools/manual_html.py's markup in manual.css's layout) ---------- */
+.skip { position: absolute; left: 1rem; top: -100px; z-index: 1; padding: .5rem .9rem; border-radius: 0 0 6px 6px;
+        background: var(--tangerine); color: #1a1209; font-weight: 700; text-decoration: none; }
+.skip:focus { top: 0; }
+main:focus { outline: none; }
+article h2 .num { color: var(--tangerine); margin-right: .45em; font-variant-numeric: tabular-nums; }
+.toc .num { color: var(--ink3); margin-right: .35em; font-variant-numeric: tabular-nums; }
+article pre {
+  margin: 1rem 0 1.25rem; padding: 1rem 1.25rem; overflow-x: auto; max-width: var(--measure);
+  background: var(--panel-deep); border: 1px solid var(--line); border-radius: 6px;
+  font-size: .85rem; line-height: 1.7; color: var(--ink2);
+}
+article pre code { color: inherit; }
+article code { overflow-wrap: anywhere; }
+.callout {
+  max-width: var(--measure); margin: 1.25rem 0; padding: .8rem 1rem;
+  border-left: 3px solid var(--cyan); background: var(--panel); border-radius: 0 6px 6px 0;
+}
+.callout p { margin: 0; }
+.table { overflow-x: auto; max-width: 52rem; margin: 1rem 0 1.5rem; }
+.table table { max-width: none; margin: 0; }
+.table td:first-child { white-space: nowrap; color: var(--ink); font-family: "JetBrains Mono", monospace; font-size: .85rem; padding-top: .7rem; }
+.table th { text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; }
+.figs { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.5rem 0 1.75rem; }
+.figs figure { margin: 0; flex: 0 1 auto; }
+.figs figure img { display: block; max-width: 100%; height: auto; }
+figure.shot img { width: 300px; image-rendering: pixelated; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 0 1px var(--line); }
+figure.wide { flex-basis: 100%; max-width: 52rem; }
+figure.wide img { width: 100%; border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+.figs figcaption { margin-top: .7rem; color: var(--ink3); font-size: .9rem; max-width: 300px; }
+figure.wide figcaption { max-width: var(--measure); }
+.toc ol ol .num { display: none; }

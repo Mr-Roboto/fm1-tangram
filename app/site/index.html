@@ -1,0 +1,285 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 Jiří Píša
+     The site's front page, in Berlinan for macOS's design (assets/site.css). tools/site_pages.py fills in the
+     version ({{VERSION}}) and the package's file name ({{PKG}}). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Berlinan for the FM-1 — Berlin School sequencer firmware for the M-VAVE FM-1</title>
+<meta name="description" content="Berlinan, the generative Berlin School MIDI sequencer, as firmware for the M-VAVE FM-1: short melodic loops that repeat, slowly shift against each other and change only a little at a time, played from the FM-1's panel. Install it from Chrome or Edge. Free and open source.">
+<meta property="og:title" content="Berlinan for the FM-1">
+<meta property="og:description" content="The generative Berlin School sequencer as firmware for the M-VAVE FM-1. Free and open source.">
+<meta property="og:image" content="https://jiripisa.github.io/fm1-berlinan/img/screen-perform.png">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#131418">
+<link rel="alternate" hreflang="en" href="https://jiripisa.github.io/fm1-berlinan/">
+<link rel="alternate" hreflang="cs" href="https://jiripisa.github.io/fm1-berlinan/cs/">
+<link rel="alternate" hreflang="x-default" href="https://jiripisa.github.io/fm1-berlinan/">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/fm1.css">
+</head>
+<body>
+
+<header class="wrap masthead">
+  <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="32" height="32">Berlinan FM-1</a>
+  <nav aria-label="Page">
+    <a href="#how">How it works</a>
+    <a href="manual/">Manual</a>
+    <a href="#get">Install</a>
+    <a href="https://github.com/jiripisa/fm1-berlinan">GitHub</a>
+    <a class="lang" href="cs/" hreflang="cs" lang="cs">Česky</a>
+  </nav>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <h1>Berlinan <span class="tag">FM-1</span></h1>
+    <p class="lede">
+      The generative Berlin School sequencer, as firmware for the M-VAVE FM-1.
+      Short melodic loops repeat, slowly shift against each other and change
+      only a little at a time, and you play the ensemble from the FM-1's keys,
+      buttons and knobs. No laptop needed.
+    </p>
+    <div class="actions">
+      <a class="button" href="install/">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Install from Chrome or Edge
+      </a>
+      <a class="button secondary" href="emu/">Try it in the browser</a>
+      <span class="meta">Version {{VERSION}}. Free and <a href="https://github.com/jiripisa/fm1-berlinan">open source</a>. <a href="manual/">Read the manual</a>.</span>
+    </div>
+
+    <div class="machine" aria-label="Animated example of three loops of different lengths slowly shifting against each other">
+      <div class="lane" data-voice="0"><span class="lane-name">7 steps</span><div class="cells"></div></div>
+      <div class="lane" data-voice="1"><span class="lane-name">5 steps</span><div class="cells"></div></div>
+      <div class="lane" data-voice="2"><span class="lane-name">6 steps</span><div class="cells"></div></div>
+      <div class="machine-foot">
+        <span>Three loops of unequal length. The same notes, never the same combination, until they line up again.</span>
+        <span>
+          <span class="counter" id="counter" aria-live="off">aligned again in 210 steps</span>
+          <button type="button" id="toggle" aria-pressed="false">Pause</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap shot">
+    <figure>
+      <img class="panel" src="img/fm1-panel.svg" width="1000" height="790"
+           alt="A drawing of the FM-1 running Berlinan, its screen showing the Perform page of the Full ensemble template. Each control is labelled with what it does: MASTER is the density, SELECT the voice, PRESETS the template, ALGORITHM the mode; the buttons open the seven pages, SAVE saves, OCT- undoes, OCT+ is Dice; the keys are the voices, the degrees 1 to 7 with the scenes, the six snapshot slots, the arranger's next change and tension.">
+      <figcaption>
+        Every control has one job. The keys select and mute the voices, move the
+        harmony by scale degree, morph scenes and recall snapshots; the screen shows
+        each voice's loop and what is about to change.
+      </figcaption>
+    </figure>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>It follows the rules of the genre</h2>
+      <p class="intro">
+        The engine is Berlinan's: a style manual compiled from about 225 video
+        lessons by a Berlin School practitioner, turned into four laws that do
+        most of the work.
+      </p>
+      <dl class="laws">
+        <div>
+          <dt>Repetition earns change</dt>
+          <dd>A pattern plays verbatim several times before it may mutate, and every mutation has to earn its place again. The dots on the Perform page count the plays left.</dd>
+        </div>
+        <div>
+          <dt>One scale for everyone</dt>
+          <dd>All voices share one scale. The white keys move the whole ensemble by scale degree, so it changes harmony together and never leaves the key.</dd>
+        </div>
+        <div>
+          <dt>Phasing, not randomness</dt>
+          <dd>Voices run loops of different lengths and drift against each other. The screen's LCM says how many bars until they line up again.</dd>
+        </div>
+        <div>
+          <dt>Change on the bar</dt>
+          <dd>What you press lands on the next bar line; a voice's new pattern waits for the end of its own loop. Press a little early and it still arrives in time.</dd>
+        </div>
+      </dl>
+
+      <div class="same">
+        <h3>It plays exactly what Berlinan for Mac plays</h3>
+        <p>The engine is Berlinan for macOS's, translated into C. The same template, the same seed and the same
+        actions at the same bars give the same notes and the same CC, event for event, tick for tick: the tests
+        check it against the unchanged Swift engine. The Setup page shows the seed, so a run on the FM-1 can be
+        repeated on the Mac.</p>
+        <p><a href="https://jiripisa.github.io/berlinan/">Berlinan for macOS</a>, the app it comes from, adds harmony
+        modes, melody extraction, Ableton Link, capture and MIDI export.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Three templates to start from</h2>
+      <p class="intro">
+        Turn PRESETS to pick one; while playing it takes over at the next bar.
+        Each starts in A minor from a fresh seed. ALGORITHM picks the mode, the
+        Setup page the root, and the Voice page moves any voice to another channel.
+      </p>
+      <div class="templates">
+        <div>
+          <h3>Demo trio <span class="bpm">90 BPM</span></h3>
+          <p>Two plucks phasing 16 against 15 steps over a pulsing bass. The first piece after power-on.</p>
+          <ul class="flow">
+            <li><span><span class="dot" style="--c: var(--cyan)"></span>Pluck 1</span><span class="ch">ch 1</span></li>
+            <li><span><span class="dot" style="--c: #5F9EC9"></span>Pluck 2</span><span class="ch">ch 2</span></li>
+            <li><span><span class="dot" style="--c: var(--amber)"></span>Bass</span><span class="ch">ch 3</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Full ensemble <span class="bpm">96 BPM</span></h3>
+          <p>The trio grown to six: a bass melody, a chord pad, a lead and the heartbeat kick.</p>
+          <ul class="flow">
+            <li><span><span class="dot" style="--c: var(--cyan)"></span>Pluck 1</span><span class="ch">ch 1</span></li>
+            <li><span><span class="dot" style="--c: #5F9EC9"></span>Pluck 2</span><span class="ch">ch 2</span></li>
+            <li><span><span class="dot" style="--c: var(--amber)"></span>Bass</span><span class="ch">ch 3</span></li>
+            <li><span><span class="dot" style="--c: var(--violet)"></span>Pad</span><span class="ch">ch 4</span></li>
+            <li><span><span class="dot" style="--c: #D9DDE3"></span>Lead</span><span class="ch">ch 5</span></li>
+            <li><span><span class="dot" style="--c: #C96F6F"></span>Heartbeat</span><span class="ch">ch 10</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Ambient drift <span class="bpm">72 BPM</span></h3>
+          <p>Built on a held drone, about one change a minute, with the arranger on and two CC scenes that slowly close and open your synths' filters.</p>
+          <ul class="flow">
+            <li><span><span class="dot" style="--c: #7FA6C9"></span>Drone</span><span class="ch">ch 1</span></li>
+            <li><span><span class="dot" style="--c: var(--cyan)"></span>Pluck 1</span><span class="ch">ch 2</span></li>
+            <li><span><span class="dot" style="--c: #5F9EC9"></span>Pluck 2</span><span class="ch">ch 3</span></li>
+            <li><span><span class="dot" style="--c: var(--violet)"></span>Pad</span><span class="ch">ch 4</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap routing">
+      <div>
+        <h2>It plays your synths</h2>
+        <p class="intro">
+          The FM-1 makes no sound of its own. Connect it by USB to a MIDI router
+          (a USB MIDI host box, or a computer that passes MIDI on); it shows up as
+          <b>FM-Berlinan</b>. Each voice goes out on its own MIDI channel, so every
+          synth plays its part.
+        </p>
+        <div class="sync">
+          <p><b>INT</b> The FM-1 is the clock master: MIDI Start, clock and Stop over USB.</p>
+          <p><b>EXT</b> It follows MIDI clock from USB or the TRS jack, and holds the tempo if the clock drops out.</p>
+          <p><b>SAVE</b> The project and six snapshot slots stay through power-off.</p>
+        </div>
+      </div>
+      <ul class="screens" aria-label="The FM-1's screen running Berlinan">
+        <li><figure><img src="img/screen-perform.png" width="240" height="240" alt="The Perform page: six voice lanes with their channels, loops and plays left, the horizon saying Pluck 2 may mutate in about 2 bars, and LCM 1680 bars"><figcaption>Perform: every voice's loop</figcaption></figure></li>
+        <li><figure><img src="img/screen-pattern.png" width="240" height="240" alt="The Pattern page: the pad's pattern in steps, a bar a row, with the ratchet knob OFF"><figcaption>Pattern: the steps, the ratchet</figcaption></figure></li>
+        <li><figure><img src="img/screen-arranger.png" width="240" height="240" alt="The Arranger page: the seven phases BUILD, BED, VAR, B-PART, PAYOFF, SUBTR and END"><figcaption>Arranger: the phases</figcaption></figure></li>
+        <li><figure><img src="img/screen-delay.png" width="240" height="240" alt="The Delay cheat sheet: a note division and its time in milliseconds for each voice at 96 BPM"><figcaption>Delay: times for your effects</figcaption></figure></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Made for playing live</h2>
+      <p class="intro">
+        Press PLAY and the ensemble starts at once. From there, every move is one
+        press and lands on the next bar.
+      </p>
+      <ul class="features">
+        <li><b>Voice keys</b>Tap to mute, hold to select. A voice the arranger holds back comes in with a tap.</li>
+        <li><b>Degree keys</b>The white keys move the whole ensemble to degrees 1 to 7.</li>
+        <li><b>The B part</b>REC: a contrasting second section in one press. With a voice key held: a blank cycle for that voice.</li>
+        <li><b>Arranger autopilot</b>Builds the piece voice by voice, varies it, brings the theme back and ends it. <code>&gt;&gt;</code> moves it on.</li>
+        <li><b>The density fader</b>MASTER thins the ensemble out or fills it, from 0 to 100 %.</li>
+        <li><b>Scenes and tension</b>The black keys morph your synths' controllers to the template's scenes over 8 bars; G5 adds a moment of tension.</li>
+        <li><b>Snapshots, Dice and undo</b>Six slots recalled on the bar, a new seed on OCT+, 20 steps of undo on OCT-.</li>
+        <li><b>Help on every button</b>Hold any button for a second and a card says what it does. Let go and nothing happens.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="get" id="get">
+    <div class="wrap">
+      <h2>Get Berlinan for the FM-1</h2>
+      <div class="get-grid">
+        <div>
+          <h3>Install from the browser</h3>
+          <p>
+            Open the install page in Chrome or Edge, connect the FM-1 by USB and
+            press Install; allow MIDI when the browser asks. The page checks the
+            firmware before it writes, and the FM-1 reports its version when it
+            restarts. Nothing is installed on the computer.
+          </p>
+          <div class="actions" style="margin-top: 1.25rem">
+            <a class="button" href="install/">Install version {{VERSION}}</a>
+          </div>
+          <p class="small" style="margin-top: 1.25rem">Installing firmware is at your own risk. <a href="manual/#s10">If the FM-1 won't start</a>, a Mac can put the stock firmware back.</p>
+        </div>
+        <div>
+          <h3>Back to M-VAVE's firmware</h3>
+          <p>
+            The same page puts M-VAVE's own firmware (FM-1 V15) back: download the
+            file from M-VAVE, choose it on the page and press the button. The page
+            checks it is M-VAVE's before it writes. M-VAVE's own updater,
+            M-UPGRADE, does it too.
+          </p>
+          <p><a href="install/">Back to the stock firmware</a> · <a href="https://www.m-vave.com/download">m-vave.com/download</a></p>
+        </div>
+      </div>
+      <div class="get-grid">
+        <div>
+          <h3>From the command line</h3>
+          <p><a href="firmware/{{PKG}}">Download {{PKG}}</a>, then, with fm1-base's installer from the source:</p>
+<pre><code>pip3 install mido python-rtmidi
+python3 base/tools/fm1_install.py {{PKG}}</code></pre>
+        </div>
+        <div>
+          <h3>Build from source</h3>
+          <p>
+            Free software under the GPL 2.0 or later. The build needs Docker (or
+            podman) and JieLi's toolchain; <a href="https://github.com/jiripisa/fm1-berlinan/blob/main/BUILDING.md">BUILDING.md</a> has the details.
+          </p>
+<pre><code>git clone --recursive https://github.com/jiripisa/fm1-berlinan.git
+cd fm1-berlinan
+./build.sh</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Credits</h2>
+      <ul class="credits">
+        <li><b>Berlinan</b> for macOS and for the FM-1 by Jiří Píša, GPL-2.0-or-later.</li>
+        <li><b><a href="https://github.com/charlesvestal/fm1-base">fm1-base</a></b> by Charles Vestal (MPL-2.0): the platform, from the hardware layer, USB and storage to the update loader, this installer and the emulator.</li>
+        <li><b><a href="https://github.com/hugelton/felucca-bsp">felucca-bsp</a></b> and <b>Felucca</b> by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com">Hügelton Instruments</a>: the firmware fm1-base grew from.</li>
+        <li><b>Berkeley SoftFloat</b> by John R. Hauser (BSD): the engine's double-precision arithmetic, bit for bit the Mac's. The sine is FreeBSD's <b>msun</b> (Sun Microsystems' fdlibm).</li>
+        <li>The screen's fonts: <b>Barlow</b> (SIL OFL 1.1).</li>
+      </ul>
+      <p class="small" style="margin-top: 1.5rem">M-VAVE and FM-1 are trademarks of their owners. Berlinan is not affiliated with M-VAVE or Hügelton Instruments.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Berlinan for the FM-1 by Jiří Píša. GPL-2.0-or-later.</span>
+    <span><a href="manual/">Manual</a> · <a href="emu/">Emulator</a> · <a href="https://github.com/jiripisa/fm1-berlinan">Source on GitHub</a> · <a href="https://jiripisa.github.io/berlinan/">Berlinan for macOS</a></span>
+  </div>
+</footer>
+
+<script src="assets/phasing.js"></script>
+</body>
+</html>
