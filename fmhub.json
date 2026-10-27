@@ -1,0 +1,5 @@
+{
+  "what": "A generative Berlin School MIDI sequencer: a small ensemble of voices that repeat, phase against each other on loops of unequal length and earn their mutations over time. The FM-1 makes no sound with it: each voice goes out over USB on its own MIDI channel to your synths, as Berlinan for macOS plays it.",
+  "kinds": ["other"],
+  "play": "https://jiripisa.github.io/fm1-berlinan/emu/"
+}

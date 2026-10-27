@@ -21,6 +21,9 @@ Install it from the browser: open the [install page](https://jiripisa.github.io/
 Edge, connect the FM-1 by USB and press Install; the same page puts M-VAVE's firmware back. You can also
 [try it in the browser](https://jiripisa.github.io/fm1-berlinan/emu/), its MIDI out to your synths over Web MIDI.
 
+Its identity is `FM-1_23XXYYZZ` (0.5.1 answers `FM-1_23000501`). It reads no other firmware's projects or samples: a
+saved record it does not recognise, another firmware's, is ignored, and it starts on the Demo trio with a fresh seed.
+
 ## Where to read
 
 - [docs/MANUAL.md](docs/MANUAL.md): installing it, the controls, the pages, saving, sync, and how it differs from

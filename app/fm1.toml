@@ -1,6 +1,6 @@
 # Berlinan's build settings (fm1-base's tools/build.py: ./build.sh)
 name = "BERLINAN"              # the build's files: berlinan.fwsc, berlinan-X.Y.fwsc
-id_prefix = "FM-1_8"           # package identity: dev FM-1_800, releases FM-1_8XXYYZZ
+id_prefix = "FM-1_23"          # package identity: dev FM-1_2300, releases FM-1_23XXYYZZ (its own on thefirmwarehub.com)
 usb_manufacturer = "Berlinan"
 usb_product = "FM-Berlinan"
 ble = false                    # MIDI goes out over USB only

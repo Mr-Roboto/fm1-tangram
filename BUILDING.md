@@ -37,7 +37,7 @@ On Linux x86-64 the toolchain runs natively and no container is needed.
 
 ```
 ./build.sh                    # app/build/berlinan.fwsc
-./build.sh --release X.Y      # app/build/berlinan-X.Y.fwsc, identity FM-1_8XXYYZZ
+./build.sh --release X.Y      # app/build/berlinan-X.Y.fwsc, identity FM-1_23XXYYZZ
 ./build.sh --host             # the simulator: app/build/host/berlinan_host
 ```
 
