@@ -10,7 +10,7 @@
 #   PRESETS    the template (a fresh seed), round; while playing it takes over at the next bar
 #   KNOB 1-4   the page's four values the Mac can change: Perform tempo, AUTO, form, ambient (form and ambient
 #              stopped only); Voice the selected voice's channel; Setup root, sync (stopped only), EXT input,
-#              lights. The rest are shown, their knobs do nothing.
+#              lights; Pattern the ratchet (ratchet.bln). The rest are shown, their knobs do nothing.
 proj template demo 0x5EED1234
 # ---- MASTER: the pot settled where it is at boot (2048, 50 %) sends nothing
 wait 300

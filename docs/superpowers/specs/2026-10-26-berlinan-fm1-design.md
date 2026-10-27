@@ -158,7 +158,7 @@ conventions (a lit button shows the page; holding a button for a second shows a 
 | --- | --- | --- |
 | HOME | Perform: the voice lanes (name, channel, pattern strip with playhead, loop length, legitimization count, lock / mute / WAITS), the HORIZON (what is coming: pending degree, B-part countdown, arranger phase, nearest mutation), convergence (LCM in bars), tension left | tempo · arranger AUTO on/off · form (classic arc / slow build / ambient plateau) · ambient mode |
 | ENV | Voice (the selected one) | MIDI channel · loop length · register (octave) · generator |
-| ARP | Pattern: the selected voice's pattern in steps, its generation and legitimization count | — (melody controls: later versions) |
+| ARP | Pattern: the selected voice's pattern in steps, its generation and legitimization count | Ratchet (added 2026-10-27, see [Decided](#decided)) · the rest shown (melody controls: later versions) |
 | LFO | CC and modulation | lane target CC · cycle (bars) · depth · scene |
 | SEQ | Arranger | phase · phase length · B-part bed drop · reprise |
 | FX | Delay cheat sheet: delay times for the owner's own effects at the current tempo (as the Mac's Delay Cheat Sheet). The MIDI echo is a later version | — |
@@ -201,6 +201,11 @@ start again from bar 1), with the Swift engine rendering the edited project as t
   same author wrote them).
 - No changes to Berlinan.
 - (Owner) SAVE as a Mac document: project + slots, play from bar 1. Page values without a Mac control: shown only.
+- (Owner, 2026-10-27) One exception: the Pattern page's KNOB 1, "Ratchet", sets `Project.legitimization`'s
+  `ratchetProbability`, 0–50 % in steps of 5, OFF (0) by default (the Mac has no control and plays nil, 0.15).
+  Saved in the project (format 2; a format-1 record loads with it OFF). No live engine action exists on the Mac, so
+  a change while playing reaches the next Play (as the stale project's other changes) and the screen says AT NEXT
+  PLAY. Proven by the script line `ratchet K` (`tests/equiv/README.md`).
 - (Designer's calls, open to change) Reference pinned to Berlinan `0e4a719` with committed reference files; harmony
   modes out of v1; scene keys use only the template's own scenes; a tap on a WAITS voice brings it in; MIDI out on
   USB only, TRS as a clock input.

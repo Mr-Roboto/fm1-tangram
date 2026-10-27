@@ -1,0 +1,103 @@
+# The ratchet (the Pattern page's KNOB 1): the legitimization's ratchetProbability, 0-50 % in steps of 5, OFF (0) by
+# default on the FM-1 (the Mac's nil is 15 %, with no control for it). A project value saved with SAVE (format 2); a
+# format-1 record loads with everything kept and the ratchet OFF. The Mac has no live action for it: stopped, the
+# transport takes it at once; playing, the project's changes at once and the running engine keeps its own, said AT
+# NEXT PLAY, until the next Play (as the stale project's other changes, Ruling Y).
+#   ratchet       the app project's, in %
+#   eng_ratchet   the running engine's project's (stopped: the next Play's), in %; -1 nil
+#   ratchets      the notes that ratchet (ratchet > 1) in the transport's patterns
+# ---- a fresh boot: OFF, and the transport's project has it (0, not nil)
+expect ratchet 0
+expect eng_ratchet 0
+proj template full 0x5EED1234
+expect ratchet 0
+expect eng_ratchet 0
+# ---- KNOB 1 on the Pattern page, stopped: in steps of 5, kept within 0-50, the transport's at once
+tap ARP
+expect view 2
+turn K1 1
+expect ratchet 5
+expect eng_ratchet 5
+turn K1 3
+expect ratchet 20
+turn K1 20
+expect ratchet 50
+expect eng_ratchet 50
+shot pattern_ratchet.png
+turn K1 -12
+expect ratchet 0
+expect eng_ratchet 0
+# a template keeps it (a project value of the FM-1's, not the template's)
+turn K1 6
+turn PRESET 1
+expect tpl 2
+expect ratchet 30
+expect eng_ratchet 30
+turn PRESET -1
+expect tpl 1
+proj template full 0x5EED1234
+turn K1 -6
+expect ratchet 0
+# ---- playing, OFF: 60 s (24 bars at 96, a mutation every loop of four plays): no note ratchets
+tap PLAY
+wait 30000
+expect ratchets 0
+wait 30000
+expect ratchets 0
+# a change while playing: the project's, said AT NEXT PLAY; the running engine keeps OFF
+listen
+turn K1 1
+expect ratchet 5
+expect stale 1
+expect eng_ratchet 0
+said RATCHET 5% AT NEXT PLAY
+# back to the value the engine plays: nothing waits, nothing said of the next Play
+turn K1 -1
+expect ratchet 0
+unsaid AT NEXT PLAY
+turn K1 10
+expect ratchet 50
+expect eng_ratchet 0
+said RATCHET 50% AT NEXT PLAY
+shot pattern_next_play.png
+wait 60000
+expect ratchets 0
+# the stop gives the transport the project; the next Play plays it: ratchets come with the mutations
+tap PLAY
+expect playing 0
+expect stale 0
+expect eng_ratchet 50
+tap PLAY
+expect eng_ratchet 50
+wait 60000
+expect ratchets >0
+# ---- SAVE (stopped), a restart: kept
+tap PLAY
+tap SAVE
+reboot
+expect ratchet 50
+expect eng_ratchet 50
+expect tpl 1
+expect seed_lo 0x5EED1234
+# ---- a format-1 record (an older firmware's save): everything kept, the ratchet OFF
+proj tempo 120
+proj key 2 dorian
+proj channel bass 5
+proj format1
+reboot
+expect ratchet 0
+expect eng_ratchet 0
+expect tpl 1
+expect bpm_proj 120
+expect root 2
+expect mode 1
+expect chan2 5
+expect seed_lo 0x5EED1234
+expect seeded 1
+# and saved again, it is a format-2 record with its ratchet
+tap ARP
+turn K1 2
+tap SAVE
+reboot
+expect ratchet 10
+expect bpm_proj 120

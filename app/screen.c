@@ -456,11 +456,10 @@ static void cell(int view, int i, cell_t *c)
     case KNS_REPRISE:
         cat(c->val, proj.arr_has && proj.arr_reprise ? "ON" : "OFF");
         break;
-    case KNS_VOICE:
-        if (key_voice(ui.sel) >= 0)
-            caps(c->val, vid_name(key_vid(ui.sel)), sizeof c->val);
-        else
-            cat(c->val, "-");
+    case KN_RATCHET:                     /* the project's, whichever voice is selected */
+        c->kind = CELL_RING;
+        c->hi = 50, c->v = proj.ratchet_pct;
+        ratchet_text(proj.ratchet_pct, c->val);
         break;
     case KNS_GENERATION:
         cat(c->val, "-");
@@ -1866,7 +1865,7 @@ static void speak_dump(void)
         {"SCENE", "CLOSED"}, {"SCENE", "OPEN"}, {"DEGREE 1", "NEXT BAR"}, {"DEGREE 7", "WHEN PLAYING"},
         {"BASS", "MUTED"}, {"BASS", "ON"}, {"BASS", "LOCKED"}, {"BASS", "UNLOCKED"}, {"BASS", "AT ITS LOOP"},
         {"BASS", "NEXT BAR"}, {"VOICE", "HEARTBEAT"}, {"TEMPO", "120"}, {"DENSITY", "50"}, {"FULL ENSEMBLE", "NEXT BAR"},
-        {"PLAYING", "AMBIENT DRIFT"}};
+        {"PLAYING", "AMBIENT DRIFT"}, {"RATCHET 25%", "AT NEXT PLAY"}, {"RATCHET OFF", "AT NEXT PLAY"}};
     static const char *const WARN[][2] = {
         {"SAVE", "FAILED"}, {"UNDO", "NOTHING TO UNDO"}, {"UNDO", "QUEUE FULL"}, {"UNDO", "TOO BIG"},
         {"SLOT 1", "TOO BIG"}, {"SLOT 1", "EMPTY"}, {"SLOT 1", "QUEUE FULL"}, {"DEGREE 2", "SCHEDULE FULL"},
@@ -1928,6 +1927,14 @@ static void speak_dump(void)
             proj.channel[k] = (uint8_t)x;
         sp_clear();
         sp_knob(V_VOICE, 0);
+        sp_print("KNOB", sp_buf);
+    }
+    proj = keep;
+    ui.view = V_PATTERN;
+    for (x = 0; x <= 50; x += 5) {
+        proj.ratchet_pct = (uint8_t)x;
+        sp_clear();
+        sp_knob(V_PATTERN, 0);
         sp_print("KNOB", sp_buf);
     }
     proj = keep;

@@ -15,6 +15,8 @@
  *   once, a template at the next bar line, Dice's fresh state recalled at the next bar) and the project waits for
  *   the stop (transportStale, rebuildTransportIfStale). The arranger's form and ambient mode and the sync are
  *   stopped only.
+ * - The ratchet (the legitimization's ratchetProbability) is a project value with no live action on the Mac (which
+ *   has no control for it): playing, a change waits for the next Play, as the stale project's others.
  * - The arrangement is the Mac's: nil or a config, with AUTO (enabled), the form (a preset's periods and reprise) and
  *   ambient mode in it apart; AUTO or ambient mode on a nil one starts from ArrangementConfig(); off keeps the rest.
  * - A slot stores the transport's state at the render head (captureState: before a Play of the project in place,
@@ -55,6 +57,7 @@ static uint8_t undo_lost;                /* the last push took no point (undo_re
 static uint8_t proj_stale;               /* transportStale */
 static uint8_t proj_unseeded;            /* the defaults: their seed is drawn at the first Play */
 static uint8_t proj_saving;              /* a SAVE made while playing, written at the stop */
+static uint8_t proj_rt_ratchet;          /* the ratchet of the project the transport was last given */
 static bl_state_t proj_st PLAT_POOL;     /* a state captured, unpacked */
 static bl_project_t proj_eng PLAT_POOL;  /* the project as the engine's, a template */
 static uint8_t proj_buf[PLAT_STORE_MAX] PLAT_POOL;   /* a state packed; a record read back */
@@ -136,10 +139,13 @@ void proj_defaults(void)
     proj_unseeded = 1;
 }
 
+/* a record of this format, or of format 1 (the same layout, the ratchet's byte its padding, not read) */
 static int proj_valid(const proj_t *p)
 {
     int i;
-    if (p->magic != PROJ_MAGIC || p->format != PROJ_FORMAT)
+    if (p->magic != PROJ_MAGIC || (p->format != PROJ_FORMAT && p->format != 1u))
+        return 0;
+    if (p->format == PROJ_FORMAT && (p->ratchet_pct > 50 || p->ratchet_pct % 5))
         return 0;
     if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES || p->sync > 1 || (p->ext_ports & ~PORTS_ALL)
         || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
@@ -182,6 +188,10 @@ int proj_load(void)
     memset(&rec, 0, sizeof rec);
     n = plat_store_load(OBJ_PROJ, &rec, sizeof rec);
     if (n == (int)sizeof rec && proj_valid(&rec)) {
+        if (rec.format == 1u) {          /* format 1: everything kept, the ratchet off */
+            rec.format = PROJ_FORMAT;
+            rec.ratchet_pct = 0;
+        }
         proj = rec;
         proj_unseeded = 0;
         return 0;
@@ -232,9 +242,11 @@ int proj_save(void)                      /* the project; the slots stored since 
     return r;
 }
 
-static f64 density_of(int pct) { return f64_div(f64_from_i64(pct), HUNDRED); }   /* Double(pct) / 100 */
+static f64 pct_of(int pct) { return f64_div(f64_from_i64(pct), HUNDRED); }   /* Double(pct) / 100 */
 
-void proj_to_engine(bl_project_t *out)   /* the template in A minor, then the project's own values */
+/* the template in A minor, then the project's own values; the legitimization Legitimizer.Config(repeats: 4,
+ * ratchetProbability: Double(pct) / 100): the FM-1's project always has one (0: no ratchets) */
+void proj_to_engine(bl_project_t *out)
 {
     int i;
     bl_template(proj.tpl, out);
@@ -245,7 +257,9 @@ void proj_to_engine(bl_project_t *out)   /* the template in A minor, then the pr
     out->has_arr = proj.arr_has;
     arr_get(&out->arr);
     if (proj.has_density)
-        out->density = density_of(proj.density_pct);
+        out->density = pct_of(proj.density_pct);
+    out->has_ratchet = 1;
+    out->ratchet_p = pct_of(proj.ratchet_pct);
     for (i = 0; i < out->nvoices; i++)
         out->voice[i].channel = proj.channel[i];
 }
@@ -260,6 +274,7 @@ void proj_apply(void)                    /* rebuildTransport: a stopped transpor
     rt_set_sync(proj.sync);
     rt_set_ext_port(proj.ext_ports);
     rt_load(&proj_eng);
+    proj_rt_ratchet = proj.ratchet_pct;
     proj_stale = 0;
 }
 
@@ -304,6 +319,7 @@ static int template_seeded(int t, uint64_t seed)
     }
     proj_to_engine(&proj_eng);
     rt_load(&proj_eng);                  /* Transport.loadProject: from the next bar line */
+    proj_rt_ratchet = proj.ratchet_pct;
     proj_stale = 1;
     return 0;
 }
@@ -361,7 +377,7 @@ int proj_set_density(int pct)
     proj_stale = 1;
     memset(&a, 0, sizeof a);
     a.kind = BL_A_DENSITY;
-    a.value = density_of(pct);
+    a.value = pct_of(pct);
     return rt_action(&a);
 }
 
@@ -398,6 +414,21 @@ int proj_set_ambient(int on)             /* (arrangement ?? ArrangementConfig())
     proj.arr_ambient = on ? 1 : 0;
     proj_apply();
     return 0;
+}
+
+/* the Mac has no live action for it: playing, the project's at once, the transport's at the next Play (1 while the
+ * two differ) */
+int proj_set_ratchet(int pct)
+{
+    if (pct < 0 || pct > 50 || pct % 5)
+        return -1;
+    proj.ratchet_pct = (uint8_t)pct;
+    if (!rt_playing()) {
+        proj_apply();
+        return 0;
+    }
+    proj_stale = 1;
+    return pct != proj_rt_ratchet;
 }
 
 void proj_set_channel(int voice, int ch)

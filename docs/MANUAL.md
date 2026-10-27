@@ -119,8 +119,8 @@ FULL) instead of dropping silently.
 
 ## 4. The pages
 
-Seven pages, a button each. A page's four values sit on KNOB 1 to 4. Only what the Mac can change is editable; the
-other values are shown, and their knobs do nothing.
+Seven pages, a button each. A page's four values sit on KNOB 1 to 4. Only what the Mac can change is editable, and
+the ratchet (the FM-1's own); the other values are shown, and their knobs do nothing.
 
 ### HOME: Perform
 
@@ -148,7 +148,14 @@ Generator. Registers are named with C3 = 60 (as Ableton and Logic): middle C is 
 ![The Pattern page](img/screen-pattern.png "Pattern")
 
 The selected voice's pattern in steps, a bar a row: the onsets, their scale degrees, accents, what each gate holds,
-the playhead. Shown only: Voice, Steps, Generation, Plays left.
+the playhead.
+
+Knobs: **Ratchet** (OFF, 5 to 50 % in steps of 5), and shown only: Steps, Generation, Plays left. The ratchet is the
+chance that a mutation gives one note of the pattern a ratchet, a 2- or 3-fold retrigger, for the pattern's next
+legitimization cycle (Berlinan's intermittent ratchet). It is the project's, for every voice whichever is selected,
+and saved with it. OFF, the default, no note ratchets. Stopped, a change holds from the next Play; while playing it
+goes into the project and the screen says AT NEXT PLAY: the running piece keeps its own until you stop and play
+again (the Mac has no live control for it).
 
 ### LFO: CC
 
@@ -190,8 +197,8 @@ and a dot while a SAVE waits for the stop. Messages take its place for a moment.
 
 ## 5. Saving
 
-SAVE writes the project (the template, its seed, key and mode, tempo, density, the arranger's settings, the voices'
-channels) and the six slots to the FM-1's memory, as a Berlinan document on the Mac. The undo stack and the running
+SAVE writes the project (the template, its seed, key and mode, tempo, density, the arranger's settings, the
+ratchet, the voices' channels) and the six slots to the FM-1's memory, as a Berlinan document on the Mac. The undo stack and the running
 engine are not saved. After power-on the saved project is loaded and PLAY starts it from bar 1, as every Play does.
 
 - **SAVE while stopped** writes at once.
@@ -202,7 +209,7 @@ engine are not saved. After power-on the saved project is loaded and PLAY starts
   slots are saved with SAVE.
 - **Undo:** OCT-, 20 deep; a recall or Dice can be undone. Loading a project empties it.
 - A record the firmware does not recognise (another firmware's, or damaged) is ignored: the Demo trio with a fresh
-  seed.
+  seed. A project saved by an earlier Berlinan firmware, before the ratchet, loads as it was, with the ratchet OFF.
 
 With nothing saved, the first piece is the Demo trio in A minor, and its seed is drawn at the first Play, so each
 power-on is a new universe.
@@ -240,7 +247,8 @@ saved project.
 The FM-1 plays what Berlinan for macOS plays: the same template, the same seed and the same actions at the same bars
 give the same notes and the same CC, event for event, tick for tick (tested against the unchanged Swift engine, see
 `tests/equiv/README.md`). The FM-1 shows the seed on the Setup page; to repeat a run on the Mac, use the same template
-in A minor, the same seed and the same actions at the same bars.
+in A minor, the same seed and the same actions at the same bars, with the FM-1's ratchet at 15 % (the Mac's, which
+it has no control for; see [Differences](#9-differences-from-berlinan-on-the-mac)).
 
 Projects do not move between the two: the FM-1 starts from Berlinan's three built-in templates and a seed.
 
@@ -253,6 +261,11 @@ Notes and CC are the same; these are where the behaviour differs on purpose.
 - **Edits while playing (Y).** Changes made while playing that the Mac applies only when stopped reach the next Play
   after any stop, including MIDI Stop and the arranger's end. The Mac rebuilds only after its own stop button and
   would replay the old project after an external stop.
+- **Ratchet.** The FM-1 has a control for the legitimization's ratchet probability (the Pattern page's KNOB 1, 0 to
+  50 %) and starts with it OFF: no note ratchets until you turn it up. The Mac has no control for it and always
+  plays 15 % (Berlinan's default). The notes are the Mac engine's at the value set (tested at OFF and 50 %); a
+  change while playing waits for the next Play, as the edits above. A template keeps the value set; on the Mac a
+  template comes with the 15 %.
 - **Actions while stopped (AC).** The Mac drops them silently; the FM-1 says WHEN PLAYING. PLAY has no help card.
 - **Delay page and convergence (AF).** They use the tempo shown (live, or followed in EXT), not the project's tempo;
   the Mac's lag a tempo change by one bar.

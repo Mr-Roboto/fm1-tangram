@@ -168,6 +168,77 @@ static void test_store_bad_magic(void)
     CHECK(proj_load() == 0 && !memcmp(&proj, &good, sizeof good) && !proj_unseeded, "the project's own record");
 }
 
+/* format 2, the ratchet: off in the defaults; a format-1 record (the same 48 bytes, the ratchet's byte its padding,
+ * any value) loads with everything kept and the ratchet off; in format 2 a ratchet that is not 0-50 in steps of 5
+ * is a record out of range */
+static void test_store_format1(void)
+{
+    proj_t good, rec;
+    CHECK(PROJ_FORMAT == 2 && sizeof(proj_t) == 48, "format %u, %d bytes as format 1's", PROJ_FORMAT,
+          (int)sizeof(proj_t));
+    store_clear();
+    proj_load();
+    CHECK(proj.ratchet_pct == 0, "the defaults: off");
+    proj_defaults();
+    good = proj;
+    good.tpl = BL_TPL_AMBIENT;
+    good.key_root = 4;
+    good.key_mode = BL_MODE_LYDIAN;
+    good.bpm = 77;
+    good.seed = UINT64_C(0xFEDCBA9876543210);
+    good.arr_has = good.arr_on = good.arr_ambient = 1;
+    good.arr_min = 8;
+    good.arr_max = 16;
+    good.has_density = 1;
+    good.density_pct = 60;
+    good.channel[4] = 9;
+    good.lights = 0;
+    rec = good;
+    rec.format = 1;
+    rec.ratchet_pct = 0xA5;                             /* format 1's padding: whatever it held */
+    store_put(OBJ_PROJ, &rec, sizeof rec);
+    good.ratchet_pct = 0;
+    CHECK(proj_load() == 0 && !memcmp(&proj, &good, sizeof good) && !proj_unseeded, "format 1: kept, the ratchet off");
+    good.ratchet_pct = 35;
+    store_put(OBJ_PROJ, &good, sizeof good);
+    CHECK(proj_load() == 0 && proj.ratchet_pct == 35, "format 2: its ratchet");
+    static const uint8_t BAD[] = {7, 55, 60, 255};
+    for (int i = 0; i < 4; i++) {
+        rec = good;
+        rec.ratchet_pct = BAD[i];
+        store_put(OBJ_PROJ, &rec, sizeof rec);
+        CHECK(proj_load() != 0 && proj_is_defaults(), "ratchet %d", BAD[i]);
+    }
+}
+
+/* the ratchet to the engine as Legitimizer.Config(ratchetProbability: Double(pct) / 100), never nil; stopped, the
+ * transport at once; playing, the project's only, 1 (the next Play) while it differs from the transport's */
+static void test_ratchet(void)
+{
+    bl_project_t got;
+    store_clear();
+    proj_load();
+    stub_playing = 0;
+    proj_to_engine(&got);
+    CHECK(got.has_ratchet && f64_eq(got.ratchet_p, F64(0)), "off: 0, not nil");
+    CHECK(proj_set_ratchet(25) == 0 && proj.ratchet_pct == 25 && stub_proj.has_ratchet &&
+          f64_eq(stub_proj.ratchet_p, f64_div(f64_from_i64(25), F64(0x4059000000000000))), "25: 25.0 / 100");
+    CHECK(proj_set_ratchet(-5) == -1 && proj_set_ratchet(55) == -1 && proj_set_ratchet(12) == -1 &&
+          proj.ratchet_pct == 25, "out of range");
+    CHECK(proj_set_template(BL_TPL_DEMO) == 0 && proj.ratchet_pct == 25 && f64_eq(stub_proj.ratchet_p,
+          f64_div(f64_from_i64(25), F64(0x4059000000000000))), "a template keeps it");
+    stub_playing = 1;
+    int nact = stub_nact;
+    CHECK(proj_set_ratchet(50) == 1 && proj.ratchet_pct == 50 && proj_stale && stub_nact == nact &&
+          f64_eq(stub_proj.ratchet_p, f64_div(f64_from_i64(25), F64(0x4059000000000000))),
+          "playing: the project's, no action, the transport's at the next Play");
+    CHECK(proj_set_ratchet(25) == 0, "playing, back to the transport's: nothing waits for it");
+    CHECK(proj_set_ratchet(0) == 1, "and away again");
+    stub_playing = 0;
+    CHECK(proj_stopped() == 1 && !proj_stale && f64_eq(stub_proj.ratchet_p, F64(0)), "the stop: the transport's");
+    proj_set_ratchet(0);
+}
+
 /* the defaults' seed: the template's own until the first Play draws one from the clock and the pot (once); a
  * template loaded or Dice draws its own and the Play then keeps it */
 static void test_default_seed(void)
@@ -360,6 +431,8 @@ static void test_undo_depth(void)
 int main(void)
 {
     test_store_bad_magic();
+    test_store_format1();
+    test_ratchet();
     test_default_seed();
     test_proj_to_engine();
     test_proj_stale();

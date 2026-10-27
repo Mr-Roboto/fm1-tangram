@@ -14,7 +14,8 @@
  *   HOME ENV ARP LFO SEQ FX GLO   the pages: PERFORM, VOICE, PATTERN, CC, ARRANGER, DELAY, SETUP
  *   MASTER         density                 SELECT the voice (HOME held: tempo)
  *   ALGORITHM      the mode                PRESETS the template
- *   KNOB 1-4       the page's four values: those the Mac can change; the rest are shown, their knobs do nothing
+ *   KNOB 1-4       the page's four values: those the Mac can change, and the Pattern page's ratchet (the FM-1's
+ *                  own); the rest are shown, their knobs do nothing
  *
  * Every action takes the Mac's way (UIState, AppServices): the engine's action at the render head (rt_action), the
  * transport's mute, the project's change (proj_*), an undo point first where UIState pushes one. What is refused
@@ -26,18 +27,19 @@
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
 static const char *const VIEW_NAME[NVIEWS] = {"Perform", "Voice", "Pattern", "CC", "Arranger", "Delay", "Setup"};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
-/* the four knobs of each page (KN_); the values the Mac cannot change (KNS_) are shown, not edited. The Pattern and
- * Delay pages have no knobs (the spec's "-"): their strip shows four values all the same */
+/* the four knobs of each page (KN_); the values the Mac cannot change (KNS_) are shown, not edited. The Pattern
+ * page's KNOB 1 is the ratchet (the FM-1's own control: the Mac has none); the Delay page has no knobs (the spec's
+ * "-"): its strip shows four values all the same */
 enum {
-    KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS,
+    KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS, KN_RATCHET,
     KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
-    KNS_REPRISE, KNS_VOICE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
+    KNS_REPRISE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
 };
 #define KN_SHOWN KNS_LOOP                /* from here on: shown only */
 static const uint8_t VIEW_KNOB[NVIEWS][4] = {
     {KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT},
     {KN_CHANNEL, KNS_LOOP, KNS_REGISTER, KNS_GEN},
-    {KNS_VOICE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS},
+    {KN_RATCHET, KNS_STEPS, KNS_GENERATION, KNS_PLAYS},
     {KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE},
     {KNS_PHASE, KNS_LENGTH, KNS_DROP, KNS_REPRISE},
     {KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED},
@@ -46,7 +48,7 @@ static const uint8_t VIEW_KNOB[NVIEWS][4] = {
 static const char *const KNOB_LABEL[NVIEWS][4] = {
     {"Tempo", "Auto", "Form", "Ambient"},
     {"Channel", "Loop", "Register", "Generator"},
-    {"Voice", "Steps", "Generation", "Plays left"},
+    {"Ratchet", "Steps", "Generation", "Plays left"},
     {"Target", "Cycle", "Depth", "Scene"},
     {"Phase", "Length", "Bed drop", "Reprise"},
     {"Feedback", "Wet", "Ping-pong", "Filtered"},
@@ -179,6 +181,19 @@ static void caps(char *d, const char *s, int n)  /* s in capitals, at most n - 1
     for (i = 0; i < n - 1 && s[i]; i++)
         d[i] = (char)(s[i] >= 'a' && s[i] <= 'z' ? s[i] - 32 : s[i]);
     d[i] = 0;
+}
+
+static void ratchet_text(int pct, char *t)   /* the ratchet as shown: OFF, 5% ... 50% */
+{
+    if (!pct) {
+        memcpy(t, "OFF", 4);
+        return;
+    }
+    itoa_u((uint32_t)pct, t);
+    while (*t)
+        t++;
+    t[0] = '%';
+    t[1] = 0;
 }
 
 /* ------------------------------------------------------------ the mirror --- */
@@ -556,6 +571,16 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
         proj.lights = (uint8_t)clamp(proj.lights + d, 0, 2);
         show("LIGHTS", LIGHTS[proj.lights]);
         break;
+    case KN_RATCHET: {                   /* 0-50 % in 5s; playing, the project's, for the next Play */
+        char m[16] = "RATCHET ";
+        v = proj_set_ratchet(clamp(proj.ratchet_pct + 5 * e, 0, 50));
+        ratchet_text(proj.ratchet_pct, m + 8);
+        if (v == 1)
+            say(m, "AT NEXT PLAY");      /* (said whole: the strip's value alone would not say when) */
+        else
+            show("RATCHET", m + 8);
+        break;
+    }
     default: break;                      /* shown, not editable (spec, Pages) */
     }
 }
@@ -654,7 +679,7 @@ static int help_lines(int b, const char *l[HELP_LINES])
     switch (b) {
     case B_HOME: L("PERFORM"); L("TEMPO, AUTO, FORM, AMBIENT"); L("+ SELECT: TEMPO"); break;
     case B_ENV: L("THE VOICE"); L("CHANNEL, LOOP, REGISTER,"); L(" GENERATOR"); break;
-    case B_ARP: L("THE PATTERN"); L("ITS STEPS, GENERATION"); L(" AND LEGITIMIZATION"); break;
+    case B_ARP: L("THE PATTERN"); L("ITS STEPS, GENERATION"); L(" AND LEGITIMIZATION"); L("KNOB 1: RATCHET"); break;
     case B_LFO: L("CC AND MODULATION"); L("TARGET, CYCLE, DEPTH,"); L(" SCENE"); break;
     case B_SEQ: L("THE ARRANGER"); L("PHASE, LENGTH, BED DROP,"); L(" REPRISE"); break;
     case B_FX: L("DELAY TIMES"); L("FOR YOUR EFFECTS"); L(" AT THE TEMPO"); break;

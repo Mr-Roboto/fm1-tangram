@@ -16,7 +16,7 @@
  *                            the lines that matched
  *   selfnotes selfhash_hi selfhash_lo   the last selfrender
  *   tpl root mode bpm_proj seed_hi seed_lo seeded chanI density_pct has_density arr_has arr_on arr_ambient form
- *      sync ext_ports lights save_pending save_lit save_unsent
+ *      ratchet sync ext_ports lights save_pending save_lit save_unsent
  *                            the app project (proj: seeded 0 while the defaults' seed is still to be drawn; chanI its
  *                            voice I's channel; form proj_form, a FORM_); a SAVE waiting for the stop; the SAVE
  *                            button's LED (blinking while one waits); what the transport still had to send at once (a
@@ -28,6 +28,9 @@
  *                            only, as text: per voice "ID LENGTH N\n", then per note "POSITION GATE DEGREE OCTAVE
  *                            ACCIDENTAL VELOCITY ACCENT RATCHET\n"
  *   slot_patK_hi slot_patK_lo   the same over slot K's state
+ *   ratchets eng_ratchet     the notes that ratchet (ratchet > 1) in the transport's patterns (as pat_hash's); the
+ *                            ratchet probability of the running engine's project (stopped: the transport's project,
+ *                            the next Play's), in % rounded, -1 for nil (0.15)
  *   view voice_sel help warns   the panel (ui.c): the page (0 Perform ... 6 Setup); the selected voice (its key);
  *                            the button whose card is up, plus one (0 none); what was refused and said
  *   degree pending_degree    the degree in force at the render head's bar (1 + the offset); the next bar's when it
@@ -79,6 +82,8 @@
  *      form classic|slow|ambient | ambient on|off | channel VOICE CH | sync int|ext | dice
  *                            the project's changes as the Mac's AppServices makes them (project.c: MODE a ModeID raw
  *                            value, K 0-100; SEED a test's in place of the fresh one), until the panel has them all
+ *   proj format1             the project written to the store as a format-1 record (an older firmware's: the
+ *                            ratchet's byte its padding, here 35, which the load must not read)
  *   slot store K | slot recall K | undo push | undo pop | save
  *                            the slots (K 0-5), the undo stack, SAVE */
 
@@ -473,6 +478,12 @@ static int proj_cmd(const char *a, const char *b, const char *c)
         r = proj_set_sync(b[0] == 'e');
     else if (!strcmp(a, "dice"))
         r = proj_dice();
+    else if (!strcmp(a, "format1")) {
+        proj_t rec = proj;
+        rec.format = 1;
+        rec.ratchet_pct = 35;
+        r = plat_store_save(OBJ_PROJ, &rec, sizeof rec);
+    }
     else
         return -2;
     return r;
@@ -503,7 +514,14 @@ static int pat_expect(const char *what, int *got)
 {
     static bl_state_t s;
     const char *half;
-    int k;
+    int i, k;
+    if (!strcmp(what, "ratchets")) {
+        rt_capture(&s);
+        for (*got = 0, i = 0; i < s.n; i++)
+            for (k = 0; k < s.v[i].pat.n; k++)
+                *got += s.v[i].pat.note[k].ratchet > 1;
+        return 1;
+    }
     if (!strncmp(what, "pat_hash_", 9)) {
         rt_capture(&s);
         half = what + 9;
@@ -551,6 +569,8 @@ static int proj_expect(const char *what, int *got)
         *got = proj.arr_on;
     else if (!strcmp(what, "arr_ambient"))
         *got = proj.arr_ambient;
+    else if (!strcmp(what, "ratchet"))
+        *got = proj.ratchet_pct;
     else if (!strcmp(what, "save_pending"))
         *got = proj_save_pending();
     else if (!strcmp(what, "save_unsent"))
@@ -739,6 +759,10 @@ static int rt_expect(const char *what, int *got)   /* the transport's, under the
         *got = (int)rt.tempo_tick;
     else if (!strcmp(what, "queued"))
         *got = rt.qn;
+    else if (!strcmp(what, "eng_ratchet")) {
+        const bl_project_t *p = rt.playing ? &rt_eng.project : &rt_proj;
+        *got = p->has_ratchet ? (int)f64_to_i64(f64_round(f64_mul(p->ratchet_p, HUNDRED))) : -1;
+    }
     else if (!strncmp(what, "sounding", 8)) {   /* soundingC: channel C's alone (0-15); soundingC.N: its note N */
         const char *dot = strchr(what, '.');
         for (*got = 0, c = 0; c < 16; c++)

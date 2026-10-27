@@ -26,7 +26,7 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 1u
+#define PROJ_FORMAT 2u                   /* 2: the ratchet; a format-1 record loads with it off (proj_load) */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
@@ -43,6 +43,9 @@ typedef struct {
     int16_t arr_min, arr_max;            /* its minPeriodBars ... maxPeriodBars, 1 <= min <= max */
     uint8_t density_pct, has_density;    /* density 0-100 %; has_density 0: the template's (nil: 1) */
     uint8_t channel[BL_MAX_VOICES];      /* the template's voice i's MIDI channel, 0-15 */
+    uint8_t ratchet_pct;                 /* Project.legitimization's ratchetProbability, 0-50 % in steps of 5; 0 off,
+                                          * the FM-1's default (the Mac's nil is 15 %, with no control). Format 2:
+                                          * in format 1 this byte was the struct's padding */
 } proj_t;
 
 extern proj_t proj;
@@ -70,6 +73,8 @@ int proj_set_density(int pct);           /* setDensity: playing, at the next bar
 int proj_set_arranger(int on);           /* setArrangerEnabled (AUTO): playing, at the next bar */
 int proj_set_form(int form);             /* setArrangerForm: a FORM_ preset, stopped only */
 int proj_set_ambient(int on);            /* setAmbientMode: stopped only */
+int proj_set_ratchet(int pct);           /* the legitimization's ratchetProbability, 0-50 in 5s: no live action on
+                                          * the Mac, so playing it waits for the next Play (1); 0; -1 out of range */
 int proj_form(void);                     /* the arrangement's preset (enabled aside), FORM_OTHER for none */
 void proj_set_channel(int voice, int ch);   /* setVoiceChannel: the template's voice i, 0-15 */
 int proj_set_sync(int ext);              /* stopped only */
