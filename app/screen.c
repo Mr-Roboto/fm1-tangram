@@ -1524,13 +1524,18 @@ static void sp_knob(int view, int i)
         }
 }
 
-/* the page: its name and its values; all: the header too (the template, its key, the tempo, playing or stopped) */
+/* the page: its name (a voice's page: the voice's too, as its title shows it) and its values; all: the header too
+ * (the template, its key, the tempo, playing or stopped) */
 static void sp_page(int all)
 {
     int i;
     sp_clear();
     sp_cat(VIEW_NAME[ui.view]);
     sp_cat(" page");
+    if ((ui.view == V_VOICE || ui.view == V_PATTERN || ui.view == V_CC) && key_voice(ui.sel) >= 0) {
+        sp_cat(", ");
+        sp_cat(vid_name(key_vid(ui.sel)));
+    }
     for (i = 0; i < 4; i++) {
         sp_cat(i ? ", " : ": ");
         sp_knob(ui.view, i);

@@ -1,7 +1,7 @@
 # The screen reader (fm1-reader, announce.c), AMB-1's way: a reader listens, and each page, knob value, help card and
 # button is said once, in the screen's own words (words.tsv says the short ones in full). A page is said when it
-# settles: its name and its four values; WHERE (or a reader that has just started) the whole screen: the page, the
-# header, then what the page shows.
+# settles: its name (a voice's page: the voice's too, as its title shows) and its four values; WHERE (or a reader
+# that has just started) the whole screen: the page, the header, then what the page shows.
 proj template full 0x5EED1234
 wait 200
 listen
@@ -18,7 +18,7 @@ said Convergence 1680 bars, about 4200 seconds. Tension 2. Degree 1
 # a page settles before it is said
 tap ENV
 wait 300
-said Voice page: Channel 1, Loop 16 STEPS, Register G2 to G4, Generator SEED PROCEDURE
+said Voice page, Pluck 1: Channel 1, Loop 16 STEPS, Register G2 to G4, Generator SEED PROCEDURE
 # a knob: its name and value, once it settles
 spin K1 2
 wait 300
@@ -50,7 +50,7 @@ wait 300
 said Arranger page: Phase NONE, Length NONE, Bed drop OFF, Reprise OFF
 tap ARP
 wait 300
-said Pattern page: Ratchet OFF, Steps 16, Generation 1, Plays left 4
+said Pattern page, Pluck 1: Ratchet OFF, Steps 16, Generation 1, Plays left 4
 spin K1 2
 wait 300
 said Ratchet 10%
@@ -59,7 +59,7 @@ wait 300
 said Ratchet OFF
 tap LFO
 wait 300
-said CC page: Target FILTER CC 74, Cycle 16 BARS, Depth 30%, Scene NONE
+said CC page, Pluck 1: Target FILTER CC 74, Cycle 16 BARS, Depth 30%, Scene NONE
 tap HOME
 wait 300
 said Perform page

@@ -2,7 +2,9 @@
 # again on another seed at tick 489600 (mid-bar: it takes over on the next bar line, tick 491520).
 # AppServices.applyTemplate takes the template as it is, its legitimization nil, so from there the mutations ratchet
 # at the Mac's default 0.15; before it, no note ratchets. Degrees and a reseed on the way (the reseed's fresh engine
-# is built from the app project, ratchet 0 included; the running engine keeps its own project).
+# is built from the app project, ratchet 0 included; the running engine keeps its own project). This `load` is the
+# Mac's (the template's nil: 15 %); the FM-1's own template load keeps the ratchet set (proj_to_engine), which is
+# `ratchet K` on the template at its bar line.
 template full
 ratchet 0
 window 240

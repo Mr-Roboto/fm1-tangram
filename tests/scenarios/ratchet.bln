@@ -62,7 +62,19 @@ said RATCHET 50% AT NEXT PLAY
 shot pattern_next_play.png
 wait 60000
 expect ratchets 0
-# the stop gives the transport the project; the next Play plays it: ratchets come with the mutations
+# a template loaded while playing is a new engine of the project (proj_to_engine): it takes the ratchet waiting at
+# its bar line, before any stop
+turn PRESET 1
+expect tpl 2
+expect eng_ratchet 0
+wait 3000
+expect eng_ratchet 50
+# back to the full ensemble on its seed (its bar line too), the ratchet still 50
+proj template full 0x5EED1234
+wait 3000
+expect tpl 1
+expect eng_ratchet 50
+# the stop gives the transport the project; the next Play plays it (ratchets come with the mutations)
 tap PLAY
 expect playing 0
 expect stale 0

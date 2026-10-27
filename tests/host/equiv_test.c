@@ -3,7 +3,9 @@
 /* The equivalence runner: each tests/equiv/live_*.script played on the C engine (script.c) and its lines compared
  * with the committed .ref, line by line. Per script it prints ok or FAIL and the notes-hash, FNV-1a 64 over its N
  * lines, each with its "\n" (the value Task 12's scenario expects of the app); on the first difference the line
- * number, both lines and the last H line that matched.
+ * number, both lines and the last H line that matched. A script with `ratchet 0` is checked on its own too, whatever
+ * its .ref holds: every note the C engine renders before its first load (the whole run when there is none) has
+ * ratchet 1.
  *   equiv_test                    every tests/equiv/live_*.script
  *   equiv_test FILE...            these scripts
  *   equiv_test --text FILE        the lines with the state text (T) in place of each H, to diff with RefTool's */
@@ -46,6 +48,9 @@ typedef struct {
     char got[300], want[300], last_h[64];
     uint64_t notes_hash;
     long notes;
+    bl_tick_t ratchet0_until;       /* ratchet 0: the notes before this tick must not ratchet (-1: no such check) */
+    long ratchet0_notes, ratchet0_bad;
+    char ratchet0_first[300];       /* the first note that ratchets */
 } cmp_t;
 
 static int compare(void *ctx, const char *text)
@@ -54,6 +59,12 @@ static int compare(void *ctx, const char *text)
     if (text[0] == 'N') {
         c->notes_hash = fnv(fnv(c->notes_hash, text), "\n");
         c->notes++;
+        const char *r = strrchr(text, ' ');     /* N at voice midi vel gate accent ratchet */
+        if (c->ratchet0_until >= 0 && strtoll(text + 2, NULL, 10) < c->ratchet0_until) {
+            c->ratchet0_notes++;
+            if (strcmp(r + 1, "1") && !c->ratchet0_bad++)
+                snprintf(c->ratchet0_first, sizeof c->ratchet0_first, "%s", text);
+        }
     }
     char *nl = c->ref ? strchr(c->ref, '\n') : NULL;
     const char *want = c->ref && *c->ref ? c->ref : "(end of the .ref)";
@@ -109,6 +120,12 @@ static int run_one(const char *path)
     c.ref = ref;
     c.notes_hash = UINT64_C(0xcbf29ce484222325);
     snprintf(c.last_h, sizeof c.last_h, "(none)");
+    c.ratchet0_until = -1;
+    if (s.ratchet == 0) {
+        c.ratchet0_until = INT64_MAX;
+        for (int i = 0; i < s.nact && c.ratchet0_until == INT64_MAX; i++)
+            if (s.act[i].kind == BL_SA_LOAD) c.ratchet0_until = s.act[i].tick;
+    }
     int r = bl_script_play(&s, 0, compare, &c, err, sizeof err);
     int failed = 1;
     if (r) {
@@ -116,14 +133,21 @@ static int run_one(const char *path)
     } else if (c.mismatch) {
         printf("FAIL %s: line %ld\n  got  %s\n  want %s\n  last H that matched: %s\n", path, c.mismatch, c.got,
                c.want, c.last_h);
+    } else if (c.ratchet0_until >= 0 && (c.ratchet0_bad || !c.ratchet0_notes)) {
+        char before[32] = "the end";
+        if (c.ratchet0_until < INT64_MAX) snprintf(before, sizeof before, "tick %lld", (long long)c.ratchet0_until);
+        printf("FAIL %s: ratchet 0, yet %ld of the %ld notes before %s ratchet (the first: %s)\n", path,
+               c.ratchet0_bad, c.ratchet0_notes, before, c.ratchet0_first);
     } else if (*c.ref) {
         char *nl = strchr(c.ref, '\n');
         if (nl) *nl = 0;
         printf("FAIL %s: line %ld\n  got  (the end of the run)\n  want %s\n  last H that matched: %s\n", path,
                c.line + 1, c.ref, c.last_h);
     } else {
-        printf("ok   %s: %ld lines, %ld notes, notes-hash %016llx\n", path, c.line, c.notes,
+        printf("ok   %s: %ld lines, %ld notes, notes-hash %016llx", path, c.line, c.notes,
                (unsigned long long)c.notes_hash);
+        if (c.ratchet0_until >= 0) printf(", ratchet 0: none of %ld notes ratchets", c.ratchet0_notes);
+        printf("\n");
         failed = 0;
     }
     free(ref);

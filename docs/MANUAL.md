@@ -155,7 +155,8 @@ chance that a mutation gives one note of the pattern a ratchet, a 2- or 3-fold r
 legitimization cycle (Berlinan's intermittent ratchet). It is the project's, for every voice whichever is selected,
 and saved with it. OFF, the default, no note ratchets. Stopped, a change holds from the next Play; while playing it
 goes into the project and the screen says AT NEXT PLAY: the running piece keeps its own until you stop and play
-again (the Mac has no live control for it).
+again (the Mac has no live control for it), or until a template you load meanwhile takes over at its bar line: the
+new piece starts with the ratchet set.
 
 ### LFO: CC
 
@@ -198,8 +199,9 @@ and a dot while a SAVE waits for the stop. Messages take its place for a moment.
 ## 5. Saving
 
 SAVE writes the project (the template, its seed, key and mode, tempo, density, the arranger's settings, the
-ratchet, the voices' channels) and the six slots to the FM-1's memory, as a Berlinan document on the Mac. The undo stack and the running
-engine are not saved. After power-on the saved project is loaded and PLAY starts it from bar 1, as every Play does.
+ratchet, the voices' channels) and the six slots to the FM-1's memory, as a Berlinan document on the Mac. The undo
+stack and the running engine are not saved. After power-on the saved project is loaded and PLAY starts it from bar 1,
+as every Play does.
 
 - **SAVE while stopped** writes at once.
 - **SAVE while playing** is written at the next stop (the button, MIDI Stop or the arranger's end), a moment after
@@ -264,8 +266,9 @@ Notes and CC are the same; these are where the behaviour differs on purpose.
 - **Ratchet.** The FM-1 has a control for the legitimization's ratchet probability (the Pattern page's KNOB 1, 0 to
   50 %) and starts with it OFF: no note ratchets until you turn it up. The Mac has no control for it and always
   plays 15 % (Berlinan's default). The notes are the Mac engine's at the value set (tested at OFF and 50 %); a
-  change while playing waits for the next Play, as the edits above. A template keeps the value set; on the Mac a
-  template comes with the 15 %.
+  change while playing waits for the next Play, as the edits above, or for a template loaded while playing, which
+  takes over at its bar line with the value set. A template keeps the value set; on the Mac a template comes with
+  the 15 %.
 - **Actions while stopped (AC).** The Mac drops them silently; the FM-1 says WHEN PLAYING. PLAY has no help card.
 - **Delay page and convergence (AF).** They use the tempo shown (live, or followed in EXT), not the project's tempo;
   the Mac's lag a tempo change by one bar.
