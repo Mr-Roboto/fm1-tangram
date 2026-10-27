@@ -70,7 +70,7 @@ Not sure what a button does? Hold it for a second: a card says. Let go and nothi
 
 | Keys | What they do |
 |---|---|
-| F3 F#3 G3 G#3 A3 A#3 B3 | The voices: Pluck 1, Pluck 2, Bass, Pad, Lead, Drone, Heartbeat. **Tap** (shorter than 1 s): mute or unmute it. A voice the arranger holds back (it shows WAITS): the tap brings it in. **Hold** (1 s or more): selects it without a tap, and EDIT, REC or SEL pressed meanwhile act on that voice (below). Lit: playing. Blinking: WAITS. Dark: muted, or not in this template. |
+| F3 F#3 G3 G#3 A3 A#3 B3 | The voices: Pluck 1, Pluck 2, Bass, Pad, Lead, Drone, Heartbeat. A press selects it. **Tap** (shorter than 1 s): also mute or unmute it. A voice the arranger holds back (it shows WAITS): the tap brings it in. **Hold** (1 s or more): selects it without muting, and EDIT, REC or SEL pressed meanwhile act on that voice (below). Lit: playing. Blinking: WAITS. Dark: muted, or not in this template. |
 | C4 D4 E4 F4 G4 A4 B4 (white) | The degrees 1 to 7: the harmony moves diatonically at the next bar. The degree in force is lit; one that is coming blinks. |
 | C#4 D#4 F#4 G#4 A#4 | CC scenes 1 to 5: the controllers morph toward the template's scene over 8 bars. Only the scenes the template has (Ambient drift: two; the others none; keys past them do nothing). The template's scenes are dim, the one the morph heads for is lit. |
 | C5 C#5 D5 D#5 E5 F5 | Snapshot slots 1 to 6. Tap: recall it at the next bar (an empty slot says EMPTY). SAVE held + a slot: store the state there. Stored slots are lit. |
@@ -169,7 +169,8 @@ the arranger has in, the density and the form's settings. Shown only: Phase, Len
 ![The Delay page](img/screen-delay.png "Delay cheat sheet")
 
 The delay cheat sheet: for each voice, a note division and its time in ms at the tempo, for the delays and echoes of
-your own effects. The tempo is the one the header shows: the live one, or the followed one in EXT.
+your own effects. The tempo is the live one (the one the header shows); in EXT, where the header shows EXT, the
+followed one.
 
 ### GLO: Setup
 
@@ -194,9 +195,9 @@ channels) and the six slots to the FM-1's memory, as a Berlinan document on the 
 engine are not saved. After power-on the saved project is loaded and PLAY starts it from bar 1, as every Play does.
 
 - **SAVE while stopped** writes at once.
-- **SAVE while playing** is written at the next stop (the button, MIDI Stop or the arranger's end): writing flash
-  stops everything for a moment, the MIDI clock too. The SAVE button blinks and the header shows a dot until then, and
-  the screen says AT THE STOP.
+- **SAVE while playing** is written at the next stop (the button, MIDI Stop or the arranger's end), a moment after
+  the stop's MIDI Stop and note-offs have gone out: writing flash stops everything for a moment, the MIDI clock too.
+  The SAVE button blinks and the header shows a dot until then, and the screen says AT THE STOP.
 - **Slots:** SAVE held + a slot key (C5 to F5) stores the state at that moment; a tap recalls it at the next bar. The
   slots are saved with SAVE.
 - **Undo:** OCT-, 20 deep; a recall or Dice can be undone. Loading a project empties it.
@@ -212,12 +213,13 @@ power-on is a new universe.
 
 - **INT** (the default): the FM-1 is the clock master. It sends MIDI Start at tick 0, a clock pulse 24 times a beat and
   Stop over USB. The tempo is the project's (40 to 220, changed from the next bar).
-- **EXT:** it follows MIDI clock from USB, the TRS jack or both (EXT input). The tempo shown is the followed one. It
-  sends nothing. Sync and the input are set on the Setup page while stopped.
+- **EXT:** it follows MIDI clock from USB, the TRS jack or both (EXT input). The header shows EXT; the Delay page and
+  the convergence use the followed tempo. It sends nothing. Sync and the input are set on the Setup page while
+  stopped.
   - **PLAY in EXT** starts at once, at the tempo in store, and locks to the pulses as they arrive.
   - **MIDI Start (FA)** from the master waits for its first pulse (at most one clock) and that pulse is tick 0.
   - **MIDI Stop** stops it. If the pulses stop without a Stop (the router unplugged, the DAW paused), it holds the last
-    tempo and plays on; it never jumps, and stops only on MIDI Stop or PLAY.
+    tempo and plays on; it never jumps, and stops only on MIDI Stop, PLAY or the arranger's end.
 - Notes go out on USB only: the FM-1's TRS jack is an input.
 
 ---
@@ -289,7 +291,8 @@ you can reinstall. If even that fails twice, the chip's own update mode takes ov
 ### Recovering an FM-1 that won't start
 
 An FM-1 in the chip's own update mode shows a blank screen and neither M-UPGRADE nor `fm1_install.py` can see it. A
-script puts M-VAVE's firmware back, on a Mac, with the USB cable you have. From the source folder:
+script puts M-VAVE's firmware back, on a Mac with Apple's command line tools (it offers to install them) and an
+internet connection (it downloads its tools and the firmware), with the USB cable you have. From the source folder:
 
 ```
 bash base/bsp/tools/fm1_rescue.sh
@@ -297,9 +300,7 @@ bash base/bsp/tools/fm1_rescue.sh
 
 Plug the FM-1 in and switch it on when it waits. It catches the chip, saves a backup of the memory in `~/fm1-rescue`,
 and asks before it writes: type **yes**. It writes only the firmware area, never the bootloader or the FM-1's own
-settings, and checks what it writes; running it again is safe. Afterwards install Berlinan again. Felucca's
-[FM-1-transporter](https://github.com/kurogedelic/FM-1-transporter) (an RP2040 board wired to the USB lines) can
-still reach an FM-1 that never shows up.
+settings, and checks what it writes; running it again is safe. Afterwards install Berlinan again.
 
 ---
 

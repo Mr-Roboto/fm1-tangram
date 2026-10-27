@@ -4,11 +4,10 @@
 # Berlinan's tests: the engine (tests/host/engine_test.c: f64 against the host's IEEE binary64, the sine, and the
 # parts against RefTool's vectors; the states packed for the flash), the saved project (tests/host/project_test.c:
 # app/project.c on stubs of the platform and the transport), the live engine against Berlinan's on every script
-# (tests/host/equiv_test.c), the
-# firmware's own libc (tests/host/libc_test.c), the firmware free of float and double, the update path against
-# Berlinan's package (./build.sh first), the whole app in fm1-base's simulator (tests/scenarios/*.bln: the engine,
-# the panel, the clock, the saved state), with screenshots in app/build/scenarios/. fm1-base's own tests:
-# base/tests/run_tests.sh.
+# (tests/host/equiv_test.c), the firmware's own libc (tests/host/libc_test.c), the firmware free of float and double,
+# the update path against Berlinan's package (./build.sh first), the whole app in fm1-base's simulator
+# (tests/scenarios/*.bln: the engine, the panel, the clock, the saved state), with screenshots in app/build/scenarios/.
+# fm1-base's own tests: base/tests/run_tests.sh.
 #   tests/run_tests.sh
 set -u
 cd "$(dirname "$0")/.."
