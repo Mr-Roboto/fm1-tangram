@@ -26,20 +26,24 @@ play it from the panel: the keys, the buttons, the encoders and the screen. No l
 
 ## 1. Install
 
-You need the firmware package, `berlinan.fwsc` (`./build.sh` makes it in `app/build/`; see
-[BUILDING.md](../BUILDING.md)), a USB data cable and Python 3 with `mido` and `python-rtmidi`
-(`pip3 install mido python-rtmidi`). Connect the FM-1 and run, from the source folder:
+**From the browser.** Open the [install page](https://jiripisa.github.io/fm1-berlinan/install/) in Chrome or Edge,
+connect the FM-1 by USB (a data cable, straight to the computer) and press Install. The browser asks once to allow
+MIDI: allow it. Nothing is installed on the computer.
+
+**From the command line.** You need the firmware package (the site's download, `berlinan-X.Y.fwsc`, or
+`app/build/berlinan.fwsc` from `./build.sh`; see [BUILDING.md](../BUILDING.md)), a USB data cable and Python 3 with
+`mido` and `python-rtmidi` (`pip3 install mido python-rtmidi`). Connect the FM-1 and run, from the source folder:
 
 ```
 python3 base/tools/fm1_install.py app/build/berlinan.fwsc
 ```
 
-Don't unplug it while it is writing. When it finishes the FM-1 restarts into Berlinan and the script checks the
-identity. (fm1-base can also build a web installer page, `base/tools/make_site.py`; Berlinan has no published site
-yet, so the command line is the way.)
+Either way, don't unplug it while it is writing. When it finishes the FM-1 restarts into Berlinan, and the page or
+the script checks that it reports the version written.
 
-**Go back:** install M-VAVE's own firmware again (the FM-1 V15 file) with M-VAVE's updater, M-UPGRADE, or with the
-same script (`fm1_install.py V15.fwsc`).
+**Go back:** the install page's "Back to the stock firmware" writes M-VAVE's own firmware (FM-1 V15) again: you
+download the file from M-VAVE, the page checks it before it writes. M-VAVE's updater, M-UPGRADE, does it too, and so
+does the script (`fm1_install.py FM-1.fwsc`).
 
 > Installing other firmware is at your own risk. If the FM-1 ever won't start, see
 > [Recovering an FM-1 that won't start](#recovering-an-fm-1-that-wont-start).
@@ -51,7 +55,7 @@ same script (`fm1_install.py V15.fwsc`).
 1. **Connect.** Plug the FM-1 into the router with USB. The router sees a MIDI device, "FM-Berlinan". Route its
    output to your synthesizers: each voice has its own channel (the Perform page shows them; the Voice page changes
    one).
-2. **Play.** Press PLAY. The first piece is the Demo trio (Pluck 1, Bass, Pad) in A natural minor, from bar 1, with a
+2. **Play.** Press PLAY. The first piece is the Demo trio (Pluck 1, Pluck 2, Bass) in A natural minor, from bar 1, with a
    new seed. The FM-1 sends MIDI Start and clock (INT sync).
 3. **Mute and unmute.** Tap a voice key (F3 to B3): that voice goes quiet and its key goes dark. Tap again.
 4. **Move the harmony.** Press a white key from C4: degrees 1 to 7, at the next bar.
@@ -65,6 +69,8 @@ Not sure what a button does? Hold it for a second: a card says. Let go and nothi
 ---
 
 ## 3. Controls
+
+![A drawing of the FM-1 running Berlinan, each control labelled with what it does: the tables below say the same in words](img/fm1-panel.svg "The FM-1 (a drawing), running Berlinan")
 
 ### Keys
 
