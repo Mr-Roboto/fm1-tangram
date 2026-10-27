@@ -83,6 +83,9 @@ static int32_t project_repeats(const bl_project_t *p)
     return repeats;
 }
 
+/* the legitimization's ratchetProbability (nil: Legitimizer's 0.15), which the ambient arranger's scaling keeps */
+static f64 project_ratchet(const bl_project_t *p) { return p->has_ratchet ? p->ratchet_p : BL_RATCHET_DEFAULT; }
+
 /* ambientPeriodBars(project:): max(8, Int((bpm / Double(beatsPerBar)).rounded())) */
 static int32_t ambient_period(const bl_project_t *p)
 {
@@ -388,7 +391,7 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
     if (bl_is_mutable(p)) {
         bl_dec(s->generation, gen);
         uint64_t seed = bl_seed_derive(e->project.seed, "voice", s->voice.id, "mut", gen, (const char *)NULL);
-        bl_mutate(&s->voice, &e->project.key, seed, e->repeats, BL_RATCHET_DEFAULT);
+        bl_mutate(&s->voice, &e->project.key, seed, e->repeats, project_ratchet(&e->project));
         s->generation++;
     }
 }

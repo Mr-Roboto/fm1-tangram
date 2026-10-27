@@ -1,0 +1,7 @@
+# Ambient drift on its own seed with the ratchet probability 0.5: its arranger's ambient plateau scales the
+# legitimization's repeats (4 x 4 = 16) and keeps the ratchet probability, in windows of 240 ticks, to the ending
+# and its stop.
+template ambient
+ratchet 50
+window 240
+bars 800

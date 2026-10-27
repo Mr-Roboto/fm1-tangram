@@ -1,0 +1,7 @@
+# The full ensemble on its own seed with the legitimization's ratchet probability 0 (the FM-1's Ratchet knob OFF,
+# its default): 512 bars in windows of 240 ticks, no actions. Every mutation still draws its ratchet chance and
+# never takes it: no note ratchets.
+template full
+ratchet 0
+window 240
+bars 512

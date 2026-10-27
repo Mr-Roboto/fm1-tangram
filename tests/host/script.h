@@ -32,9 +32,9 @@ typedef struct {
     uint8_t voice, on;
 } bl_smute_t;
 
-/* a parsed script: arranger -1 none, else 0 off, 1 classic, 2 slow, 3 ambient; density -1 none */
+/* a parsed script: arranger -1 none, else 0 off, 1 classic, 2 slow, 3 ambient; density, ratchet -1 none */
 typedef struct {
-    int tpl, has_seed, arranger, density;
+    int tpl, has_seed, arranger, density, ratchet;
     uint64_t seed;
     bl_tick_t window;
     int32_t bars;
@@ -48,7 +48,8 @@ typedef struct {
 int bl_script_parse(const char *text, bl_script_t *s, char *err, int errmax);
 void bl_script_free(bl_script_t *s);
 
-/* the project the app holds before play: the template in A minor, the seed, the arranger, the density */
+/* the project the app holds before play: the template in A minor, the seed, the arranger, the density, the
+ * ratchet */
 void bl_script_project(const bl_script_t *s, bl_project_t *out);
 
 /* one play of a script; emit gets each line (without "\n") and returns nonzero to stop the run. text: T lines (the

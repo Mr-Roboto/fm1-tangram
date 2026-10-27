@@ -1,0 +1,13 @@
+# The full ensemble with the ratchet probability 0, 256 bars in windows of 240 ticks, then the full ensemble loaded
+# again on another seed at tick 489600 (mid-bar: it takes over on the next bar line, tick 491520).
+# AppServices.applyTemplate takes the template as it is, its legitimization nil, so from there the mutations ratchet
+# at the Mac's default 0.15; before it, no note ratchets. Degrees and a reseed on the way (the reseed's fresh engine
+# is built from the app project, ratchet 0 included; the running engine keeps its own project).
+template full
+ratchet 0
+window 240
+bars 256
+at 61440 transpose 3
+at 122880 reseed 0x00C0FFEE
+at 184320 transpose 0
+at 489600 load full 0x5EED0128

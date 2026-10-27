@@ -120,10 +120,10 @@ static int scr_parse_action(char **w, int n, bl_sact_t *a)
 int bl_script_parse(const char *text, bl_script_t *s, char *err, int errmax)
 {
     memset(s, 0, sizeof *s);
-    s->arranger = s->density = -1;
-    int seen[6] = {0}, line = 0;
+    s->arranger = s->density = s->ratchet = -1;
+    int seen[7] = {0}, line = 0;
     bl_tick_t last = 0, last_mute = 0;
-    static const char *const HEADS[6] = {"template", "seed", "arranger", "density", "window", "bars"};
+    static const char *const HEADS[7] = {"template", "seed", "arranger", "density", "window", "bars", "ratchet"};
     static const char *const ARRANGERS[4] = {"off", "classic", "slow", "ambient"};
     const char *p = text;
     while (*p) {
@@ -188,7 +188,7 @@ int bl_script_parse(const char *text, bl_script_t *s, char *err, int errmax)
             s->mute[s->nmute++] = m;
             continue;
         }
-        int h = scr_word_index(HEADS, 6, w[0]);
+        int h = scr_word_index(HEADS, 7, w[0]);
         if (h < 0 || n != 2) {
             snprintf(err, (size_t)errmax, "line %d: unknown line or expected '%s VALUE'", line, w[0]);
             return -1;
@@ -205,7 +205,8 @@ int bl_script_parse(const char *text, bl_script_t *s, char *err, int errmax)
         case 2: bad = (s->arranger = scr_word_index(ARRANGERS, 4, w[1])) < 0; break;
         case 3: bad = v < 0 || v > 100; s->density = (int)v; break;
         case 4: bad = v < 1; s->window = v; break;
-        default: bad = v < 1; s->bars = (int32_t)v; break;
+        case 5: bad = v < 1; s->bars = (int32_t)v; break;
+        default: bad = v < 0 || v > 50; s->ratchet = (int)v; break;
         }
         if (bad) {
             snprintf(err, (size_t)errmax, "line %d: bad value '%s'", line, w[1]);
@@ -254,6 +255,10 @@ void bl_script_project(const bl_script_t *s, bl_project_t *p)
     case 3: p->has_arr = 1; p->arr = bl_arr_ambient; break;
     }
     if (s->density >= 0) p->density = scr_density_of(s->density);
+    if (s->ratchet >= 0) {              /* Legitimizer.Config(repeats: 4, ratchetProbability: Double(K) / 100) */
+        p->has_ratchet = 1;
+        p->ratchet_p = f64_div(f64_from_i64(s->ratchet), F64(0x4059000000000000));   /* 100.0 */
+    }
 }
 
 /* ----------------------------------------------------------------- run --- */

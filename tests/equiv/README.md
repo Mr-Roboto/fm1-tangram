@@ -37,11 +37,13 @@ Each of these at most once, anywhere in the file. `template`, `window` and `bars
 | `seed 0xHEX` | `masterSeed`. Without it, the template's own seed (`0xBE1271A9`, `2477861893`, `0x0A3B11ED`). |
 | `arranger off\|classic\|slow\|ambient` | `classic`, `slow`, `ambient`: `arrangement = .classicArc`, `.slowBuild`, `.ambientPlateau` (as `AppServices.setArrangerForm`). `off`: `(arrangement ?? ArrangementConfig())` with `enabled = false` (as `AppServices.setArrangerEnabled(false)` while stopped). Without it, the template's own (`ambient`: `.ambientPlateau`; the others none). |
 | `density K` | `density = max(0, min(1, Double(K) / 100))`, K in 0–100. Without it, none (1.0). |
+| `ratchet K` | `legitimization = Legitimizer.Config(repeats: legitimization?.repeats ?? 4, ratchetProbability: Double(K) / 100)`, K in 0–50 (the config's precondition 0...0.5; 0 disables ratchets). Without it, the template's nil (`ratchetProbability` nil: 0.15). The FM-1's Ratchet knob (`proj_to_engine`: always set, OFF is 0). |
 | `window T` | The render window in ticks, T ≥ 1. |
 | `bars N` | Length: N bars of 4/4 = N × 3840 ticks (960 PPQN; every template is 4/4). |
 
-The order of application: the template, its key, the seed, the arranger, the density. The engine is
-`LiveEngine(project:)` of the result.
+The order of application: the template, its key, the seed, the arranger, the density, the ratchet. The engine is
+`LiveEngine(project:)` of the result. The ratchet is part of the app project, so a `reseed` keeps it; a `load` takes
+the template as it is, its legitimization nil (0.15).
 
 One line more belongs to the runtime, not to the engine, and is used only by the `.midiscript`s (below): any number
 of times, the ticks never smaller than the previous `mute` line's.
@@ -140,7 +142,8 @@ and hash the result. `equiv_test --text FILE` writes the C engine's lines the sa
 and `notes-hash <16 hex digits>`, FNV-1a 64 (as the state hash) over the script's `N` lines, each with its `\n`; the
 app's own render (`tests/scenarios/engine_load.bln`) is checked against that value for `live_selfrender`. On the
 first difference it prints the line number, both lines and the last `H` line that matched. Each script but
-`live_selfrender` is there three times, in windows of 240, 960 and 37 ticks (the suffix `_240`, `_960`, `_37`): the
+`live_selfrender` and the `live_ratchet_*` (windows of 240 only: the ratchet changes the mutation, not how the
+windows split) is there three times, in windows of 240, 960 and 37 ticks (the suffix `_240`, `_960`, `_37`): the
 notes and the state are the same, the windows split differently (37 splits every change and every bar line inside a
 window).
 
@@ -151,6 +154,10 @@ window).
 | `live_actions_{demo,full,ambient}` | Every action three times or more over 400 bars, on and off bar lines, some pending at a 16-bar line (in an `H` state), `bpart` twice in a bar, keys to other modes (pentatonic too: another scale size) and back, densities 35, 100, 0 and 100, saves and recalls, reseeds, the arranger on and off, ids the running engine lacks, and three loads (the last back to the template). |
 | `live_arranger_{classic,slow,ambient}` | The full ensemble under the arranger preset, 800 bars, to the ending and its stop. |
 | `live_arranger_toggle` | The full ensemble, the arranger switched on at bar 20 (it adopts the ensemble: the bed), three advances, the bass locked after a nudge, the arranger off at bar 128 and on again at bar 208 (over the voices left playing: a build). Off at 128 and not later: left on, the arranger reaches its ending at bar 175. |
+| `live_ratchet_off_full_240` | The full ensemble on its own seed with `ratchet 0` (the FM-1's default), 512 bars, no actions: every mutation still draws its ratchet chance and never takes it, so no `N` line has a ratchet above 1; the notes are `live_plain_full_240`'s but for that field (the ratchet is the mutation's last draw). |
+| `live_ratchet_50_full_240` | The same with `ratchet 50`, the knob's top. |
+| `live_ratchet_50_ambient_240` | Ambient drift with `ratchet 50`: the ambient arranger scales the repeats (16) and keeps the ratchet probability (`LiveEngine.init`), to the ending and its stop. |
+| `live_ratchet_load_full_240` | The full ensemble with `ratchet 0`, two degrees and a reseed (its fresh engine from the app project, the ratchet in it), then `load full` on another seed at tick 489600: from its bar line (491520) the template's nil, 0.15. No ratchet above 1 before it. |
 | `live_selfrender` | The full ensemble on its own seed, 128 bars, no actions, in windows of 240 only: what `tests/scenarios/engine_load.bln` has the app render (`selfrender full 128`), expecting this script's notes-hash. |
 
 The C engine's queues are bounded (`app/engine/live.h`) and the run's buffers too (`script.c`); a script that goes

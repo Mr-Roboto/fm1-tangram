@@ -1597,7 +1597,10 @@ static int tpl_dump(const bl_project_t *p, const char *name, char *buf, int size
         n = tpl_put(buf, n, size, "arrangement -\n");
     if (p->density.bits == 0x3FF0000000000000u) n = tpl_put(buf, n, size, "density -\n");
     else n = tpl_put(buf, n, size, "density %016llx\n", (unsigned long long)p->density.bits);
-    n = tpl_put(buf, n, size, "bpart -\ntension -\nlegitimization -\nvelocity -\nslides -\nunported - - -\n");
+    n = tpl_put(buf, n, size, "bpart -\ntension -\n");
+    if (p->has_ratchet) n = tpl_put(buf, n, size, "legitimization 4 %016llx\n", (unsigned long long)p->ratchet_p.bits);
+    else n = tpl_put(buf, n, size, "legitimization -\n");
+    n = tpl_put(buf, n, size, "velocity -\nslides -\nunported - - -\n");
     for (int i = 0; i < p->nvoices; i++) {
         const bl_vcfg_t *v = &p->voice[i];
         char steps[8] = "-";

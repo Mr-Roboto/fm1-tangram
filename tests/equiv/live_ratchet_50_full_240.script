@@ -1,0 +1,6 @@
+# The full ensemble on its own seed with the legitimization's ratchet probability 0.5 (the Ratchet knob's top):
+# 512 bars in windows of 240 ticks, no actions. About every other mutation arms one note's 2-3x retrigger.
+template full
+ratchet 50
+window 240
+bars 512

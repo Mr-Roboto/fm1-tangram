@@ -55,7 +55,9 @@ typedef struct {
     f64 value[BL_MAX_VOICES];
 } bl_scene_t;
 
-/* Project: has_arr 0 is arrangement nil; density nil is 1; scene_by_phase[phase] the index of the scene the
+/* Project: has_arr 0 is arrangement nil; density nil is 1; has_ratchet 0 is the legitimization's
+ * ratchetProbability nil (0.15, as every template has it), else ratchet_p, 0-0.5 (0: no ratchets; the legitimization's
+ * repeats stay the default 4, as no template or app changes them); scene_by_phase[phase] the index of the scene the
  * arranger's phase fires (sceneByPhase), -1 for none */
 typedef struct {
     uint64_t seed;
@@ -66,6 +68,8 @@ typedef struct {
     bl_sched_t transposition;
     bl_arrcfg_t arr;
     f64 density;
+    uint8_t has_ratchet;
+    f64 ratchet_p;
     int8_t scene_by_phase[7];
     bl_scene_t scene[BL_MAX_SCENES];
 } bl_project_t;

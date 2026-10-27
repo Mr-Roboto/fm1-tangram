@@ -64,6 +64,8 @@ struct Script {
     var seed: UInt64? = nil
     var arranger: ArrangerSetting? = nil
     var density: Int? = nil
+    /// `ratchet K`: the legitimization's ratchetProbability K / 100, K 0-50 (the FM-1's Ratchet knob).
+    var ratchet: Int? = nil
     var window: Tick = 0
     var bars = 0
     var actions: [(tick: Tick, action: ScriptAction)] = []
@@ -71,7 +73,7 @@ struct Script {
     /// engine never sees it: the script mode ignores it, the midi mode (Midi.swift) applies it.
     var mutes: [(voice: String, tick: Tick, on: Bool)] = []
 
-    /// The project the app holds before play: the template, then the script's seed, arranger and density.
+    /// The project the app holds before play: the template, then the script's seed, arranger, density and ratchet.
     var initialProject: Project {
         var p = template.project
         if let seed { p.masterSeed = seed }
@@ -86,6 +88,10 @@ struct Script {
         case .ambient?: p.arrangement = .ambientPlateau
         }
         if let density { p.density = max(0, min(1, Double(density) / 100)) }
+        if let ratchet {
+            p.legitimization = Legitimizer.Config(repeats: p.legitimization?.repeats ?? 4,
+                                                  ratchetProbability: Double(ratchet) / 100)
+        }
         return p
     }
 
@@ -138,6 +144,9 @@ struct Script {
             case "density":
                 guard let k = Script.integer(value), (0...100).contains(k) else { throw fail("density 0-100") }
                 density = k
+            case "ratchet":
+                guard let k = Script.integer(value), (0...50).contains(k) else { throw fail("ratchet 0-50") }
+                ratchet = k
             case "window":
                 guard let w = Script.integer(value), w >= 1 else { throw fail("window must be at least 1") }
                 window = Tick(w)
