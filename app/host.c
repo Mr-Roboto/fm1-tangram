@@ -65,7 +65,7 @@
  *   dumpmidi [FILE]          start (FILE) or stop logging "tick status d1 d2" (hex bytes) for every message the
  *                            transport sends, in send order; a flush's messages carry the sounding tick
  *   cmpmidi FILE             the dump so far against FILE (a .midiref), line by line: midicmp, midilines
- *   dumpcount ST D1 D2 [TICK]   the dump's lines with these bytes (hex; at TICK, if given): expect dumpcount
+ *   dumpcount ST D1 D2 [TICK]   the dump's lines with these bytes (hex, * any; at TICK, if given): expect dumpcount
  *   dumpis K ST D1 D2        the dump's K-th line from its end (1 the last) has these bytes; else a FAIL line and
  *                            dumpbad one more
  *   rt play | stop | tempo BPM | load TEMPLATE [SEED] | mute VOICE 0|1 | channel VOICE CH | sync int|ext |
@@ -339,8 +339,9 @@ static void cmpmidi(const char *path)
         fclose(b);
 }
 
-/* the dump's lines with st d1 d2 (at tick, unless it is -1): how many; the k-th from the end (k > 0) in *kth */
-static int dump_scan(uint32_t st, uint32_t d1, uint32_t d2, long long tick, int k, char *kth, int max)
+/* the dump's lines with st d1 d2 (each -1: any; at tick, unless it is -1): how many; the k-th from the end (k > 0) in
+ * *kth */
+static int dump_scan(long st, long d1, long d2, long long tick, int k, char *kth, int max)
 {
     FILE *f;
     char line[64];
@@ -355,8 +356,8 @@ static int dump_scan(uint32_t st, uint32_t d1, uint32_t d2, long long tick, int 
         return -1;
     while (fgets(line, sizeof line, f)) {
         snprintf(ring[total++ % 64], 64, "%s", strtok(line, "\n") ? line : "");
-        if (sscanf(line, "%lld %x %x %x", &t, &a, &b, &c) == 4 && a == st && b == d1 && c == d2
-            && (tick < 0 || t == tick))
+        if (sscanf(line, "%lld %x %x %x", &t, &a, &b, &c) == 4 && (st < 0 || a == (unsigned)st)
+            && (d1 < 0 || b == (unsigned)d1) && (d2 < 0 || c == (unsigned)d2) && (tick < 0 || t == tick))
             n++;
     }
     fclose(f);
@@ -364,6 +365,8 @@ static int dump_scan(uint32_t st, uint32_t d1, uint32_t d2, long long tick, int 
         snprintf(kth, (size_t)max, "%s", k <= total && k <= 64 ? ring[(total - k) % 64] : "(none)");
     return n;
 }
+
+static long dump_byte(const char *w) { return !strcmp(w, "*") ? -1 : (long)strtoul(w, 0, 16); }   /* "*": any */
 
 /* ---- the transport's controls */
 static int rt_cmd(const char *a, const char *b, const char *c)
@@ -725,7 +728,7 @@ static int rt_expect(const char *what, int *got)   /* the transport's, under the
         for (*got = 0, c = 0; c < 16; c++)
             for (n = 0; n < 128; n++)
                 *got += (int)((!what[8] || c == atoi(what + 8)) && (!dot || n == atoi(dot + 1))
-                              && rt.snd[c][n >> 5] >> (n & 31) & 1u);
+                              && rt.snd[c][n]);
     } else if (!strcmp(what, "per_ms"))
         *got = per_ms;
     else if (!strcmp(what, "dumpcount"))
@@ -769,8 +772,7 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
     } else if (!strcmp(cmd, "cmpmidi"))
         cmpmidi(a);
     else if (!strcmp(cmd, "dumpcount")) {
-        dump_count = dump_scan((uint32_t)strtoul(a, 0, 16), (uint32_t)strtoul(b, 0, 16), (uint32_t)strtoul(c, 0, 16),
-                               d[0] ? strtoll(d, 0, 10) : -1, 0, NULL, 0);
+        dump_count = dump_scan(dump_byte(a), dump_byte(b), dump_byte(c), d[0] ? strtoll(d, 0, 10) : -1, 0, NULL, 0);
         printf("  dumpcount %s %s %s%s%s: %d\n", a, b, c, d[0] ? " at " : "", d, dump_count);
     } else if (!strcmp(cmd, "dumpis")) {
         char kth[64], want[16];

@@ -108,6 +108,34 @@ expect tick 30850
 expect sounding0 0
 expect sounding5 2
 tap PLAY
+# a switch to the same piece in bar 20: on bar 21's line (80640) the new drone strikes E3 and A3 on channel 1 while
+# the old one (struck on bars 0, 8 and 16) still holds them; the old drone's offs on bar 24's line (92160) end its
+# strike, the new one's still sound: the stop in bar 26 silences them. Every note-on gets its note-off
+rt load ambient
+dumpmidi app/build/scenarios/stop_flush/same.txt
+tap PLAY
+wait 68400
+expect tick 78772
+rt load ambient
+wait 18400
+expect tick 99969
+expect sounding0.52 1
+expect sounding0.57 1
+tap PLAY
+expect playing 0
+dumpcount 90 34 *
+expect dumpcount 4
+dumpcount 80 34 *
+expect dumpcount 4
+dumpcount 90 39 *
+expect dumpcount 4
+dumpcount 80 39 *
+expect dumpcount 4
+dumpis 1 B0 7B 00
+dumpis 2 80 39 00
+dumpis 3 80 34 00
+dumpis 4 FC 00 00
+expect sounding 0
 # the arranger's ending: Ambient drift's ambient plateau ends on bar 288 (tick 1105920, 960 s from tick 0); the
 # transport stops there by itself once that tick is out (the drone's last off is on it: nothing left to flush)
 rt load ambient

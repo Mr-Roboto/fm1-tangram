@@ -36,7 +36,8 @@
  *   never past the next pulse; after RT_FREEWHEEL_MS without one it runs on at that rate (the router unplugged, the
  *   DAW paused), and the next pulse takes up from the tick reached, never back. FA / FB start, FC stops. The tempo
  *   (rt_bpm) is the followed one.
- * - The registry knows what went out on the wire (the tick sends it), not what was scheduled. */
+ * - The registry knows what went out on the wire (the tick sends it), not what was scheduled, so it counts each key's
+ *   ons: an old piece's off on a key the new piece has struck again (a template switch) leaves it sounding. */
 #include "runtime.h"
 
 #define RT_WINDOW 240                   /* the windows' grid, in ticks: the longest window */
@@ -90,7 +91,7 @@ static struct {
     int32_t swap_rate;
     bl_tick_t pulse_tick;                /* EXT: the last pulse's tick */
     uint32_t last_pulse, fa_ms, pulse_ms[RT_RING];   /* its ms; the FA's; the latest pulses' ms (npm of them) */
-    uint32_t snd[16][4];                 /* NoteRegistry: a bit per (channel, note) sounding */
+    uint8_t snd[16][128];                /* NoteRegistry: the note-ons per (channel, note) still to be ended */
 } rt;
 
 #ifdef PLAT_HOST
@@ -112,14 +113,17 @@ static bl_tick_t rt_next_bar(bl_tick_t t)
 }
 
 /* ---- the wire (the tick's) */
-static void rt_send(bl_tick_t tick, uint32_t pkt)
+/* NoteRegistry.track: an on sounds (whatever its velocity), an off ends one on of its key (one engine's off never
+ * ends another's strike of the same key: an old piece's drone under a new one's); a flush's off (all) ends them all */
+static void rt_send(bl_tick_t tick, uint32_t pkt, int all)
 {
-    uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu, b = 1u << (n & 31u);
+    uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
+    uint8_t *k = &rt.snd[st & 15u][n];
     plat_midi_out(pkt);
-    if ((st & 0xF0u) == 0x90u)           /* NoteRegistry.track: an on sounds (whatever its velocity), an off ends it */
-        rt.snd[st & 15u][n >> 5] |= b;
-    else if ((st & 0xF0u) == 0x80u)
-        rt.snd[st & 15u][n >> 5] &= ~b;
+    if ((st & 0xF0u) == 0x90u && *k < 255u)
+        ++*k;
+    else if ((st & 0xF0u) == 0x80u && *k)
+        *k = all ? 0 : (uint8_t)(*k - 1u);
 #ifdef PLAT_HOST
     host_sent(tick, pkt);
 #else
@@ -141,8 +145,8 @@ static void rt_now(uint32_t pkt)
     e->vid = BL_VID_NONE;
 }
 
-/* NoteRegistry.flushEvents (one channel, or ch -1 all), locked: the offs by (channel, note), then CC 123 per channel
- * that had one; the registry lets the notes go as their offs go out */
+/* NoteRegistry.flushEvents (one channel, or ch -1 all), locked: an off for every key sounding, by (channel, note),
+ * then CC 123 per channel that had one; the registry lets the keys go as their offs go out */
 static void rt_flush(int ch)
 {
     uint32_t touched = 0, c, n;
@@ -150,7 +154,7 @@ static void rt_flush(int ch)
         if (ch >= 0 && c != (uint32_t)ch)
             continue;
         for (n = 0; n < 128u; n++)
-            if (rt.snd[c][n >> 5] >> (n & 31u) & 1u) {
+            if (rt.snd[c][n]) {
                 rt_now(rt_pkt(0x80u | c, n, 0));
                 touched |= 1u << c;
             }
@@ -311,7 +315,7 @@ void app_tick(void)
     rt_midi_in(now);
     for (; room && rt.nn; room--) {      /* what goes out at once, first */
         rt_ev_t *e = &rt_nq[rt.nr];
-        rt_send(e->tick, e->pkt);
+        rt_send(e->tick, e->pkt, 1);
         rt.nr = (uint16_t)((rt.nr + 1u) & (RT_NOW - 1u));
         rt.nn--;
     }
@@ -319,7 +323,7 @@ void app_tick(void)
         return;
     for (; room && rt.qn && rt_q[rt.qr].tick <= rt.tick && (rt.stop_at < 0 || rt_q[rt.qr].tick <= rt.stop_at);
          room--) {                       /* then what is due */
-        rt_send(rt_q[rt.qr].tick, rt_q[rt.qr].pkt);
+        rt_send(rt_q[rt.qr].tick, rt_q[rt.qr].pkt, 0);
         rt.qr = (uint16_t)((rt.qr + 1u) & (RT_QUEUE - 1u));
         rt.qn--;
     }
