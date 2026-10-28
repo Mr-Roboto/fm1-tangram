@@ -1,4 +1,20 @@
-# Berlinan for the M-VAVE FM-1
+# Tangram for the M-VAVE FM-1
+
+Tangram is an independent firmware fork of [Berlinan for the FM-1](https://github.com/jiripisa/fm1-berlinan)
+by Jiří Píša, maintained at [Mr-Roboto/fm1-tangram](https://github.com/Mr-Roboto/fm1-tangram).
+`main` preserves the upstream baseline; Tangram development takes place on `dev/tangram`.
+
+Its build name is `TANGRAM`, with USB manufacturer `Mr. Roboto` and product `FM-Tangram`.
+The identity prefix is `FM-1_975`: development builds use `FM-1_97500`, and releases append major, minor
+and patch as two digits each (`FM-1_975XXYYZZ`). The planned v0.1.0 identity is `FM-1_975000100`.
+The pinned fm1-base identity generator supports this format without changes.
+
+This identity change retains Berlinan's engine, update loader and MIDI functionality. Original copyright
+notices, Jiří Píša's attribution, GPL-2.0-or-later licensing and dependency licences are preserved.
+The documentation and website links below describe the inherited Berlinan baseline; its hosted installer
+and emulator serve upstream Berlinan.
+
+## Berlinan heritage
 
 Berlinan is a generative sequencer in the Berlin School tradition: a small ensemble of voices that repeat, phase
 against each other on loops of unequal length, and earn their mutations over time. This is its firmware for the
@@ -21,7 +37,7 @@ Install it from the browser: open the [install page](https://jiripisa.github.io/
 Edge, connect the FM-1 by USB and press Install; the same page puts M-VAVE's firmware back. You can also
 [try it in the browser](https://jiripisa.github.io/fm1-berlinan/emu/), its MIDI out to your synths over Web MIDI.
 
-Its identity is `FM-1_23XXYYZZ` (0.5.1 answers `FM-1_23000501`). It reads no other firmware's projects or samples: a
+Upstream Berlinan's identity is `FM-1_23XXYYZZ` (0.5.1 answers `FM-1_23000501`). It reads no other firmware's projects or samples: a
 saved record it does not recognise, another firmware's, is ignored, and it starts on the Demo trio with a fresh seed.
 
 ## Where to read
@@ -47,7 +63,7 @@ saved record it does not recognise, another firmware's, is ignored, and it start
 
 ```
 git submodule update --init --recursive
-./build.sh                    # app/build/berlinan.fwsc
+./build.sh                    # app/build/tangram.fwsc
 sh tests/run_tests.sh         # the host tests and the simulator scenarios
 ```
 

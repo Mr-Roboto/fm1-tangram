@@ -1,8 +1,8 @@
-# Berlinan's build settings (fm1-base's tools/build.py: ./build.sh)
-name = "BERLINAN"              # the build's files: berlinan.fwsc, berlinan-X.Y.fwsc
-id_prefix = "FM-1_23"          # package identity: dev FM-1_2300, releases FM-1_23XXYYZZ (its own on thefirmwarehub.com)
-usb_manufacturer = "Berlinan"
-usb_product = "FM-Berlinan"
+# Tangram's build settings (fm1-base's tools/build.py: ./build.sh)
+name = "TANGRAM"               # the build's files: tangram.fwsc, tangram-X.Y.Z.fwsc
+id_prefix = "FM-1_975"         # package identity: dev FM-1_97500, releases FM-1_975XXYYZZ
+usb_manufacturer = "Mr. Roboto"
+usb_product = "FM-Tangram"
 ble = false                    # MIDI goes out over USB only
 usb_audio_in = false           # the FM-1 makes no sound
 usb_audio_out = false
@@ -13,6 +13,6 @@ o2 = ["engine/*.c", "engine/softfloat/*.c"]   # the engine, each file its own un
 vendored = ["engine/softfloat/"]   # SoftFloat's numbers are not addresses: the register check skips it
 # the site
 tagline = "A Berlin School MIDI sequencer for the FM-1"
-repo = "https://github.com/jiripisa/fm1-berlinan"
+repo = "https://github.com/Mr-Roboto/fm1-tangram"
 licence = "GPL-2.0-or-later"
 credits = "Its engine is a C translation of Berlinan for macOS by Jiří Píša, with Berkeley SoftFloat for its arithmetic."   # after the installer's own line on fm1-base, felucca-bsp and Felucca
