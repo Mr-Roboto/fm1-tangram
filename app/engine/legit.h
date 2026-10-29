@@ -31,7 +31,7 @@ int bl_anchor_ticks(int anchor, bl_tick_t out[2]);
 
 /* Legitimizer.advanceAtLoopBoundary, in place: a repeating pattern counts down, the last play makes it established */
 void bl_advance_boundary(bl_pattern_t *p);
-/* Legitimizer.isMutable: established and unlocked; Tangram ARP is never
+/* Legitimizer.isMutable: established and unlocked; Tangram ARP/MOTIF are never
  * automatically mutable. This does not lock it or prevent manual regeneration. */
 int bl_is_mutable(const bl_pattern_t *p);
 

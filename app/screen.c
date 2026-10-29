@@ -18,7 +18,7 @@ static const char *const TPL_TITLE[BL_NTPL] = {"Demo trio", "Full ensemble", "Am
 static const char *const VID_NAME[BL_NVIDS] = {"Pluck 1", "Pluck 2", "Bass", "Pad", "Lead", "Heartbeat", "Drone"};
 /* the generators (BL_GEN_ order: GeneratorID's raw values, in words) */
 static const char *const GEN_NAME[BL_NGENS] = {"SEED PROCEDURE", "PULSING BASS", "STAGED PLUCK", "BASS MELODY", "CHORD LAYER",
-                                               "HEARTBEAT", "DRONE", "ARP"};
+                                               "HEARTBEAT", "DRONE", "ARP", "MOTIF"};
 /* the arranger's phases (ArrangementPhase), as the Mac's panel and horizon label them */
 static const char *const PHASE_NAME[7] = {"BUILD", "BED", "VAR", "B-PART", "PAYOFF", "SUBTR", "END"};
 
@@ -890,7 +890,8 @@ static int horizon(hz_t *hz)
     for (i = 0; i < nlanes; i++) {       /* the nearest mutation: an active, unlocked voice still repeating */
         const lane_t *l = &lane[i];
         int32_t per = (int32_t)(l->pat->length / BL_TICKS_PER_BAR), bars;
-        if (!l->active || l->locked || l->remaining < 0 || l->pat->generator == BL_GEN_ARP)
+        if (!l->active || l->locked || l->remaining < 0 || l->pat->generator == BL_GEN_ARP ||
+            l->pat->generator == BL_GEN_MOTIF)
             continue;
         bars = l->remaining * (per > 1 ? per : 1);
         if (best < 0 || bars < best_bars)

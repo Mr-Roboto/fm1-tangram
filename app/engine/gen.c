@@ -295,6 +295,61 @@ int bl_make_arp(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_t
     return dropped;
 }
 
+/* ----------------------------------------------------- Tangram stable MOTIF --- */
+/* Non-chord scale neighbors inside the surrounding ascending contour. The
+ * perfect-fourth cap is deliberately conservative, including in sparse scales.
+ * Wraps and phrase ends are left alone; this is not loop-boundary correction. */
+static int motif_candidates(const bl_key_t *key, const bl_pattern_t *p, int i, const int chord[4], int out[2])
+{
+    int count = key->scale.count, n = 0;
+    int32_t previous = bl_resolve(key, p->note[i - 1].pitch, 0);
+    int32_t next = bl_resolve(key, p->note[i + 1].pitch, 0);
+    int32_t original = bl_resolve(key, p->note[i].pitch, 0);
+    if (previous >= original || original >= next) return 0;
+    for (int delta = -1; delta <= 1; delta += 2) {
+        int d = p->note[i].pitch.degree + delta, is_chord = 0;
+        if (d < 0 || d >= 2 * count) continue;
+        for (int j = 0; j < 4; j++) is_chord |= d % count == chord[j];
+        if (is_chord) continue;
+        int32_t midi = bl_resolve(key, degree(d), 0);
+        if (midi > previous && midi < next && midi - previous <= 5 && next - midi <= 5)
+            out[n++] = d;
+    }
+    return n;
+}
+
+int bl_make_motif(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_tick_t length, bl_pattern_t *out)
+{
+    int omitted = bl_make_arp(cfg, key, seed, length, out);
+    out->generator = BL_GEN_MOTIF;
+    int budget = out->n / 8;
+    if (!budget) return omitted;        /* empty, very short, or malformed scale */
+    int chord[4], midpoint = out->n;
+    for (int j = 0; j < 4; j++) chord[j] = out->note[j].pitch.degree;
+    for (int i = 1; i < out->n; i++)
+        if (out->note[i].position >= (out->length + 1) / 2) {
+            midpoint = i;
+            break;
+        }
+    bl_rng_t r;
+    bl_rng_seed(&r, seed);
+    uint8_t blocked[BL_MAX_NOTES] = {0};
+    for (int change = 0; change < budget; change++) {
+        uint8_t eligible[BL_MAX_NOTES];
+        int n = 0, candidates[2];
+        for (int i = 1; i + 1 < out->n; i++)
+            if (i != midpoint && !blocked[i] && motif_candidates(key, out, i, chord, candidates))
+                eligible[n++] = (uint8_t)i;
+        if (!n) break;                 /* never force an unsuitable replacement */
+        int i = eligible[bl_rand_index(&r, n)];
+        int nc = motif_candidates(key, out, i, chord, candidates);
+        out->note[i].pitch.degree = candidates[bl_rand_index(&r, nc)];
+        /* Each changed tone remains surrounded by its original chord tones. */
+        blocked[i - 1] = blocked[i] = blocked[i + 1] = 1;
+    }
+    return omitted;
+}
+
 /* PatternFactory.make */
 int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint64_t seed, bl_pattern_t *out)
 {
@@ -331,6 +386,8 @@ int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint6
         break;
     case BL_GEN_ARP:
         return bl_make_arp(cfg, key, seed, bl_ticks_per_bar(M), out);
+    case BL_GEN_MOTIF:
+        return bl_make_motif(cfg, key, seed, bl_ticks_per_bar(M), out);
     default:                    /* not a ported generator: an empty bar */
         begin(out, cfg->kind, bl_ticks_per_bar(M), seed);
         break;

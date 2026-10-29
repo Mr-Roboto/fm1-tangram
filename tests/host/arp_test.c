@@ -39,9 +39,9 @@ static void test_scales(void)
         {0,4,7,11}, {0,3,7,11}, {0,4,6,10},
     };
     const int ids[] = {BL_GEN_SEED_PROCEDURE, BL_GEN_PULSING_BASS, BL_GEN_STAGED_PLUCK, BL_GEN_BASS_MELODY,
-                       BL_GEN_CHORD_LAYER, BL_GEN_HEARTBEAT, BL_GEN_DRONE, BL_GEN_ARP};
-    CHECK(BL_NMODES == 23 && BL_NGENS == 8, "scale and generator counts");
-    for (int i = 0; i < 8; i++) CHECK(ids[i] == i, "generator ID %d unchanged/appended", i);
+                       BL_GEN_CHORD_LAYER, BL_GEN_HEARTBEAT, BL_GEN_DRONE, BL_GEN_ARP, BL_GEN_MOTIF};
+    CHECK(BL_NMODES == 23 && BL_NGENS == 9, "scale and generator counts");
+    for (int i = 0; i < 9; i++) CHECK(ids[i] == i, "generator ID %d unchanged/appended", i);
     for (int m = 0; m < 23; m++) {
         for (int root = 0; root < 12; root++) {
             bl_key_t k = key(m, root);

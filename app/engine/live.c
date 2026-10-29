@@ -50,11 +50,14 @@ static bl_vstate_t *state_of(bl_live_t *e, uint8_t vid)
 static void make_pattern(const bl_project_t *p, int32_t repeats, const bl_vcfg_t *c, uint64_t seed,
                          const bl_sched_t *sched, bl_pattern_t *out)
 {
-    if (c->gen.kind == BL_GEN_ARP) {
+    if (c->gen.kind == BL_GEN_ARP || c->gen.kind == BL_GEN_MOTIF) {
         /* Generate on the adjusted duration so longer loops also fill their grid.
          * Other generators retain withLength's existing truncate/extend semantics. */
         bl_tick_t length = BL_TICKS_PER_BAR + c->phase_steps * (BL_PPQN / 4);
-        bl_make_arp(&c->gen, &p->key, seed, length, out);
+        if (c->gen.kind == BL_GEN_MOTIF)
+            bl_make_motif(&c->gen, &p->key, seed, length, out);
+        else
+            bl_make_arp(&c->gen, &p->key, seed, length, out);
         out->remaining = (int16_t)repeats;
         return;
     }
