@@ -39,7 +39,7 @@ static bl_vcfg_t voice(const char *id, uint8_t role, uint8_t low, uint8_t high, 
     v.ref_c = ref_c;
     v.channel = channel;
     v.anchor = BL_ANCHOR_NONE;
-    v.gen = (bl_gencfg_t){kind, a, b};
+    v.gen = (bl_gencfg_t){kind, a, b, BL_DIR_UP, BL_GROOVE_STRAIGHT};
     return v;
 }
 

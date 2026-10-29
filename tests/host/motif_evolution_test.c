@@ -39,7 +39,7 @@ static void test_music_and_intervals(void)
     for (int m = 0; m < 23; m++) for (int root = 0; root < 12; root++) {
         bl_key_t k = key(m,root);
         for (int rate = 240; rate <= 480; rate += 240) for (int seed = 0; seed < 2; seed++) {
-            bl_gencfg_t cfg = {BL_GEN_MOTIF,(int16_t)rate,73};
+            bl_gencfg_t cfg = {BL_GEN_MOTIF,(int16_t)rate,73,BL_DIR_UP,BL_GROOVE_STRAIGHT};
             bl_pattern_t p, arp;
             bl_make_motif(&cfg,&k,(uint64_t)seed,3840,&p);
             bl_make_arp(&cfg,&k,(uint64_t)seed,3840,&arp);
@@ -73,7 +73,7 @@ static void test_music_and_intervals(void)
     /* Same interval stream even when melody selection has no candidates. */
     bl_key_t normal = key(0,9), sparse = normal;
     sparse.scale = (bl_scale_t){0,5,{0,1,2,10,11}};
-    bl_gencfg_t cfg = {BL_GEN_MOTIF,480,73};
+    bl_gencfg_t cfg = {BL_GEN_MOTIF,480,73,BL_DIR_UP,BL_GROOVE_STRAIGHT};
     bl_pattern_t a,b,original;
     bl_make_motif(&cfg,&normal,9,3840,&a); bl_make_motif(&cfg,&sparse,9,3840,&b); original=b;
     bl_motif_evo_t ea,eb;

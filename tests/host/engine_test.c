@@ -557,7 +557,7 @@ static void test_gen_vectors(void)
         if (!strcmp(word, "gen") || !strcmp(word, "walk")) {
             char what[96];
             if (*word == 'g') {
-                bl_gencfg_t cfg;
+                bl_gencfg_t cfg = {0, 0, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
                 const char *kind = next_word(&p);
                 cfg.kind = (uint8_t)name_index(GEN_NAME, 7, kind);
                 cfg.a = (int16_t)next_int(&p);
@@ -670,9 +670,14 @@ static void test_gen_vectors(void)
 static void test_gen_max_notes(void)
 {
     static const bl_gencfg_t CFG[] = {
-        {BL_GEN_SEED_PROCEDURE, 1, 4}, {BL_GEN_SEED_PROCEDURE, 1, 3}, {BL_GEN_PULSING_BASS, 3, 0},
-        {BL_GEN_STAGED_PLUCK, 2, 0},   {BL_GEN_BASS_MELODY, 16, 0},   {BL_GEN_CHORD_LAYER, 7, 0},
-        {BL_GEN_HEARTBEAT, 0, 0},      {BL_GEN_DRONE, 8, 0},
+        {BL_GEN_SEED_PROCEDURE, 1, 4, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_SEED_PROCEDURE, 1, 3, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_PULSING_BASS, 3, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_STAGED_PLUCK, 2, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_BASS_MELODY, 16, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_CHORD_LAYER, 7, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_HEARTBEAT, 0, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT},
+        {BL_GEN_DRONE, 8, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT},
     };
     static const int ROLE[] = {BL_ROLE_BED1, BL_ROLE_BED1, BL_ROLE_BASS, BL_ROLE_LEAD,
                                BL_ROLE_BASS, BL_ROLE_PAD,  BL_ROLE_RHYTHM, BL_ROLE_DRONE};
@@ -711,16 +716,16 @@ static void test_gen_max_notes(void)
     /* 17 bars of the unmutated seed procedure are 68 notes: 4 dropped, and said so */
     bl_key_t a = {9, {0}};
     bl_scale_preset(BL_MODE_NATURAL_MINOR, &a.scale);
-    bl_gencfg_t big = {BL_GEN_SEED_PROCEDURE, 17, 0};
+    bl_gencfg_t big = {BL_GEN_SEED_PROCEDURE, 17, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
     int d = bl_make_pattern(&big, BL_ROLE_BED1, &a, 1, &p);
     CHECK(d == 4 && p.n == BL_MAX_NOTES, "seedProcedure(17, 0): %d notes, %d dropped", p.n, d);
     /* a kind that is not ported: an empty bar */
-    bl_gencfg_t none = {BL_NGENS, 8, 0};
+    bl_gencfg_t none = {BL_NGENS, 8, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
     CHECK(bl_make_pattern(&none, BL_ROLE_AUX, &a, 1, &p) == 0 && p.n == 0 && p.length == BL_TICKS_PER_BAR,
           "unported kind: %d notes, length %lld", p.n, (long long)p.length);
 
     /* withLength(0) or less is Swift's trap: the pattern stays as it was */
-    bl_gencfg_t drone = {BL_GEN_DRONE, 8, 0};
+    bl_gencfg_t drone = {BL_GEN_DRONE, 8, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
     bl_make_pattern(&drone, BL_ROLE_DRONE, &a, 1, &p);
     CHECK(bl_with_length(&p, 0) == -1 && bl_with_length(&p, -240) == -1 && p.length == 8 * BL_TICKS_PER_BAR &&
               p.n == 2,
@@ -778,7 +783,7 @@ static void test_mut_vectors(void)
             key.root = (int32_t)next_int(&p);
             const char *mode = next_word(&p);
             bl_scale_preset(name_index(BL_MODE_RAW, BL_NMODES, mode), &key.scale);
-            bl_gencfg_t cfg;
+            bl_gencfg_t cfg = {0, 0, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
             const char *kind = next_word(&p);
             cfg.kind = (uint8_t)name_index(GEN_NAME, 7, kind);
             cfg.a = (int16_t)next_int(&p);

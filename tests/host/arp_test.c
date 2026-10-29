@@ -46,7 +46,7 @@ static void test_scales(void)
         for (int root = 0; root < 12; root++) {
             bl_key_t k = key(m, root);
             for (int rate = 240; rate <= 480; rate += 240) {
-                bl_gencfg_t cfg = {BL_GEN_ARP, (int16_t)rate, 0};
+                bl_gencfg_t cfg = {BL_GEN_ARP, (int16_t)rate, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
                 bl_pattern_t a, b;
                 CHECK(bl_make_pattern(&cfg, BL_ROLE_BED1, &k, 1, &a) == 0, "dispatch");
                 CHECK(bl_make_pattern(&cfg, BL_ROLE_BED2, &k, UINT64_MAX, &b) == 0 && material_same(&a, &b),
@@ -77,7 +77,7 @@ static void test_config_capacity(void)
     for (unsigned r = 0; r < sizeof rates / sizeof rates[0]; r++) {
         int spacing = rates[r] == 240 ? 240 : 480;
         for (unsigned g = 0; g < sizeof gates / sizeof gates[0]; g++) {
-            bl_gencfg_t cfg = {BL_GEN_ARP, (int16_t)rates[r], (int16_t)gates[g]};
+            bl_gencfg_t cfg = {BL_GEN_ARP, (int16_t)rates[r], (int16_t)gates[g], BL_DIR_UP, BL_GROOVE_STRAIGHT};
             bl_pattern_t p;
             bl_make_pattern(&cfg, BL_ROLE_BED1, &k, 5, &p);
             int gate = gates[g] > 0 && gates[g] < spacing ? gates[g] : spacing / 2;
@@ -87,7 +87,7 @@ static void test_config_capacity(void)
         }
     }
     for (int rate = 240; rate <= 480; rate += 240) {
-        bl_gencfg_t cfg = {BL_GEN_ARP, (int16_t)rate, 73};
+        bl_gencfg_t cfg = {BL_GEN_ARP, (int16_t)rate, 73, BL_DIR_UP, BL_GROOVE_STRAIGHT};
         const bl_tick_t lengths[] = {240, 3600, 3840, 4080, (BL_MAX_NOTES - 1) * rate,
             BL_MAX_NOTES * rate, BL_MAX_NOTES * rate + 1, (BL_MAX_NOTES + 1) * rate,
             INT32_MAX, INT64_MAX, 0, -1, 239};
@@ -103,7 +103,7 @@ static void test_config_capacity(void)
                 guard.p.note[i].position < length && guard.p.note[i].gate == 73, "valid positions/capacity");
         }
     }
-    bl_gencfg_t cfg = {BL_GEN_ARP, 240, 0};
+    bl_gencfg_t cfg = {BL_GEN_ARP, 240, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
     bl_pattern_t p;
     bl_make_pattern(&cfg, BL_ROLE_BED1, &k, 1, &p);
     CHECK(bl_with_length(&p, 3600) == 0 && p.n == 15 && p.note[14].position == 3360, "shorten removes notes");
@@ -130,7 +130,7 @@ static bl_project_t fixture(int rate, int phase1, int phase2)
     p.has_ratchet = 1;
     p.ratchet_p = F64(0x3fe0000000000000); /* 0.5: must still never mutate ARP. */
     for (int i = 0; i < 2; i++) {
-        p.voice[i].gen = (bl_gencfg_t){BL_GEN_ARP, (int16_t)rate, 0};
+        p.voice[i].gen = (bl_gencfg_t){BL_GEN_ARP, (int16_t)rate, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
         p.voice[i].phase_steps = (int8_t)(i ? phase2 : phase1);
         p.voice[i].nlanes = 0;
         p.voice[i].reg_low = 0;

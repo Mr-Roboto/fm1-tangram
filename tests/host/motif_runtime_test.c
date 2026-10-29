@@ -56,7 +56,7 @@ int main(void)
         bl_template(BL_TPL_DEMO,&p);
         p.nvoices=2;p.transposition.n=0;p.has_arr=0;p.nscenes=0;
         for(int v=0;v<2;v++) {
-            p.voice[v].gen=(bl_gencfg_t){BL_GEN_MOTIF,(int16_t)rate,73};p.voice[v].nlanes=0;
+            p.voice[v].gen=(bl_gencfg_t){BL_GEN_MOTIF,(int16_t)rate,73,BL_DIR_UP,BL_GROOVE_STRAIGHT};p.voice[v].nlanes=0;
         }
         rt_load(&p);rt_play();run_ms(25000);
         rt_capture(&saved);

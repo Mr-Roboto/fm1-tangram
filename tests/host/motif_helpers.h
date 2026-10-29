@@ -78,7 +78,7 @@ static bl_project_t fixture(int rate, int phase1, int phase2)
     p.has_ratchet = 1;
     p.ratchet_p = F64(0x3fe0000000000000);
     for (int i = 0; i < 2; i++) {
-        p.voice[i].gen = (bl_gencfg_t){BL_GEN_MOTIF,(int16_t)rate,73};
+        p.voice[i].gen = (bl_gencfg_t){BL_GEN_MOTIF,(int16_t)rate,73,BL_DIR_UP,BL_GROOVE_STRAIGHT};
         p.voice[i].phase_steps = (int8_t)(i ? phase2 : phase1);
         p.voice[i].nlanes = 0;
         p.voice[i].ref_c = 60;

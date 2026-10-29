@@ -19,7 +19,7 @@ static void test_scales_and_seeds(void)
         for (int root = 0; root < 12; root++) {
             bl_key_t k = key(mode, root);
             for (int rate = 240; rate <= 480; rate += 240) {
-                bl_gencfg_t cfg = {BL_GEN_MOTIF, (int16_t)rate, 73};
+                bl_gencfg_t cfg = {BL_GEN_MOTIF, (int16_t)rate, 73, BL_DIR_UP, BL_GROOVE_STRAIGHT};
                 for (int length = 3600; length <= 3840; length += 240) {
                     bl_pattern_t arp;
                     bl_make_arp(&cfg, &k, 123, length, &arp);
@@ -42,7 +42,7 @@ static void test_scales_and_seeds(void)
     CHECK(substitutions > 0, "MOTIF actually adds restrained melodic color");
     bl_key_t k = key(BL_MODE_NATURAL_MINOR, 9);
     for (int rate = 240; rate <= 480; rate += 240) {
-        bl_gencfg_t cfg = {BL_GEN_MOTIF, (int16_t)rate, 0};
+        bl_gencfg_t cfg = {BL_GEN_MOTIF, (int16_t)rate, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
         bl_pattern_t first, p;
         bl_make_pattern(&cfg, BL_ROLE_BED1, &k, 0, &first);
         int varied = 0;
@@ -62,7 +62,7 @@ static void test_fallbacks_and_capacity(void)
     const int gates[] = {0,73,1,239,479,480,-1,INT16_MAX};
     for (unsigned r = 0; r < sizeof rates / sizeof rates[0]; r++) {
         for (unsigned g = 0; g < sizeof gates / sizeof gates[0]; g++) {
-            bl_gencfg_t cfg = {BL_GEN_MOTIF, (int16_t)rates[r], (int16_t)gates[g]};
+            bl_gencfg_t cfg = {BL_GEN_MOTIF, (int16_t)rates[r], (int16_t)gates[g], BL_DIR_UP, BL_GROOVE_STRAIGHT};
             const bl_tick_t lengths[] = {240,960,1680,1920,2160,3600,3840,4080,4800,
                 64 * 240, 65 * 240, INT32_MAX, 0, -1, INT64_MAX};
             for (unsigned l = 0; l < sizeof lengths / sizeof lengths[0]; l++) {
@@ -77,7 +77,7 @@ static void test_fallbacks_and_capacity(void)
             }
         }
     }
-    bl_gencfg_t cfg = {BL_GEN_MOTIF,480,0};
+    bl_gencfg_t cfg = {BL_GEN_MOTIF,480,0,BL_DIR_UP,BL_GROOVE_STRAIGHT};
     /* Valid four-tone scale with no non-chord tones: retain every note, no forced fallback. */
     k.scale = (bl_scale_t){0,4,{0,4,7,11}};
     bl_pattern_t arp, m;
