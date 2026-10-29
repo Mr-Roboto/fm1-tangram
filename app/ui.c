@@ -72,7 +72,8 @@ static const uint8_t WHITE_K[16] = PLAT_WHITE_KEYS, BLACK_K[11] = PLAT_BLACK_KEY
 static const char *const TPL_NAME[BL_NTPL] = {"DEMO TRIO", "FULL ENSEMBLE", "AMBIENT DRIFT"};
 static const char *const MODE_NAME[BL_NMODES] = {"NATURAL MINOR", "DORIAN", "PHRYGIAN", "MIXOLYDIAN", "LYDIAN",
                                                  "LYDIAN DOMINANT", "HARMONIC MINOR", "MINOR PENTATONIC", "LOCRIAN",
-                                                 "MAJOR"};
+                                                 "MAJOR", "PMAJ", "EGYP", "HIRA", "MELM", "HMAJ", "ALTR", "GYPS",
+                                                 "ROMN", "BHAI", "MARV", "PURV", "TODI", "ARAB"};
 static const char *const NOTE_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
 static const char *const FORM_NAME[] = {"", "CLASSIC ARC", "SLOW BUILD", "AMBIENT PLATEAU"};
 

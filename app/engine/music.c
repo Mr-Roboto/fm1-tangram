@@ -7,6 +7,8 @@
 const char *const BL_MODE_RAW[BL_NMODES] = {
     "naturalMinor", "dorian", "phrygian", "mixolydian", "lydian",
     "lydianDominant", "harmonicMinor", "minorPentatonic", "locrian", "major",
+    "PMAJ", "EGYP", "HIRA", "MELM", "HMAJ", "ALTR", "GYPS",
+    "ROMN", "BHAI", "MARV", "PURV", "TODI", "ARAB",
 };
 
 /* Scale.preset, in ModeID's order */
@@ -24,6 +26,20 @@ static const struct {
     {5, {0, 3, 5, 7, 10}},          /* minorPentatonic */
     {7, {0, 1, 3, 5, 6, 8, 10}},    /* locrian */
     {7, {0, 2, 4, 5, 7, 9, 11}},    /* major */
+    /* X0X-RMX musical data only; see docs/scales.md (TGM-001A). */
+    {5, {0, 2, 4, 7, 9}},          /* PMAJ: Major Pentatonic */
+    {5, {0, 2, 5, 7, 10}},         /* EGYP: Egyptian Pentatonic */
+    {5, {0, 2, 3, 7, 8}},          /* HIRA: Hirajoshi */
+    {7, {0, 2, 3, 5, 7, 9, 11}},   /* MELM: Melodic Minor */
+    {7, {0, 2, 4, 5, 7, 8, 11}},   /* HMAJ: Harmonic Major */
+    {7, {0, 1, 3, 4, 6, 8, 10}},   /* ALTR: Altered */
+    {7, {0, 2, 3, 6, 7, 8, 11}},   /* GYPS: Hungarian Minor */
+    {7, {0, 2, 3, 6, 7, 9, 10}},   /* ROMN: Romanian Minor */
+    {7, {0, 1, 4, 5, 7, 8, 11}},   /* BHAI: Bhairav Thaat */
+    {7, {0, 1, 4, 6, 7, 9, 11}},   /* MARV: Marva Thaat */
+    {7, {0, 1, 4, 6, 7, 8, 11}},   /* PURV: Purvi Thaat */
+    {7, {0, 1, 3, 6, 7, 8, 11}},   /* TODI: Todi Thaat */
+    {7, {0, 2, 4, 5, 6, 8, 10}},   /* ARAB: Arabic */
 };
 
 void bl_scale_preset(int mode, bl_scale_t *out)

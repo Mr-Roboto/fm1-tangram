@@ -1,19 +1,21 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 Jiří Píša */
 /* Scales, keys and degree pitch as Berlinan has them (Tonality.swift, DegreePitch.swift, RegisterWindow.swift): the
- * ten preset modes, a key's root and scale, a note as scale degree + octave + accidental, resolving it to MIDI,
+ * preset modes, a key's root and scale, a note as scale degree + octave + accidental, resolving it to MIDI,
  * quantizing MIDI into the key, and the octave fold of a voice's register window. */
 #pragma once
 #include <stdint.h>
 
-/* ModeID's order (custom has no preset and is not here) */
+/* Tangram's preset IDs: retain 0–9; append new modes. */
 enum {
     BL_MODE_NATURAL_MINOR, BL_MODE_DORIAN, BL_MODE_PHRYGIAN, BL_MODE_MIXOLYDIAN, BL_MODE_LYDIAN,
     BL_MODE_LYDIAN_DOMINANT, BL_MODE_HARMONIC_MINOR, BL_MODE_MINOR_PENTATONIC, BL_MODE_LOCRIAN, BL_MODE_MAJOR,
+    BL_MODE_PMAJ, BL_MODE_EGYP, BL_MODE_HIRA, BL_MODE_MELM, BL_MODE_HMAJ, BL_MODE_ALTR, BL_MODE_GYPS,
+    BL_MODE_ROMN, BL_MODE_BHAI, BL_MODE_MARV, BL_MODE_PURV, BL_MODE_TODI, BL_MODE_ARAB,
     BL_NMODES
 };
 
-/* ModeID's raw values, as the saved files and the screen spell them */
+/* Mode names used by host commands and reference scripts. */
 extern const char *const BL_MODE_RAW[BL_NMODES];
 
 typedef struct {

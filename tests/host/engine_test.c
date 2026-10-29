@@ -372,11 +372,12 @@ static void test_rng_vectors(void)
  * (see the task report) */
 static void test_music(void)
 {
-    static const int8_t OFF[BL_NMODES][7] = {
+    static const int8_t OFF[10][7] = {
         {0, 2, 3, 5, 7, 8, 10}, {0, 2, 3, 5, 7, 9, 10}, {0, 1, 3, 5, 7, 8, 10}, {0, 2, 4, 5, 7, 9, 10},
         {0, 2, 4, 6, 7, 9, 11}, {0, 2, 4, 6, 7, 9, 10}, {0, 2, 3, 5, 7, 8, 11}, {0, 3, 5, 7, 10},
         {0, 1, 3, 5, 6, 8, 10}, {0, 2, 4, 5, 7, 9, 11}};
-    for (int m = 0; m < BL_NMODES; m++) {
+    /* Original ten presets; scale_test.c covers Tangram's full collection. */
+    for (int m = 0; m < 10; m++) {
         bl_scale_t s;
         bl_scale_preset(m, &s);
         int n = m == BL_MODE_MINOR_PENTATONIC ? 5 : 7;
@@ -2018,8 +2019,13 @@ static void test_state_caps(void)
     CHECK(state_pack(&back, buf, (int)sizeof buf) == -1, "packed: a loop of 120 ticks");
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    if (argc == 2 && !strcmp(argv[1], "--music-only")) {
+        test_music();
+        printf(fails ? "music regression: %d FAILED\n" : "music regression: ok\n", fails);
+        return fails != 0;
+    }
     test_f64_ops();
     test_sin_cc_level();
     test_sin_range();
