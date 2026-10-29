@@ -74,6 +74,7 @@ static void put_config(out_t *o, const bl_vconfig_t *c)
     put32(o, c->length);
     put8(o, c->reg_low);
     put8(o, c->reg_high);
+    put8(o, c->phase);
 }
 
 int state_pack(const bl_state_t *s, uint8_t *buf, int max)
@@ -100,7 +101,8 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put_config(&o, &v->pending);
         if (v->config_dirty != bl_config_diff(&v->config, &v->pending) ||
             v->config.length != p->length || v->config.gen.kind != p->generator ||
-            v->config.reg_low != v->reg_low || v->config.reg_high != v->reg_high) o.bad = 1;
+            v->config.reg_low != v->reg_low || v->config.reg_high != v->reg_high ||
+            v->config.phase != p->pitch_phase) o.bad = 1;
         put16(&o, v->config_dirty);
         if (!bl_delay_valid(v->delay)) o.bad = 1;
         put8(&o, v->delay.enabled);
@@ -218,6 +220,7 @@ static void get_config(in_t *in, bl_vconfig_t *c)
     c->length = get32(in);
     c->reg_low = (uint8_t)get8(in);
     c->reg_high = (uint8_t)get8(in);
+    c->phase = (uint8_t)get8(in);
     if (!bl_config_valid(c)) in->bad = 1;
 }
 
@@ -260,6 +263,7 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         p->seed = get64(&in);
         get_config(&in, &v->config);
         get_config(&in, &v->pending);
+        p->pitch_phase = v->config.phase; /* derived metadata, not another serialized copy */
         v->config_dirty = (uint16_t)get16(&in);
         if (v->config_dirty != bl_config_diff(&v->config, &v->pending) ||
             v->config.length != p->length || v->config.gen.kind != p->generator ||

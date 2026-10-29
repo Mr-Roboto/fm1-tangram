@@ -38,11 +38,29 @@ static int direction_tones(const bl_pattern_t *p)
     return p->generator == BL_GEN_ARP && p->n > 8 ? 8 : p->n;
 }
 
+int bl_pitch_phase_count(const bl_pattern_t *p)
+{
+    if (p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) return 1;
+    int n = direction_tones(p);
+    return n > 0 ? n : 1;
+}
+
 static int direction_period(const bl_pattern_t *p)
 {
     int n = direction_tones(p);
     if (n < 2) return 1;
     return p->direction == BL_DIR_PENDULUM || p->direction == BL_DIR_M_PENDULUM ? 2 * (n - 1) : n;
+}
+
+/* For a phase-bearing source whose size changes outside regeneration, fold the
+ * cursor to the new period without changing its selected direction. PHASE 0
+ * retains the historical cursor-recovery path exactly. */
+static void phase_cursor_fold(bl_pattern_t *p)
+{
+    if (!p->pitch_phase || p->direction >= BL_NDIRS) return;
+    int period = direction_period(p);
+    p->direction_cursor = (uint8_t)(p->direction == BL_DIR_M_PENDULUM && p->direction_cursor
+        ? (p->direction_cursor - 1) % period + 1 : p->direction_cursor % period);
 }
 
 int bl_direction_valid(const bl_pattern_t *p)
@@ -58,15 +76,18 @@ bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t comple
 {
     if (onset < 0 || onset >= p->n) return (bl_pitch_t){0};
     if ((p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) ||
-        p->direction == BL_DIR_UP || !bl_direction_valid(p)) return p->note[onset].pitch;
+        (p->direction == BL_DIR_UP && !p->pitch_phase) || p->direction >= BL_NDIRS ||
+        (!p->pitch_phase && !bl_direction_valid(p))) return p->note[onset].pitch;
     int n = direction_tones(p), period = direction_period(p);
     /* Reduce before multiplication: bounded 32-bit arithmetic on the FM-1.
      * Live rendering passes zero (its cursor is advanced at boundaries); direct
      * harmony rendering supplies the absolute loop ordinal for window independence. */
-    int step = p->direction_cursor + onset + (int)bl_floor_mod(completed_loops, period) * p->n, index;
+    int step = p->direction_cursor + onset + (int)bl_floor_mod(completed_loops, period) * p->n +
+        p->pitch_phase % bl_pitch_phase_count(p), index;
     if (p->direction == BL_DIR_M_PENDULUM && !step && completed_loops) step = period;
     if (n < 2) return p->note[0].pitch;
     switch (p->direction) {
+    case BL_DIR_UP: index = step % n; break;
     case BL_DIR_DOWN: index = n - 1 - step % n; break;
     case BL_DIR_M_DOWN: index = (n - step % n) % n; break;
     case BL_DIR_PENDULUM:
@@ -84,6 +105,7 @@ bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t comple
 void bl_direction_advance(bl_pattern_t *p)
 {
     if ((p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) || !p->n) return;
+    phase_cursor_fold(p);
     if (!bl_direction_valid(p)) {
         p->direction = BL_DIR_UP;
         p->direction_cursor = 0;
@@ -151,6 +173,7 @@ int bl_with_length(bl_pattern_t *p, bl_tick_t new_len)
     for (int i = 0; i < p->n; i++)
         if (p->note[i].position < new_len) p->note[n++] = p->note[i];
     p->n = (uint8_t)n;
+    phase_cursor_fold(p);
     if (!bl_direction_valid(p)) p->direction_cursor = 0;
     p->start_offset = bl_floor_mod(p->start_offset, new_len);
     return 0;
@@ -175,6 +198,7 @@ void bl_density_cap(const bl_pattern_t *in, f64 density, bl_pattern_t *out)
     int64_t keep = f64_to_i64(f64_ceil(f64_mul(f64_from_i64(out->n), clamped)));
     if (keep <= 0) {
         out->n = 0;
+        phase_cursor_fold(out);
         return;
     }
     uint8_t order[BL_MAX_NOTES], kept[BL_MAX_NOTES];
@@ -189,6 +213,7 @@ void bl_density_cap(const bl_pattern_t *in, f64 density, bl_pattern_t *out)
     for (int i = 0; i < out->n; i++)
         if (kept[i]) out->note[n++] = out->note[i];
     out->n = (uint8_t)n;
+    phase_cursor_fold(out);
 }
 
 /* PatternOps.thinToRoots: the root-degree notes, or the first note retuned to the root when there is none; locked
@@ -204,6 +229,7 @@ void bl_thin_to_roots(bl_pattern_t *p)
     }
     p->n = (uint8_t)n;
     p->locked = 1;
+    phase_cursor_fold(p);
     p->remaining = -1;
 }
 

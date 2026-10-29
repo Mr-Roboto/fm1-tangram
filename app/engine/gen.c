@@ -237,6 +237,7 @@ static void begin(bl_pattern_t *p, int generator, bl_tick_t length, uint64_t see
     p->direction = BL_DIR_UP;
     p->direction_cursor = 0;
     p->groove = BL_GROOVE_STRAIGHT;
+    p->pitch_phase = 0;
     p->remaining = 4;           /* .repeating(remaining: 4) */
     p->seed = seed;
     dropped = 0;

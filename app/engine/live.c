@@ -60,6 +60,7 @@ static void configured_pattern(const bl_vconfig_t *cfg, int role, int repeats, u
         bl_with_length(out, cfg->length);
     }
     out->remaining = (int16_t)repeats;
+    out->pitch_phase = cfg->phase;
 }
 
 /* OfflineRenderer.makePattern(_:project:seedLabels:idSuffix:schedule:): the generator's pattern in the project's key
@@ -499,6 +500,7 @@ static int apply_voice_config(bl_live_t *e, int i, bl_tick_t tick)
         }
         v->pat.groove = v->config.gen.groove;
     }
+    v->pat.pitch_phase = v->config.phase;
     e->project.voice[i].has_config = 1;
     e->project.voice[i].config = v->config;
     v->config_dirty = 0;
@@ -591,7 +593,7 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                 bl_tick_t offset = s->voice.pat.start_offset;
                 const bl_voice_t *src = &s->voice;
                 int directed = (src->pat.generator == BL_GEN_ARP || src->pat.generator == BL_GEN_MOTIF)
-                    && src->pat.direction != BL_DIR_UP;
+                    && (src->pat.direction != BL_DIR_UP || src->pat.pitch_phase);
                 if (directed || f64_lt(e->density, ONE)) {
                     e->capped = s->voice;
                     /* Map pitches before density removes onset slots; gates,
@@ -601,6 +603,7 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                             e->capped.pat.note[j].pitch = bl_direction_pitch(&src->pat, j, 0);
                         e->capped.pat.direction = BL_DIR_UP;
                         e->capped.pat.direction_cursor = 0;
+                        e->capped.pat.pitch_phase = 0;
                     }
                     bl_density_cap(&e->capped.pat, e->density, &e->capped.pat);
                     src = &e->capped;

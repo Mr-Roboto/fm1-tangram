@@ -112,7 +112,8 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
             int index = total++;
             if (index >= max) continue;
             bl_pitch_t pitch = note->pitch;
-            if ((p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) && p->direction != BL_DIR_UP)
+            if ((p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) &&
+                (p->direction != BL_DIR_UP || p->pitch_phase))
                 pitch = bl_direction_pitch(p, occ[i].index,
                     bl_floor_div(occ[i].at + p->start_offset, p->length));
             if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));

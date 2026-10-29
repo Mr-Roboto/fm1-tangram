@@ -9,8 +9,9 @@
  *   generator remaining n               u8, i8 (-1: established), u8
  *   length source-phase generation      u32 each (pat.start_offset holds source phase in a snapshot)
  *   seed                                u64
- *   active config, pending config       28 bytes each: root/mode/count/off[12], generator,
- *                                       a/b u16, direction/groove u8, length u32, register low/high u8
+ *   active config, pending config       29 bytes each: root/mode/count/off[12], generator,
+ *                                       a/b u16, direction/groove u8, length u32, register low/high/PHASE u8
+ *                                       pat.pitch_phase is reconstructed from active PHASE
  *   pending field mask                  u16
  *   delay enabled time feedback decay   u8 each (all generators)
  *   ARP/MOTIF only: direction cursor groove u8 each

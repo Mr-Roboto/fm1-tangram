@@ -30,6 +30,7 @@ typedef struct {
     uint8_t n, generator, locked;
     uint8_t direction, direction_cursor; /* ARP/MOTIF source traversal at the local loop's first onset */
     uint8_t groove;             /* ARP/MOTIF playback mask, never edits source notes */
+    uint8_t pitch_phase;        /* offset in ordered traversal positions, not ticks */
     int16_t remaining;          /* .repeating(remaining:); -1 = .established */
     uint64_t seed;
     bl_pnote_t note[BL_MAX_NOTES];
@@ -66,6 +67,9 @@ int bl_first_sounding(const bl_pattern_t *p);
 bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops);
 void bl_direction_advance(bl_pattern_t *p);
 int bl_direction_valid(const bl_pattern_t *p);
+/* Available source positions, at least one even for an empty pattern. PHASE
+ * range is 0..count-1; the render helper safely folds after source thinning. */
+int bl_pitch_phase_count(const bl_pattern_t *p);
 
 /* Whether a source onset sounds. Local tick position supplies the groove phase;
  * active groove accents are ORed into *accent, leaving source accents intact. */

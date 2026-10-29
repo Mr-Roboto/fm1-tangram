@@ -3,7 +3,7 @@
 #pragma once
 #include "gen.h"
 
-/* Musical settings only: delay/channel and a future pitch PHASE are separate.
+/* Musical settings only: delay/channel are separate.
  * length is ticks so unedited multi-bar legacy templates retain their duration.
  * The LOOP setter below exposes 1..16 sixteenth-note steps. */
 typedef struct {
@@ -11,13 +11,26 @@ typedef struct {
     bl_gencfg_t gen;
     uint32_t length;
     uint8_t reg_low, reg_high;
+    uint8_t phase;               /* pitch traversal positions, independent of duration */
 } bl_vconfig_t;
 
 enum {
     BL_CFG_GENERATOR, BL_CFG_ROOT, BL_CFG_SCALE, BL_CFG_REG_LOW, BL_CFG_REG_HIGH,
-    BL_CFG_RATE, BL_CFG_GATE, BL_CFG_LOOP, BL_CFG_DIRECTION, BL_CFG_GROOVE, BL_NCFG
+    BL_CFG_RATE, BL_CFG_GATE, BL_CFG_LOOP, BL_CFG_DIRECTION, BL_CFG_GROOVE, BL_CFG_PHASE, BL_NCFG
 };
 #define BL_CFG_ALL ((1u << BL_NCFG) - 1u)
+
+/* Straight-grid source size for an ARP/MOTIF target, before playback masks.
+ * Legacy generators have no ordered traversal and expose only PHASE 0. */
+static inline int bl_config_phase_count(const bl_vconfig_t *c)
+{
+    if (c->gen.kind != BL_GEN_ARP && c->gen.kind != BL_GEN_MOTIF) return 1;
+    uint32_t spacing = c->gen.a == 240 ? 240u : 480u;
+    uint32_t n = c->length ? (c->length - 1u) / spacing + 1u : 1u;
+    if (n > BL_MAX_NOTES) n = BL_MAX_NOTES;
+    if (c->gen.kind == BL_GEN_ARP && n > 8) n = 8;
+    return (int)n;
+}
 
 static inline uint16_t bl_config_diff(const bl_vconfig_t *a, const bl_vconfig_t *b)
 {
@@ -34,6 +47,7 @@ static inline uint16_t bl_config_diff(const bl_vconfig_t *a, const bl_vconfig_t 
     if (a->length != b->length) mask |= 1u << BL_CFG_LOOP;
     if (a->gen.direction != b->gen.direction) mask |= 1u << BL_CFG_DIRECTION;
     if (a->gen.groove != b->gen.groove) mask |= 1u << BL_CFG_GROOVE;
+    if (a->phase != b->phase) mask |= 1u << BL_CFG_PHASE;
     return mask;
 }
 
@@ -42,7 +56,8 @@ static inline int bl_config_valid(const bl_vconfig_t *c)
     if (c->key.root < 0 || c->key.root > 11 || c->key.scale.mode >= BL_NMODES ||
         c->key.scale.count < 4 || c->key.scale.count > 12 || c->key.scale.off[0] ||
         c->gen.kind >= BL_NGENS || c->gen.direction >= BL_NDIRS || c->gen.groove >= BL_NGROOVES ||
-        c->reg_low > c->reg_high || c->reg_high > 127 || c->length < BL_PPQN / 4 || c->length > INT32_MAX)
+        c->reg_low > c->reg_high || c->reg_high > 127 || c->length < BL_PPQN / 4 || c->length > INT32_MAX ||
+        c->phase >= bl_config_phase_count(c))
         return 0;
     for (int i = 1; i < c->key.scale.count; i++)
         if (c->key.scale.off[i] <= c->key.scale.off[i - 1] || c->key.scale.off[i] > 11) return 0;
@@ -107,8 +122,15 @@ static inline int bl_config_edit(bl_vconfig_t *c, int field, int32_t value)
         if (!arp || value < 0 || value >= BL_NGROOVES) return -1;
         next.gen.groove = (uint8_t)value;
         break;
+    case BL_CFG_PHASE:
+        if (value < 0 || value >= bl_config_phase_count(&next)) return -1;
+        next.phase = (uint8_t)value;
+        break;
     default: return -1;
     }
+    /* A count-changing edit keeps the musical offset modulo the new source.
+     * Explicit PHASE input is range-checked above rather than silently wrapped. */
+    if (field != BL_CFG_PHASE) next.phase = (uint8_t)(next.phase % bl_config_phase_count(&next));
     if (!bl_config_valid(&next)) return -1;
     *c = next;
     return 0;

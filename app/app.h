@@ -26,7 +26,7 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 4u                   /* per-voice musical configuration; no legacy migration */
+#define PROJ_FORMAT 5u                   /* independent pitch PHASE; no legacy migration */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
