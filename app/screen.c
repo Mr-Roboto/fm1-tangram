@@ -19,6 +19,10 @@ static const char *const VID_NAME[BL_NVIDS] = {"Pluck 1", "Pluck 2", "Bass", "Pa
 /* the generators (BL_GEN_ order: GeneratorID's raw values, in words) */
 static const char *const GEN_NAME[BL_NGENS] = {"SEED PROCEDURE", "PULSING BASS", "STAGED PLUCK", "BASS MELODY", "CHORD LAYER",
                                                "HEARTBEAT", "DRONE", "ARP", "MOTIF"};
+static const char *const GEN_SHORT[BL_NGENS] = {"SEED", "PULSE", "STAGED", "BASS", "CHORD", "BEAT", "DRONE", "ARP", "MOTIF"};
+static const char *const SCALE_SHORT[BL_NMODES] = {"NAT MIN", "DORIAN", "PHRYG", "MIXOLYD", "LYDIAN", "LYD DOM",
+    "HARM MN", "MIN PNT", "LOCRIAN", "MAJOR", "PMAJ", "EGYP", "HIRA", "MELM", "HMAJ", "ALTR", "GYPS",
+    "ROMN", "BHAI", "MARV", "PURV", "TODI", "ARAB"};
 /* the arranger's phases (ArrangementPhase), as the Mac's panel and horizon label them */
 static const char *const PHASE_NAME[7] = {"BUILD", "BED", "VAR", "B-PART", "PAYOFF", "SUBTR", "END"};
 
@@ -86,9 +90,10 @@ static uint32_t hash_s(uint32_t h, const char *s)
 
 static uint32_t pre_sig(void)            /* the project the stopped transport holds: its preview changes with it */
 {
-    return hash(hash(hash(2166136261u, proj.tpl | (uint32_t)proj.key_root << 8 | (uint32_t)proj.key_mode << 16),
-                     (uint32_t)proj.seed),
-                (uint32_t)(proj.seed >> 32));
+    uint32_t h = 2166136261u;
+    const uint8_t *p = (const uint8_t *)&proj;
+    for (uint32_t i = 0; i < sizeof proj; i++) h = hash(h, p[i]);
+    return h;
 }
 
 static void lanes(void)
@@ -137,6 +142,16 @@ static const lane_t *lane_of(int vid)    /* the lane of a voice id, 0 none */
     return 0;
 }
 static const lane_t *sel_lane(void) { return lane_of(key_vid(ui.sel)); }
+static const bl_voice_t *voice_material(int vid)
+{
+    int n = ui.st_ok ? ui_st.nvoices : ui_pre.n;
+    for (int i = 0; i < n; i++) {
+        const bl_voice_t *v = ui.st_ok ? bl_live_voice(rt_engine(), i) : &ui_pre.v[i];
+        if (bl_vid(v->id) == vid) return v;
+    }
+    return NULL;
+}
+static const bl_voice_t *sel_material(void) { return voice_material(key_vid(ui.sel)); }
 static const bl_vcfg_t *sel_cfg(void)   /* the selected voice in the app project's template, 0 none */
 {
     int i = key_voice(ui.sel);
@@ -204,13 +219,13 @@ static int degree_label(const bl_pnote_t *n, const bl_key_t *k)
 enum { DIV_DOTTED8, DIV_8TH, DIV_QUARTER };
 static const char *const DIV_NAME[3] = {"dotted 8th", "8th", "quarter"};   /* DelayDivision.label */
 static const uint16_t DIV_MS_BEATS[3] = {45000, 30000, 60000};            /* 60000 x 0.75, 0.5, 1.0 */
-static int delay_div(int role)
+static __attribute__((unused)) int delay_div(int role)
 {
     return role == BL_ROLE_BASS || role == BL_ROLE_DRONE  ? DIV_8TH
            : role == BL_ROLE_PAD || role == BL_ROLE_LEAD ? DIV_QUARTER
                                                           : DIV_DOTTED8;
 }
-static uint32_t delay_ms(int div, int32_t bpm)
+static __attribute__((unused)) uint32_t delay_ms(int div, int32_t bpm)
 {
     uint32_t n = DIV_MS_BEATS[div], b = (uint32_t)bpm;
     return (2u * n + b) / (2u * b);
@@ -298,15 +313,93 @@ static void cycle_text(f64 bars, char *t)   /* a lane's cycle in bars (0.5-64): 
     }
 }
 
+static int voice_cell(int k, cell_t *c)
+{
+    if (k < KN_TRACK || k > KN_DECAY) return 0;
+    const bl_voice_t *v = sel_material();
+    const bl_vconfig_t *cfg = v ? &v->pending : NULL;
+    c->kind = CELL_RING;
+    c->hi = 1;
+    if (k == KN_TRACK) {
+        c->hi = NVKEYS - 1;
+        c->v = ui.sel;
+        cat(c->val, ROLE_NAME[ui.sel]);
+        return 1;
+    }
+    if (!cfg) {
+        c->kind = CELL_TEXT;
+        cat(c->val, "-");
+        return 1;
+    }
+    int arp = cfg->gen.kind == BL_GEN_ARP || cfg->gen.kind == BL_GEN_MOTIF;
+    if (!arp && (k == KN_RATE || k == KN_GATE || k == KN_DIRECTION || k == KN_GROOVE)) {
+        c->kind = CELL_TEXT;
+        cat(c->val, "N/A");
+        cat(c->sub, "ARP/MOTIF");
+        return 1;
+    }
+    switch (k) {
+    case KN_GENERATOR: c->hi = BL_NGENS - 1; c->v = cfg->gen.kind; cat(c->val, GEN_SHORT[c->v]); break;
+    case KN_VROOT: c->hi = 11; c->v = (int16_t)cfg->key.root; cat(c->val, NOTE_NAME[c->v]); break;
+    case KN_SCALE: c->hi = BL_NMODES - 1; c->v = cfg->key.scale.mode; cat(c->val, SCALE_SHORT[c->v]); break;
+    case KN_DIRECTION:
+        c->kind = CELL_PIPS; c->hi = BL_NDIRS - 1; c->v = cfg->gen.direction;
+        cat(c->val, DIR_LABEL[c->v]); break;
+    case KN_GROOVE:
+        c->kind = CELL_PIPS; c->hi = BL_NGROOVES - 1; c->v = cfg->gen.groove;
+        cat(c->val, GROOVE_LABEL[c->v]); break;
+    case KN_RATE:
+        c->kind = CELL_PIPS; c->v = cfg->gen.a == 240;
+        cat(c->val, c->v ? "1/16" : "1/8"); break;
+    case KN_GATE: {
+        c->lo = 1; c->hi = cfg->gen.a - 1; c->v = cfg->gen.b;
+        int tenths = (cfg->gen.b * 1000 + cfg->gen.a / 2) / cfg->gen.a;
+        cat_u(c->val, (uint32_t)(tenths / 10));
+        if (tenths % 10) cat_u(cat(c->val, "."), (uint32_t)(tenths % 10));
+        cat(c->val, "%"); break;
+    }
+    case KN_LOOP:
+        c->lo = 1; c->hi = 16; c->v = (int16_t)clamp((int32_t)(cfg->length / STEP_TICKS), 1, 16);
+        cat_u(c->val, cfg->length / STEP_TICKS); cat(c->sub, "STEPS"); break;
+    case KN_PHASE:
+        c->hi = (int16_t)(bl_config_phase_count(cfg) - 1); c->v = cfg->phase;
+        if (!c->hi) c->kind = CELL_TEXT;
+        cat_u(c->val, cfg->phase); break;
+    case KN_REGISTER:
+        c->hi = 127 - (cfg->reg_high - cfg->reg_low); c->v = cfg->reg_low;
+        if (!c->hi) c->kind = CELL_TEXT;
+        reg_text(cfg->reg_low, cfg->reg_high, c->val, 0); break;
+    case KN_DELAY_ON:
+        c->kind = CELL_PIPS; c->v = v->delay.enabled;
+        cat(c->val, c->v ? "ON" : "OFF"); break;
+    case KN_DELAY_TIME:
+        c->hi = 6; c->v = v->delay.time - 1;
+        cat(c->val, TIME_LABEL[c->v]); break;
+    case KN_FEEDBACK:
+        c->kind = CELL_PIPS; c->hi = 3; c->v = v->delay.feedback / 25 - 1;
+        cat_u(c->val, v->delay.feedback); cat(c->val, "%"); break;
+    case KN_DECAY:
+        c->lo = 50; c->hi = 100; c->v = v->delay.decay;
+        cat_u(c->val, v->delay.decay); cat(c->val, "%"); break;
+    default: break;
+    }
+    return 1;
+}
+
 static void cell(int view, int i, cell_t *c)
 {
     const bl_vcfg_t *vc = sel_cfg();
     const lane_t *l = sel_lane();
-    int k = VIEW_KNOB[view][i], v = key_voice(ui.sel);
+    int k = view_knob(view, i), v = key_voice(ui.sel);
     memset(c, 0, sizeof *c);
     c->kind = k < KN_SHOWN ? CELL_PIPS : CELL_TEXT;
     c->hi = 1;
+    if (voice_cell(k, c)) return;
     switch (k) {
+    case KN_NONE:
+        c->kind = CELL_TEXT;
+        cat(c->val, "-");
+        break;
     case KN_TEMPO:
         c->kind = CELL_RING;
         c->lo = 40, c->hi = 220, c->v = (int16_t)proj.bpm;
@@ -326,10 +419,10 @@ static void cell(int view, int i, cell_t *c)
         break;
     case KN_CHANNEL:
         c->kind = CELL_RING;
-        c->hi = 15, c->v = v < 0 ? -1 : proj.channel[v];
+        c->hi = 15, c->v = v < 0 ? -1 : sel_material() ? sel_material()->midi_channel : proj.channel[v];
         cat(c->val, "-");
         if (v >= 0)
-            itoa_u(proj.channel[v] + 1u, c->val);
+            itoa_u((uint32_t)c->v + 1u, c->val);
         break;
     case KN_ROOT:
         c->kind = CELL_RING;
@@ -1063,7 +1156,8 @@ static void draw_pattern(void)
     if (!l)
         return;
     p = l->pat;
-    key_now(&k);
+    if (sel_material()) k = sel_material()->config.key;
+    else key_now(&k);
     n = steps(p);
     n = n > 256 ? 256 : n;
     c = vid_color(l->vid);
@@ -1186,88 +1280,34 @@ static void draw_cc(void)
     }
 }
 
-/* ---- ARRANGER: AUTO and the form, the phases (the one now lit), where it is and what comes, the voices in, the
- * density and the form's settings */
+/* ---- SEQ MOTION: reuse the selected source grid, with motion bindings below. */
 static void draw_arranger(void)
 {
-    static const char *const FORM_TITLE[] = {"custom", "classic arc", "slow build", "ambient plateau"};
-    char t[48], u[16];
-    int i, live = ui.st_ok && ui_st.has_arr;
-    int32_t x;
-    x = 4 + tag(4, 3, 15, "AUTO", proj.arr_on ? K_ACC : K_DIM2) + 6;
-    x = cv_text(x, 3, &FONT_XS, proj.arr_has ? FORM_TITLE[proj_form()] : "no arrangement", proj.arr_has ? K_TEXT : K_DIM);
-    if (proj.arr_ambient)
-        tag(x + 6, 3, 15, "AMBIENT", K_CYAN);
-    for (i = 0, x = 4; i < 7; i++) {     /* the phases, in their order */
-        int32_t w = text_w(&FONT_T, PHASE_NAME[i]) + 6;
-        int now = live && ui_st.phase == i, past = live && i < ui_st.phase;
-        cv_round(x, 26, w, 15, 2, now ? K_ACC : K_PANEL);
-        cv_text(x + 3, 28, &FONT_T, PHASE_NAME[i], now ? K_BG : past ? K_DIM2 : K_TEXT2);
-        x += w + 3;
-    }
-    t[0] = 0;
-    if (live) {
-        bar_count(ui_st.bars_in_phase, t);
-        cat(cat(t, " in "), PHASE_NAME[ui_st.phase % 7u]);
-        cat(t, ", change in ~");
-        bar_count(ui_st.bars_until_change > 0 ? ui_st.bars_until_change : 0, t);
-    } else if (ui.st_ok || !proj.arr_has) {
-        cat(t, proj.arr_has ? "-" : "AUTO starts one");
-    } else {
-        cat(t, proj.arr_on ? "from the next Play" : "off: the next Play is yours");
-    }
-    cv_text(4, 46, &FONT_XS, t, live ? K_TEXT : K_DIM);
-    cv_text(4, 68, &FONT_T, "IN", K_DIM);
-    for (i = 0, x = 24; live && i < ui_st.nactive; i++) {   /* the voices the arranger has in */
-        int vid = ui_st.active[i] < nlanes ? lane[ui_st.active[i]].vid : BL_VID_NONE;
-        caps(u, vid_name(vid), sizeof u);
-        if (x + text_w(&FONT_T, u) + 6 > 236)
-            break;
-        x += tag(x, 66, 14, u, vid_color(vid)) + 3;
-    }
-    if (!live)
-        cv_text(24, 66, &FONT_XS, ui.st_ok ? "every voice" : "-", K_DIM);
-    t[0] = 0;
-    cat_u(t, ui.st_ok ? pct(ui_st.density) : proj.density_pct);
-    cat(t, "%");
-    row(4, 92, 64, "DENSITY", t, K_TEXT2);
-    t[0] = 0;
-    if (proj.arr_has) {
-        cat_u(t, (uint32_t)proj.arr_min);
-        cat_u(cat(t, "-"), (uint32_t)proj.arr_max);
-        cat(t, " bars");
-    } else {
-        cat(t, "-");
-    }
-    row(4, 107, 64, "LENGTH", t, K_TEXT2);
-    row(4, 122, 64, "REPRISE", proj.arr_has && proj.arr_reprise ? "on" : "off", K_TEXT2);
-    row(124, 122, 184, "BED DROP", "off", K_TEXT2);
+    draw_pattern();                     /* MOTION reuses the existing selected-source grid */
 }
 
-/* ---- DELAY: the Delay Cheat Sheet: for each of the template's voices its division and time at the tempo shown */
+/* ---- MIDI DELAY: actual per-voice output settings, not the legacy audio-delay hint. */
 static void draw_delay(void)
 {
     const bl_project_t *p = tpl_now();
     const felucca_font_t *f = p->nvoices > 6 ? &FONT_T : &FONT_XS;
     int32_t rh = p->nvoices > 6 ? 12 : 14, i, y;
     char t[40];
-    cv_text(4, 2, &FONT_B, "DELAY CHEAT SHEET", K_ACC);
+    cv_text(4, 2, &FONT_B, "MIDI NOTE DELAY", K_ACC);
     t[0] = 0;
-    cat_u(cat(t, "audio delay per voice @ "), (uint32_t)bpm_now());
+    cat_u(cat(t, "per voice @ "), (uint32_t)bpm_now());
     cat(t, " BPM");
     cv_text(4, 20, &FONT_XS, t, K_DIM);
     cv_text(4, 40, &FONT_T, "VOICE", K_DIM);
-    cv_text(96, 40, &FONT_T, "DIVISION", K_DIM);
+    cv_text(96, 40, &FONT_T, "DELAY", K_DIM);
     text_r(236, 40, &FONT_T, "TIME", K_DIM);
     cv_rect(4, 53, 232, 1, K_LINE);
     for (i = 0, y = 56; i < p->nvoices; i++, y += rh) {
-        int div = delay_div(p->voice[i].role);
-        t[0] = 0;
-        cat_u(t, delay_ms(div, bpm_now()));
-        cat(t, " ms");
+        const bl_voice_t *v = voice_material(bl_vid(p->voice[i].id));
+        bl_delay_t d = v ? v->delay : proj.delay[i];
         cv_text(4, y, f, vid_name(bl_vid(p->voice[i].id)), K_TEXT);
-        cv_text(96, y, f, DIV_NAME[div], K_CYAN);
-        text_r(236, y, f, t, K_TEXT2);
+        cv_text(96, y, f, d.enabled ? "ON" : "OFF", d.enabled ? K_CYAN : K_DIM);
+        text_r(236, y, f, TIME_LABEL[d.time - 1], K_TEXT2);
     }
 }
 
@@ -1336,6 +1376,12 @@ static uint32_t main_sig(void)
     int k;
     if (ui.help)
         return hash(0x48454C50u, ui.help);
+    h = hash(h, ui.page[ui.view]);
+    for (int j = 0; j < 4; j++) {
+        cell_t c;
+        cell(ui.view, j, &c);
+        h = hash_s(hash_s(h, c.val), c.sub);
+    }
     h = hash(hash(h, ui.pre_sig), (uint32_t)proj.arr_has | proj.arr_on << 1 | proj.arr_ambient << 2 |
                                       proj.arr_reprise << 3 | (uint32_t)proj.arr_min << 8 | (uint32_t)proj.arr_max << 20);
     h = hash(hash(h, proj.sync | proj.ext_ports << 1 | (uint32_t)proj.density_pct << 8 | (uint32_t)proj_seeded() << 16 |
@@ -1354,6 +1400,7 @@ static uint32_t main_sig(void)
     }
     for (k = 0; k < nlanes; k++) {       /* the patterns: a mutation changes them */
         const bl_pattern_t *p = lane[k].pat;
+        h = hash(h, (uint32_t)p->length);
         h = hash(hash(h, p->n | (uint32_t)p->locked << 8), (uint32_t)p->seed);
         for (i = 0; i < p->n; i++)
             h = hash(h, (uint32_t)p->note[i].position ^ (uint32_t)p->note[i].pitch.degree << 20);
@@ -1394,6 +1441,7 @@ static void draw_knobs(void)
     cell_t c[4];
     int now_touch = plat_ms() < ui.touch_until, i;
     uint32_t h = hash(2166136261u, ui.view | (uint32_t)(ui.touched + 1) << 8 | (uint32_t)now_touch << 16);
+    h = hash(h, ui.page[ui.view]);
     for (i = 0; i < 4; i++) {
         cell(ui.view, i, &c[i]);
         h = hash_s(hash_s(hash(h, (uint32_t)c[i].v), c[i].val), c[i].sub);
@@ -1403,10 +1451,10 @@ static void draw_knobs(void)
     ui.sig[2] = h;
     cv_begin(240, KNB_H, K_BG);
     {   /* the rule; at its right end, where you are: the page, then the dots */
-        char t[12];
+        char t[24];
         int k;
         int32_t xd = 237 - NVIEWS * 6, xt;
-        caps(t, VIEW_NAME[ui.view], sizeof t);
+        caps(t, view_name(ui.view), sizeof t);
         xt = xd - 5 - text_w(&FONT_XS, t);
         cv_rect(4, 5, xt - 9, 1, K_LINE);
         cv_text(xt, -1, &FONT_XS, t, K_ACC);
@@ -1414,7 +1462,7 @@ static void draw_knobs(void)
             cv_round(xd + k * 6, 3, 4, 4, 2, k == ui.view ? K_ACC : K_LINE);
     }
     for (i = 0; i < 4; i++) {
-        int k = VIEW_KNOB[ui.view][i], hot = now_touch && ui.touched == i && k < KN_SHOWN;
+        int k = view_knob(ui.view, i), hot = now_touch && ui.touched == i && k != KN_NONE && k < KN_SHOWN;
         int32_t x = i * 60, cx = x + 30;
         char t[16];
         const felucca_font_t *f;
@@ -1423,7 +1471,20 @@ static void draw_knobs(void)
             cv_rect(x, 16, 1, 46, K_LINE);
         if (hot)
             cv_round(x + 3, 11, 54, 57, 6, K_PANEL);
-        caps(t, KNOB_LABEL[ui.view][i], sizeof t);
+        if (ui.view == V_CC || ui.view == V_SETUP) caps(t, knob_label(ui.view, i), sizeof t);
+        else {
+            const char *label = knob_label(ui.view, i);
+            if (k == KN_GENERATOR) label = "GEN";
+            if (k == KN_DIRECTION) label = "DIR";
+            if (k == KN_LOOP) label = "STEPS";
+            if (k == KN_REGISTER) label = "REG";
+            if (k == KN_CHANNEL) label = "MIDI";
+            if (k == KN_FEEDBACK) label = "FDBK";
+            if (k == KN_DELAY_TIME) label = "TIME";
+            if (k == KN_NONE) label = "-";
+            t[0] = 'K'; t[1] = (char)('1' + i); t[2] = ' ';
+            caps(t + 3, label, sizeof t - 3);
+        }
         f = fit(&FONT_XS, t, 56);
         text_c(cx, f == &FONT_T ? 14 : 12, f, t, hot ? K_TEXT : K_DIM);
         if (c[i].kind == CELL_TEXT) {    /* shown only */
@@ -1452,7 +1513,7 @@ static void draw_knobs(void)
  * (queued). WHERE (the reader asks, or it has just started listening) is the whole screen: the page, its values and
  * the header, then what the page shows. Nothing is built while no reader listens. */
 static struct {
-    uint8_t view, help, started, playing, phase;
+    uint8_t view, page, help, started, playing, phase;
     uint32_t val[4];                     /* the cells' values, hashed */
 } sp;
 static char sp_buf[ANN_MAX + 1];
@@ -1500,17 +1561,33 @@ static void sp_item(const char *s, const char *sep)   /* s after what is gathere
  * STEPS"); a range as "G2 to G4", "8 to 16" */
 static void sp_knob(int view, int i)
 {
-    static const uint8_t WITH_SUB[] = {KNS_LOOP, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_LENGTH, KNS_PHASE, KNS_PLAYS};
+    static const uint8_t WITH_SUB[] = {KN_LOOP, KNS_LOOP, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_LENGTH, KNS_PHASE, KNS_PLAYS};
     cell_t c;
     uint32_t j;
-    int k = VIEW_KNOB[view][i];
+    int k = view_knob(view, i);
     cell(view, i, &c);
-    sp_cat(KNOB_LABEL[view][i]);
+    if (view != V_CC && view != V_SETUP) {
+        char number[4] = {'K', (char)('1' + i), ' ', 0};
+        sp_cat(number);
+    }
+    sp_cat(knob_label(view, i));
     sp_cat(" ");
     if (k == KNS_REGISTER && sel_cfg()) {   /* (its notes may have a minus of their own) */
         char t[24];
         reg_text(sel_cfg()->reg_low, sel_cfg()->reg_high, t, 1);
         sp_cat(t);
+    }
+    if (k == KN_REGISTER && sel_material()) {
+        char t[24];
+        const bl_vconfig_t *cfg = &sel_material()->pending;
+        reg_text(cfg->reg_low, cfg->reg_high, t, 1);
+        sp_cat(t);
+        return;
+    }
+    if ((k == KN_GENERATOR || k == KN_SCALE) && sel_material()) {
+        const bl_vconfig_t *cfg = &sel_material()->pending;
+        sp_cat(k == KN_GENERATOR ? GEN_NAME[cfg->gen.kind] : MODE_NAME[cfg->key.scale.mode]);
+        return;
     }
     for (j = 0; !(k == KNS_REGISTER && sel_cfg()) && c.val[j]; j++) {
         char ch[2] = {c.val[j], 0};
@@ -1532,7 +1609,7 @@ static void sp_page(int all)
 {
     int i;
     sp_clear();
-    sp_cat(VIEW_NAME[ui.view]);
+    sp_cat(view_name(ui.view));
     sp_cat(" page");
     if ((ui.view == V_VOICE || ui.view == V_PATTERN || ui.view == V_CC) && key_voice(ui.sel) >= 0) {
         sp_cat(", ");
@@ -1620,7 +1697,8 @@ static void sp_main(void)
         break;
     }
     case V_VOICE:
-    case V_PATTERN: {
+    case V_PATTERN:
+    case V_ARRANGER: {
         const lane_t *l = sel_lane();
         if (!l) {
             sp_cat(vid_name(key_vid(ui.sel)));
@@ -1633,7 +1711,7 @@ static void sp_main(void)
         sp_int((uint32_t)l->gen);
         if (l->pending)
             sp_cat(l->pending == BL_REQ_REGENERATE ? ", regenerates at its loop" : ", a blank cycle at its loop");
-        if (ui.view == V_PATTERN && l->pat->n) {   /* the onsets' steps, where they are few enough to hear */
+        if ((ui.view == V_PATTERN || ui.view == V_ARRANGER) && l->pat->n) { /* source-grid onsets */
             int32_t n = steps(l->pat), last = -1;
             sp_flush();
             sp_int(l->pat->n);
@@ -1689,37 +1767,18 @@ static void sp_main(void)
         }
         break;
     }
-    case V_ARRANGER:
-        sp_cat(proj.arr_on ? "Auto on" : "Auto off");
-        if (ui.st_ok && ui_st.has_arr) {
-            sp_cat(". Phase ");
-            sp_cat(PHASE_NAME[ui_st.phase % 7u]);
-            sp_cat(", ");
-            t[0] = 0;
-            bar_count(ui_st.bars_in_phase, t);
-            sp_cat(t);
-            sp_cat(" in, change in about ");
-            t[0] = 0;
-            bar_count(ui_st.bars_until_change > 0 ? ui_st.bars_until_change : 0, t);
-            sp_cat(t);
-            sp_cat(". In");
-            for (i = 0; i < ui_st.nactive; i++) {
-                sp_cat(i ? ", " : ": ");
-                sp_cat(vid_name(ui_st.active[i] < nlanes ? lane[ui_st.active[i]].vid : BL_VID_NONE));
-            }
-        }
-        sp_cat(". Density ");
-        sp_int(ui.st_ok ? pct(ui_st.density) : proj.density_pct);
-        sp_cat("%");
-        break;
     case V_DELAY: {
         const bl_project_t *p = tpl_now();
         for (i = 0; i < p->nvoices; i++) {
-            int div = delay_div(p->voice[i].role);
+            int vid = bl_vid(p->voice[i].id);
+            const bl_voice_t *v = voice_material(vid);
+            bl_delay_t d = v ? v->delay : proj.delay[i];
             t[0] = 0;
-            cat(cat(cat(cat(t, vid_name(bl_vid(p->voice[i].id))), " "), DIV_NAME[div]), " ");
-            cat_u(t, delay_ms(div, bpm_now()));
-            cat(t, " ms");
+            cat(cat(cat(cat(t, vid_name(vid)), d.enabled ? " on, " : " off, "), TIME_LABEL[d.time - 1]), ", feedback ");
+            cat_u(t, d.feedback);
+            cat(t, "%, decay ");
+            cat_u(t, d.decay);
+            cat(t, "%");
             sp_item(t, ", ");
         }
         t[0] = 0;
@@ -1768,7 +1827,7 @@ static void sp_help(void)
 static uint32_t sp_cell(int i)           /* a cell the knob changes, hashed (0: shown only) */
 {
     cell_t c;
-    if (VIEW_KNOB[ui.view][i] >= KN_SHOWN)
+    if (view_knob(ui.view, i) == KN_NONE || view_knob(ui.view, i) >= KN_SHOWN)
         return 0;
     cell(ui.view, i, &c);
     return hash_s(2166136261u, c.val);
@@ -1779,6 +1838,7 @@ static void sp_snap(void)
     for (i = 0; i < 4; i++)
         sp.val[i] = sp_cell(i);
     sp.view = ui.view;
+    sp.page = ui.page[ui.view];
     sp.help = ui.help;
     sp.playing = (uint8_t)rt_playing();
     sp.phase = ui.st_ok && ui_st.has_arr ? ui_st.phase : 0xFFu;
@@ -1826,7 +1886,7 @@ static void speak(void)
             return;
         }
     }
-    if (ui.view != sp.view) {            /* a new page: said when it settles */
+    if (ui.view != sp.view || ui.page[ui.view] != sp.page) { /* section or remembered subpage */
         sp_snap();
         sp_page(0);
         ann_later(sp_buf, ANN_NOW, 200u, now);

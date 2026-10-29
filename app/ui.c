@@ -11,11 +11,10 @@
  *   F#5            >>: the arranger's next change         G5   one unit of tension
  *   PLAY           play / stop             REC   the B part          EDIT   re-roll every unlocked voice
  *   SEL            lock (on the Voice page) SAVE  saves             OCT- / OCT+   undo / Dice (a new seed)
- *   HOME ENV ARP LFO SEQ FX GLO   the pages: PERFORM, VOICE, PATTERN, CC, ARRANGER, DELAY, SETUP
+ *   HOME ENV ARP LFO SEQ FX GLO   QUICK/PLAY, TIMING/ROUTING, HARMONY, CC, MOTION, MIDI DELAY, SETUP
  *   MASTER         density                 SELECT the voice (HOME held: tempo)
  *   ALGORITHM      the mode                PRESETS the template
- *   KNOB 1-4       the page's four values: those the Mac can change, and the Pattern page's ratchet (the FM-1's
- *                  own); the rest are shown, their knobs do nothing
+ *   K1-K4          the current page's values; LFO/GLO retain their existing bindings
  *
  * Every action takes the Mac's way (UIState, AppServices): the engine's action at the render head (rt_action), the
  * transport's mute, the project's change (proj_*), an undo point first where UIState pushes one. What is refused
@@ -25,35 +24,44 @@
 
 /* the pages, a button each */
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
-static const char *const VIEW_NAME[NVIEWS] = {"Perform", "Voice", "Pattern", "CC", "Arranger", "Delay", "Setup"};
+static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "Setup"};
+static const uint8_t VIEW_PAGES[NVIEWS] = {2, 2, 1, 1, 1, 1, 1};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
-/* the four knobs of each page (KN_); the values the Mac cannot change (KNS_) are shown, not edited. The Pattern
- * page's KNOB 1 is the ratchet (the FM-1's own control: the Mac has none); the Delay page has no knobs (the spec's
- * "-"): its strip shows four values all the same */
+/* Page bindings: KN_ edits through the project interfaces; KNS_ remains shown
+ * only. Legacy AUTO/FORM/AMBIENT/RATCHET handlers remain for later placement. */
 enum {
     KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS, KN_RATCHET,
+    KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME,
+    KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_DECAY,
     KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
     KNS_REPRISE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
 };
 #define KN_SHOWN KNS_LOOP                /* from here on: shown only */
 static const uint8_t VIEW_KNOB[NVIEWS][4] = {
-    {KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT},
-    {KN_CHANNEL, KNS_LOOP, KNS_REGISTER, KNS_GEN},
-    {KN_RATCHET, KNS_STEPS, KNS_GENERATION, KNS_PLAYS},
+    {KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE},
+    {KN_RATE, KN_GATE, KN_LOOP, KN_PHASE},
+    {KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DIRECTION},
     {KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE},
-    {KNS_PHASE, KNS_LENGTH, KNS_DROP, KNS_REPRISE},
-    {KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED},
+    {KN_GROOVE, KN_LOOP, KN_PHASE, KN_DIRECTION},
+    {KN_DELAY_ON, KN_DELAY_TIME, KN_FEEDBACK, KN_DECAY},
     {KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS},
 };
 static const char *const KNOB_LABEL[NVIEWS][4] = {
-    {"Tempo", "Auto", "Form", "Ambient"},
-    {"Channel", "Loop", "Register", "Generator"},
-    {"Ratchet", "Steps", "Generation", "Plays left"},
+    {"Track", "Generator", "Root", "Scale"},
+    {"Rate", "Gate", "Loop length", "Phase"},
+    {"Generator", "Root", "Scale", "Direction"},
     {"Target", "Cycle", "Depth", "Scene"},
-    {"Phase", "Length", "Bed drop", "Reprise"},
-    {"Feedback", "Wet", "Ping-pong", "Filtered"},
+    {"Groove", "Loop length", "Phase", "Direction"},
+    {"Delay", "Time", "Feedback", "Decay"},
     {"Root", "Sync", "EXT input", "Lights"},
 };
+static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME};
+static const uint8_t ROUTING_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_NONE, KN_NONE};
+static const char *const PLAY_LABEL[4] = {"Direction", "Groove", "Delay", "Delay time"};
+static const char *const ROUTING_LABEL[4] = {"MIDI channel", "Register", "Unused", "Unused"};
+static const char *const DIR_LABEL[BL_NDIRS] = {"UP", "DOWN", "M-DOWN", "PEND", "M-PEND"};
+static const char *const GROOVE_LABEL[BL_NGROOVES] = {"STRAIGHT", "PULSE 8", "DRIVE 16", "BROKEN 8"};
+static const char *const TIME_LABEL[7] = {"1/16", "1/8", "1/8D", "1/4", "5/16", "1/4D", "7/16"};
 
 /* the keys: the voices' (key k is the role KEY_ROLE[k]), the degrees' (white keys 4-10), the scenes' (black keys
  * 3-7), the slots', >> and tension */
@@ -88,6 +96,7 @@ enum { POT_BOOT, POT_REST, POT_MOVING };
 
 static struct {
     uint8_t view, sel;                   /* the page; the selected voice (its key) */
+    uint8_t page[NVIEWS];                /* runtime-only page memory, independent for each section */
     uint32_t btn, keys, btn_used, key_used;
     uint32_t enc_t[NE];
     uint8_t enc_run[NE];                 /* detents in the current quick run, per knob (accel) */
@@ -112,6 +121,22 @@ static struct {
     uint32_t frame;
     uint32_t sig[3];                     /* what each band shows: redrawn when it changes */
 } ui;
+
+static const char *view_name(int v)
+{
+    return ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
+           ui.page[v] && v == V_VOICE ? "ENV ROUTING" : VIEW_NAME[v];
+}
+static int view_knob(int v, int i)
+{
+    return ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
+           ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] : VIEW_KNOB[v][i];
+}
+static const char *knob_label(int v, int i)
+{
+    return ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
+           ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] : KNOB_LABEL[v][i];
+}
 static bl_project_t ui_p PLAT_POOL;      /* the app project's template: its voices' roles and ids, its scenes */
 static bl_status_t ui_st PLAT_POOL;      /* the mirror (UIState.refresh): the running engine's snapshot */
 
@@ -512,6 +537,72 @@ static int32_t accel(int role, int32_t s, int range)
     return s * (int32_t)m;
 }
 
+/* New page controls share CORE1/2/3 targets; no page keeps a private parameter copy. */
+static int voice_knob(int role, int k, int32_t e)
+{
+    if (k < KN_TRACK || k > KN_DECAY) return 0;
+    int d = e > 0 ? 1 : -1, voice = key_voice(ui.sel);
+    if (k == KN_TRACK) {
+        sel_step(d);                    /* same ui.sel and missing-role skipping as SELECT */
+        return 1;
+    }
+    if (voice < 0 || rt_loading()) {
+        warn("VOICE", "NOT AVAILABLE");
+        return 1;
+    }
+    if (k == KN_DELAY_ON || k == KN_DELAY_TIME || k == KN_FEEDBACK || k == KN_DECAY) {
+        bl_delay_t target;
+        if (proj_get_delay(voice, &target)) {
+            warn("DELAY", "NOT AVAILABLE");
+            return 1;
+        }
+        bl_delay_t next = target;
+        if (k == KN_DELAY_ON) next.enabled = d > 0;
+        if (k == KN_DELAY_TIME) next.time = (uint8_t)clamp(target.time + d, 1, 7);
+        if (k == KN_FEEDBACK) next.feedback = (uint8_t)(25 * clamp(target.feedback / 25 + d, 1, 4));
+        if (k == KN_DECAY) next.decay = (uint8_t)clamp(target.decay + accel(role, e, 50), 50, 100);
+        if (!memcmp(&next, &target, sizeof next)) return 1;
+        undo_point();
+        if (proj_set_delay(voice, &next)) warn("DELAY", "NOT AVAILABLE");
+        else show("MIDI DELAY", rt_playing() ? "NEXT ORIGINAL NOTE" : "SET");
+        return 1;
+    }
+    bl_vconfig_t target;
+    if (proj_get_voice_config(voice, &target)) {
+        warn("CONFIG", "NOT AVAILABLE");
+        return 1;
+    }
+    bl_vconfig_t next = target;
+    int field = -1, value = 0;
+    switch (k) {
+    case KN_GENERATOR: field = BL_CFG_GENERATOR; value = (target.gen.kind + d + BL_NGENS) % BL_NGENS; break;
+    case KN_VROOT: field = BL_CFG_ROOT; value = (target.key.root + d + 12) % 12; break;
+    case KN_SCALE: field = BL_CFG_SCALE; value = (target.key.scale.mode + d + BL_NMODES) % BL_NMODES; break;
+    case KN_DIRECTION: field = BL_CFG_DIRECTION; value = (target.gen.direction + d + BL_NDIRS) % BL_NDIRS; break;
+    case KN_GROOVE: field = BL_CFG_GROOVE; value = (target.gen.groove + d + BL_NGROOVES) % BL_NGROOVES; break;
+    case KN_RATE: field = BL_CFG_RATE; value = d > 0 ? 240 : 480; break;
+    case KN_GATE: field = BL_CFG_GATE; value = clamp(target.gen.b + accel(role, e, target.gen.a), 1, target.gen.a - 1); break;
+    case KN_LOOP: field = BL_CFG_LOOP; value = clamp((int32_t)(target.length / 240) + e, 1, 16); break;
+    case KN_PHASE: field = BL_CFG_PHASE; value = clamp(target.phase + e, 0, bl_config_phase_count(&target) - 1); break;
+    case KN_REGISTER: {
+        int shift = clamp(12 * clamp(e, -11, 11), -(int)target.reg_low, 127 - target.reg_high);
+        next.reg_low = (uint8_t)(target.reg_low + shift);
+        next.reg_high = (uint8_t)(target.reg_high + shift);
+        break;
+    }
+    default: return 1;
+    }
+    if (field >= 0 && bl_config_edit(&next, field, value)) {
+        warn("CONTROL", "ARP / MOTIF ONLY");
+        return 1;
+    }
+    if (!bl_config_diff(&target, &next)) return 1;
+    undo_point();
+    if (proj_set_voice_config(voice, &next)) warn("CONFIG", "NOT AVAILABLE");
+    else show("VOICE CONFIG", rt_playing() ? "NEXT LOCAL LOOP" : "SET");
+    return 1;
+}
+
 static void knob(int role, int k, int32_t e)   /* a page's knob: the values the Mac can change (shown in the
                                                 * header; a reader hears the strip's value as it settles) */
 {
@@ -520,6 +611,7 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     static const char *const LIGHTS[3] = {"OFF", "ON", "KEYS"};
     int d = e > 0 ? 1 : -1, v, i;
     char t[8];
+    if (voice_knob(role, k, e)) return;
     switch (k) {
     case KN_TEMPO: tempo_to(proj.bpm + accel(role, e, 180), 0); break;
     case KN_AUTO:
@@ -545,7 +637,21 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     case KN_CHANNEL:
         if ((i = key_voice(ui.sel)) < 0)
             break;
-        proj_set_channel(i, clamp(proj.channel[i] + e, 0, 15));
+        if (rt_loading()) {
+            warn("CHANNEL", "NOT AVAILABLE");
+            break;
+        }
+        v = proj.channel[i];
+        if (rt_playing()) {
+            const bl_live_t *engine = rt_engine();
+            for (int j = 0; j < engine->project.nvoices; j++)
+                if (bl_vid(engine->st[j].voice.id) == key_vid(ui.sel)) v = engine->st[j].voice.midi_channel;
+        }
+        if (v < 0) break;
+        d = clamp(v + e, 0, 15);
+        if (d == v) break;
+        undo_point();
+        proj_set_channel(i, d);
         itoa_u(proj.channel[i] + 1u, t);
         show("CHANNEL", t);
         break;
@@ -592,7 +698,11 @@ static void button(int b)                /* a button's job, on its release (PLAY
     int v, k = ui.combo[b] - 1;
     for (v = 0; v < NVIEWS; v++)         /* a page's button: its page */
         if (VIEW_BTN[v] == b) {
+            if (plat_ms() - ui.down_t[b] >= HELP_HOLD) return;
+            if (ui.view == v) ui.page[v] = (uint8_t)((ui.page[v] + 1u) % VIEW_PAGES[v]);
             set_view(v);
+            ui.touched = -1;
+            ui.touch_until = 0;
             return;
         }
     if (k >= 0) {                        /* a voice key was held at the press */
@@ -678,12 +788,12 @@ static int help_lines(int b, const char *l[HELP_LINES])
     int n = 0;
 #define L(t) (l[n++] = (t))
     switch (b) {
-    case B_HOME: L("PERFORM"); L("TEMPO, AUTO, FORM, AMBIENT"); L("+ SELECT: TEMPO"); break;
-    case B_ENV: L("THE VOICE"); L("CHANNEL, LOOP, REGISTER,"); L(" GENERATOR"); break;
-    case B_ARP: L("THE PATTERN"); L("ITS STEPS, GENERATION"); L(" AND LEGITIMIZATION"); L("KNOB 1: RATCHET"); break;
+    case B_HOME: L("QUICK / PLAY"); L("TAP AGAIN: NEXT PAGE"); L("K1-K4: PAGE PARAMETERS"); L("+ SELECT: TEMPO"); break;
+    case B_ENV: L("TIMING / ROUTING"); L("TAP AGAIN: NEXT PAGE"); L("K1-K4: PAGE PARAMETERS"); L("SEL: LOCK SELECTED VOICE"); break;
+    case B_ARP: L("HARMONY"); L("K1 GENERATOR, K2 ROOT"); L("K3 SCALE, K4 DIRECTION"); break;
     case B_LFO: L("CC AND MODULATION"); L("TARGET, CYCLE, DEPTH,"); L(" SCENE"); break;
-    case B_SEQ: L("THE ARRANGER"); L("PHASE, LENGTH, BED DROP,"); L(" REPRISE"); break;
-    case B_FX: L("DELAY TIMES"); L("FOR YOUR EFFECTS"); L(" AT THE TEMPO"); break;
+    case B_SEQ: L("MOTION"); L("K1 GROOVE, K2 LOOP"); L("K3 PHASE, K4 DIRECTION"); break;
+    case B_FX: L("MIDI NOTE DELAY"); L("K1 ON/OFF, K2 TIME"); L("K3 FEEDBACK, K4 DECAY"); break;
     case B_GLO: L("SETUP"); L("ROOT, SYNC, EXT INPUT,"); L(" LIGHTS"); break;
     case B_EDIT: L("RE-ROLL EVERY"); L(" UNLOCKED VOICE"); L("WITH A VOICE KEY:"); L(" REGENERATE IT"); break;
     case B_REC: L("THE B PART"); L("WITH A VOICE KEY:"); L(" A BLANK CYCLE"); break;
@@ -791,7 +901,7 @@ static void input(void)
         }
     if ((e = plat_enc(EN_SELECT)) != 0) {   /* SELECT: the voice; with HOME held, the tempo */
         if (btn >> B_HOME & 1u) {
-            tempo_to(proj.bpm + accel(EN_SELECT, e, 180), ui.view != V_PERFORM);
+            tempo_to(proj.bpm + accel(EN_SELECT, e, 180), 1);
             ui.btn_used |= 1u << B_HOME;
         } else {
             sel_step(e > 0 ? 1 : -1);
@@ -814,7 +924,7 @@ static void input(void)
     }
     for (i = 0; i < 4; i++)
         if ((e = plat_enc(EN_K1 + (int)i)) != 0) {
-            knob(EN_K1 + (int)i, VIEW_KNOB[ui.view][i], e);
+            knob(EN_K1 + (int)i, view_knob(ui.view, (int)i), e);
             ui.touched = (int8_t)i;
             ui.touch_until = plat_ms() + 1200u;
             ui.turn_t = plat_ms();
