@@ -32,12 +32,12 @@
 #define BL_MAX_UPCOMING (BL_MAX_PENDING + BL_MAX_ENABLES + BL_MAX_ADVANCES)
 
 /* StateSnapshot: voices (patterns + MOTIF evolution), generations and schedule.
- * ARP/MOTIF also capture local phase for continuation; other generators retain their recall behavior. */
+ * All voices capture local phase so pending configuration resumes at its original boundary. */
 typedef struct {
     bl_voice_t v[BL_MAX_VOICES];
     int64_t generation[BL_MAX_VOICES];
-    uint32_t motif_phase[BL_MAX_VOICES]; /* ARP/MOTIF: captured local ticks into its cycle */
-    uint8_t motif_flags[BL_MAX_VOICES];  /* ARP/MOTIF: active bit 0, blank-cycle bit 1 */
+    uint32_t motif_phase[BL_MAX_VOICES]; /* all generators: captured local ticks into the cycle */
+    uint8_t motif_flags[BL_MAX_VOICES];  /* all generators: active bit 0, blank-cycle bit 1 */
     bl_sched_t sched;
     uint8_t n;
 } bl_state_t;
@@ -106,6 +106,7 @@ typedef struct bl_live {
     struct {
         bl_tick_t tick;
         uint8_t voice;              /* a BL_VID_ */
+        uint8_t midi;               /* resolved in the voice's effective frame at the action tick */
     } tension_note[BL_MAX_TENSION];
     uint8_t nmorph;
     bl_smorph_t morph[BL_MAX_MORPHS];
@@ -193,6 +194,15 @@ void bl_live_status(const bl_live_t *e, bl_status_t *out);
 /* Snapshot.VoiceSnapshot.pattern: voice i's (project order, 0 <= i < nvoices), its pattern inside, as the engine
  * holds it now (the panel's lanes draw it; valid until the engine renders or takes an action) */
 const bl_voice_t *bl_live_voice(const bl_live_t *e, int i);
+
+/* Main-loop configuration API. IDs are BL_VID_, not array indices. Get returns
+ * active and latest requested target (including earlier pending edits).
+ * Set/field stage a validated atomic target for the next local boundary;
+ * LOCK permits manual edits and remains set; inactive voices retain pending
+ * edits. -1: missing voice/invalid input. */
+int bl_live_get_config(const bl_live_t *e, int vid, bl_vconfig_t *active, bl_vconfig_t *target);
+int bl_live_set_config(bl_live_t *e, int vid, const bl_vconfig_t *target);
+int bl_live_set_config_field(bl_live_t *e, int vid, int field, int32_t value);
 
 /* the canonical state text of tests/equiv/README.md ("The state hash"), one call of line per line (without its
  * "\n"), and its FNV-1a 64 (each line with its "\n") */

@@ -45,6 +45,8 @@ typedef struct {
     const char *cc_name[2];
     uint8_t cc_num[2];
     bl_delay_t delay;             /* output effect; zero fields retain OFF / 3/16 / 75% / 70% defaults */
+    uint8_t has_config;          /* 0: preserve the template's original materialization */
+    bl_vconfig_t config;         /* explicit initial musical settings when has_config */
 } bl_vcfg_t;
 
 /* CCScene: per entry a voice (its index in the project), a target (the index of its name in that voice's CC map)

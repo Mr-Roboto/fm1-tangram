@@ -21,6 +21,11 @@ void rt_capture(bl_state_t *out);        /* Transport.captureState */
 int rt_muted(int vid);
 int32_t rt_bpm(void);
 int rt_action(const bl_action_t *a);     /* Transport.enqueue: 0, or -1 when the engine's queue drops it */
+/* Main-loop musical configuration, BL_VID_ addressing. No MIDI queue edits. */
+int rt_get_voice_config(int vid, bl_vconfig_t *active, bl_vconfig_t *target);
+int rt_has_voice_state(void);            /* materialized engine, rather than a freshly loaded project preview */
+int rt_set_voice_config(int vid, const bl_vconfig_t *target);
+int rt_set_voice_config_field(int vid, int field, int32_t value);
 void rt_set_tempo(int32_t bpm);          /* playing: from the head's next bar line */
 void rt_load(const bl_project_t *p);     /* playing: Transport.loadProject; stopped: the next Play's project */
 void rt_set_mute(int vid, int on);

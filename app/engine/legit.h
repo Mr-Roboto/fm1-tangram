@@ -11,6 +11,7 @@
 #include "music.h"
 #include "pattern.h"
 #include "delay.h"
+#include "config.h"
 
 /* AnchorPolicy (in this order here, not Swift's) */
 enum { BL_ANCHOR_NONE, BL_ANCHOR_BEAT1, BL_ANCHOR_BEATS13 };
@@ -24,6 +25,8 @@ typedef struct {
     bl_pattern_t pat;
     bl_motif_evo_t motif;
     bl_delay_t delay;
+    bl_vconfig_t config, pending; /* active frame and coalesced target */
+    uint16_t config_dirty;        /* pending field bits; zero means no boundary edit */
 } bl_voice_t;
 
 /* Legitimizer.Config's ratchetProbability nil: 0.15 */

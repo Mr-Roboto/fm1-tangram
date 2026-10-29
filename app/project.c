@@ -34,7 +34,7 @@
 #include "state.h"
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
-#define SLOT_FORMAT 5u                  /* per-voice MIDI delay settings */
+#define SLOT_FORMAT 6u                  /* active/pending per-voice musical frames */
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
 #define PORTS_ALL (1u << PORT_USB | 1u << PORT_TRS)
@@ -58,6 +58,7 @@ static uint8_t proj_stale;               /* transportStale */
 static uint8_t proj_unseeded;            /* the defaults: their seed is drawn at the first Play */
 static uint8_t proj_saving;              /* a SAVE made while playing, written at the stop */
 static uint8_t proj_rt_ratchet;          /* the ratchet of the project the transport was last given */
+static uint8_t proj_template_pending;    /* a new template requested but not yet observed in the engine */
 static bl_state_t proj_st PLAT_POOL;     /* a state captured, unpacked */
 static bl_project_t proj_eng PLAT_POOL;  /* the project as the engine's, a template */
 static uint8_t proj_buf[PLAT_STORE_MAX] PLAT_POOL;   /* a state packed; a record read back */
@@ -122,6 +123,8 @@ static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: 
     proj.density_pct = 100;
     proj.has_density = 0;
     memset(proj.channel, 0, sizeof proj.channel);
+    memset(proj.voice_configured, 0, sizeof proj.voice_configured);
+    memset(proj.voice_config, 0, sizeof proj.voice_config);
     for (i = 0; i < BL_MAX_VOICES; i++) proj.delay[i] = bl_delay_config((bl_delay_t){0});
     for (i = 0; i < proj_eng.nvoices; i++)
         proj.channel[i] = proj_eng.voice[i].channel;
@@ -157,7 +160,8 @@ static int proj_valid(const proj_t *p)
                    : p->arr_on || p->arr_ambient || p->arr_reprise || p->arr_min || p->arr_max)
         return 0;
     for (i = 0; i < BL_MAX_VOICES; i++)
-        if (p->channel[i] > 15 || !bl_delay_valid(p->delay[i]))
+        if (p->channel[i] > 15 || !bl_delay_valid(p->delay[i]) || p->voice_configured[i] > 1 ||
+            (p->voice_configured[i] && !bl_config_valid(&p->voice_config[i])))
             return 0;
     return 1;
 }
@@ -184,6 +188,7 @@ int proj_load(void)
     int n, k;
     undo_used = undo_n = 0;
     proj_stale = proj_saving = 0;
+    proj_template_pending = 0;
     for (k = 0; k < PROJ_SLOTS; k++)
         slot_load(k);
     memset(&rec, 0, sizeof rec);
@@ -215,6 +220,7 @@ static void draw_seed(void)              /* the defaults' seed, now (the Mac dra
 
 int proj_save_pending(void) { return proj_saving; }
 int proj_seeded(void) { return !proj_unseeded; }
+static void sync_voice_configs(void);
 
 int proj_save(void)                      /* the project; the slots stored since (the others are on the flash) */
 {
@@ -223,6 +229,7 @@ int proj_save(void)                      /* the project; the slots stored since 
         proj_saving = 1;
         return 1;
     }
+    sync_voice_configs();
     proj_saving = 0;
 #ifdef PLAT_HOST
     host_saving();
@@ -260,6 +267,8 @@ void proj_to_engine(bl_project_t *out)
     for (i = 0; i < out->nvoices; i++) {
         out->voice[i].channel = proj.channel[i];
         out->voice[i].delay = bl_delay_config(proj.delay[i]);
+        out->voice[i].has_config = proj.voice_configured[i];
+        if (proj.voice_configured[i]) out->voice[i].config = proj.voice_config[i];
     }
 }
 
@@ -273,6 +282,7 @@ void proj_apply(void)                    /* rebuildTransport: a stopped transpor
     rt_set_sync(proj.sync);
     rt_set_ext_port(proj.ext_ports);
     rt_load(&proj_eng);
+    proj_template_pending = 0;
     proj_rt_ratchet = proj.ratchet_pct;
     proj_stale = 0;
 }
@@ -284,11 +294,38 @@ void proj_ready(void)
         proj_apply();
 }
 
+/* Recall/undo can change engine targets without touching app controls. Carry
+ * those frames into the saved project on stop, including still-pending edits.
+ * A different template awaiting activation keeps its own requested defaults. */
+static void sync_voice_configs(void)
+{
+    if (!rt_has_voice_state()) return;
+    if (proj_template_pending) {
+        if (rt_engine()->project.seed != proj.seed) return;
+        proj_template_pending = 0;
+    }
+    rt_capture(&proj_st);
+    bl_template(proj.tpl, &proj_eng);
+    if (proj_st.n != proj_eng.nvoices) return;
+    for (int i = 0; i < proj_st.n; i++)
+        if (strcmp(proj_st.v[i].id, proj_eng.voice[i].id)) return;
+    for (int i = 0; i < proj_st.n; i++) {
+        const bl_vconfig_t *target = &proj_st.v[i].pending;
+        if (!bl_config_valid(target)) continue;
+        if (!proj.voice_configured[i] || bl_config_diff(&proj.voice_config[i], target)) {
+            proj.voice_configured[i] = 1;
+            proj.voice_config[i] = *target;
+            proj_stale = 1;
+        }
+    }
+}
+
 int proj_stopped(void)
 {
     int r = 1;
     if (rt_playing())
         return 1;
+    sync_voice_configs();
     if (proj_saving && rt_idle())        /* (the stop's Stop and offs out first: the write would hold them) */
         r = proj_save();
     if (proj_stale)
@@ -318,12 +355,44 @@ static int template_seeded(int t, uint64_t seed)
     }
     proj_to_engine(&proj_eng);
     rt_load(&proj_eng);                  /* Transport.loadProject: from the next bar line */
+    proj_template_pending = 1;
     proj_rt_ratchet = proj.ratchet_pct;
     proj_stale = 1;
     return 0;
 }
 
 int proj_set_template(int tpl) { return template_seeded(tpl, proj_fresh_seed()); }
+
+int proj_get_voice_config(int voice, bl_vconfig_t *target)
+{
+    if (!target || rt_loading()) return -1;
+    proj_to_engine(&proj_eng);
+    if (voice < 0 || voice >= proj_eng.nvoices) return -1;
+    if (rt_playing()) return rt_get_voice_config(bl_vid(proj_eng.voice[voice].id), NULL, target);
+    if (bl_initial_state(&proj_eng, &proj_st)) return -1;
+    *target = proj_st.v[voice].pending;
+    return 0;
+}
+
+int proj_set_voice_config(int voice, const bl_vconfig_t *target)
+{
+    if (!target || !bl_config_valid(target) || rt_loading()) return -1;
+    proj_to_engine(&proj_eng);
+    if (voice < 0 || voice >= proj_eng.nvoices) return -1;
+    if (rt_playing() && rt_set_voice_config(bl_vid(proj_eng.voice[voice].id), target)) return -1;
+    proj.voice_configured[voice] = 1;
+    proj.voice_config[voice] = *target;
+    proj_stale = 1;
+    if (!rt_playing()) proj_apply();
+    return 0;
+}
+
+int proj_set_voice_config_field(int voice, int field, int32_t value)
+{
+    bl_vconfig_t target;
+    if (proj_get_voice_config(voice, &target) || bl_config_edit(&target, field, value)) return -1;
+    return proj_set_voice_config(voice, &target);
+}
 
 int proj_set_key(int root, int mode)
 {
@@ -333,6 +402,10 @@ int proj_set_key(int root, int mode)
     if (!rt_playing()) {
         proj.key_root = (uint8_t)root;
         proj.key_mode = (uint8_t)mode;
+        for (int i = 0; i < BL_MAX_VOICES; i++) if (proj.voice_configured[i]) {
+            proj.voice_config[i].key.root = root;
+            bl_scale_preset(mode, &proj.voice_config[i].key.scale);
+        }
         proj_apply();
         return 0;
     }
@@ -340,6 +413,10 @@ int proj_set_key(int root, int mode)
         return 0;
     proj.key_root = (uint8_t)root;
     proj.key_mode = (uint8_t)mode;
+    for (int i = 0; i < BL_MAX_VOICES; i++) if (proj.voice_configured[i]) {
+        proj.voice_config[i].key.root = root;
+        bl_scale_preset(mode, &proj.voice_config[i].key.scale);
+    }
     proj_stale = 1;
     memset(&a, 0, sizeof a);
     a.kind = BL_A_KEY;

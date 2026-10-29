@@ -59,6 +59,23 @@ static uint32_t in_range(out_t *o, int64_t v, int64_t lo, int64_t hi)
     return (uint32_t)v;
 }
 
+static void put_config(out_t *o, const bl_vconfig_t *c)
+{
+    if (!bl_config_valid(c)) o->bad = 1;
+    put8(o, (uint32_t)c->key.root);
+    put8(o, c->key.scale.mode);
+    put8(o, c->key.scale.count);
+    for (int j = 0; j < 12; j++) put8(o, (uint8_t)c->key.scale.off[j]);
+    put8(o, c->gen.kind);
+    put16(o, (uint16_t)c->gen.a);
+    put16(o, (uint16_t)c->gen.b);
+    put8(o, c->gen.direction);
+    put8(o, c->gen.groove);
+    put32(o, c->length);
+    put8(o, c->reg_low);
+    put8(o, c->reg_high);
+}
+
 int state_pack(const bl_state_t *s, uint8_t *buf, int max)
 {
     out_t o = {buf, 0, max, 0};
@@ -79,6 +96,12 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put32(&o, in_range(&o, p->start_offset, 0, p->length - 1));
         put32(&o, in_range(&o, s->generation[i], 0, UINT32_MAX));
         put64(&o, p->seed);
+        put_config(&o, &v->config);
+        put_config(&o, &v->pending);
+        if (v->config_dirty != bl_config_diff(&v->config, &v->pending) ||
+            v->config.length != p->length || v->config.gen.kind != p->generator ||
+            v->config.reg_low != v->reg_low || v->config.reg_high != v->reg_high) o.bad = 1;
+        put16(&o, v->config_dirty);
         if (!bl_delay_valid(v->delay)) o.bad = 1;
         put8(&o, v->delay.enabled);
         put8(&o, v->delay.time);
@@ -102,10 +125,8 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
                 put8(&o, in_range(&o, m->chord[j], 0, m->scale_count ? m->scale_count - 1 : 0));
             }
         }
-        if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
-            put32(&o, in_range(&o, s->motif_phase[i], 0, p->length - 1));
-            put8(&o, in_range(&o, s->motif_flags[i], 0, 3));
-        }
+        put32(&o, in_range(&o, s->motif_phase[i], 0, p->length - 1));
+        put8(&o, in_range(&o, s->motif_flags[i], 0, 3));
         for (int k = 0; k < p->n && k < BL_MAX_NOTES; k++) {
             const bl_pnote_t *q = &p->note[k];
             put16(&o, in_range(&o, q->position, 0, p->length - 1 < 0xFFFF ? p->length - 1 : 0xFFFF));
@@ -183,6 +204,23 @@ static void check(in_t *in, int64_t v, int64_t lo, int64_t hi)
     if (v < lo || v > hi) in->bad = 1;
 }
 
+static void get_config(in_t *in, bl_vconfig_t *c)
+{
+    c->key.root = (int32_t)get8(in);
+    c->key.scale.mode = (uint8_t)get8(in);
+    c->key.scale.count = (uint8_t)get8(in);
+    for (int j = 0; j < 12; j++) c->key.scale.off[j] = (int8_t)sign8(get8(in));
+    c->gen.kind = (uint8_t)get8(in);
+    c->gen.a = (int16_t)get16(in);
+    c->gen.b = (int16_t)get16(in);
+    c->gen.direction = (uint8_t)get8(in);
+    c->gen.groove = (uint8_t)get8(in);
+    c->length = get32(in);
+    c->reg_low = (uint8_t)get8(in);
+    c->reg_high = (uint8_t)get8(in);
+    if (!bl_config_valid(c)) in->bad = 1;
+}
+
 int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
 {
     in_t in = {buf, n, 0, 0};
@@ -220,6 +258,12 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         check(&in, p->start_offset, 0, p->length - 1);
         out->generation[i] = get32(&in);
         p->seed = get64(&in);
+        get_config(&in, &v->config);
+        get_config(&in, &v->pending);
+        v->config_dirty = (uint16_t)get16(&in);
+        if (v->config_dirty != bl_config_diff(&v->config, &v->pending) ||
+            v->config.length != p->length || v->config.gen.kind != p->generator ||
+            v->config.reg_low != v->reg_low || v->config.reg_high != v->reg_high) in.bad = 1;
         v->delay.enabled = (uint8_t)get8(&in);
         v->delay.time = (uint8_t)get8(&in);
         v->delay.feedback = (uint8_t)get8(&in);
@@ -247,12 +291,10 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
                 if ((!j && m->chord[j]) || (j && m->scale_count && m->chord[j] <= m->chord[j - 1])) in.bad = 1;
             }
         }
-        if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
-            out->motif_phase[i] = get32(&in);
-            check(&in, out->motif_phase[i], 0, p->length - 1);
-            out->motif_flags[i] = (uint8_t)get8(&in);
-            check(&in, out->motif_flags[i], 0, 3);
-        }
+        out->motif_phase[i] = get32(&in);
+        check(&in, out->motif_phase[i], 0, p->length - 1);
+        out->motif_flags[i] = (uint8_t)get8(&in);
+        check(&in, out->motif_flags[i], 0, 3);
         for (int k = 0; k < p->n && !in.bad; k++) {
             bl_pnote_t *q = &p->note[k];
             q->position = get16(&in);

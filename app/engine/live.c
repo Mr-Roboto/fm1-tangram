@@ -45,6 +45,23 @@ static bl_vstate_t *state_of(bl_live_t *e, uint8_t vid)
 }
 
 /* ------------------------------------------------------------ patterns --- */
+static void configured_pattern(const bl_vconfig_t *cfg, int role, int repeats, uint64_t seed,
+                                const bl_sched_t *sched, bl_pattern_t *out)
+{
+    if (cfg->gen.kind == BL_GEN_ARP)
+        bl_make_arp(&cfg->gen, &cfg->key, seed, cfg->length, out);
+    else if (cfg->gen.kind == BL_GEN_MOTIF)
+        bl_make_motif(&cfg->gen, &cfg->key, seed, cfg->length, out);
+    else {
+        if (cfg->gen.kind == BL_GEN_BASS_MELODY)
+            bl_make_bass_melody(cfg->gen.a, sched, seed, out);
+        else
+            bl_make_pattern(&cfg->gen, role, &cfg->key, seed, out);
+        bl_with_length(out, cfg->length);
+    }
+    out->remaining = (int16_t)repeats;
+}
+
 /* OfflineRenderer.makePattern(_:project:seedLabels:idSuffix:schedule:): the generator's pattern in the project's key
  * (the bass melody walks over sched), phased by phaseSteps 16ths, starting a full legitimization cycle of repeats */
 static void make_pattern(const bl_project_t *p, int32_t repeats, const bl_vcfg_t *c, uint64_t seed,
@@ -84,7 +101,51 @@ static void materialize(const bl_project_t *p, int32_t repeats, const bl_vcfg_t 
     v->delay = bl_delay_config(c->delay);
     uint64_t seed = bl_seed_derive(p->seed, "voice", c->id, "gen0", (const char *)NULL);
     make_pattern(p, repeats, c, seed, &p->transposition, &v->pat);
-    if (v->pat.generator == BL_GEN_MOTIF) bl_motif_evolution_init(&v->motif, &p->key, seed, c->id);
+    v->config.key = p->key;
+    v->config.gen = c->gen;
+    v->config.length = (uint32_t)v->pat.length;
+    v->config.reg_low = c->reg_low;
+    v->config.reg_high = c->reg_high;
+    if (c->gen.kind == BL_GEN_ARP || c->gen.kind == BL_GEN_MOTIF) {
+        v->config.gen.a = c->gen.a == 240 ? 240 : 480;
+        v->config.gen.b = c->gen.b > 0 && c->gen.b < v->config.gen.a ? c->gen.b : v->config.gen.a / 2;
+    } else if (v->config.gen.a < 1) v->config.gen.a = 1;
+    if (c->has_config && bl_config_valid(&c->config)) {
+        v->config = c->config;
+        v->reg_low = c->config.reg_low;
+        v->reg_high = c->config.reg_high;
+        configured_pattern(&v->config, c->role, repeats, seed, &p->transposition, &v->pat);
+    }
+    v->pending = v->config;
+    if (v->pat.generator == BL_GEN_MOTIF) bl_motif_evolution_init(&v->motif, &v->config.key, seed, c->id);
+}
+
+int bl_live_get_config(const bl_live_t *e, int vid, bl_vconfig_t *active, bl_vconfig_t *target)
+{
+    for (int i = 0; vid >= 0 && vid < BL_NVIDS && i < e->project.nvoices; i++)
+        if (e->st[i].vid == vid) {
+            if (active) *active = e->st[i].voice.config;
+            if (target) *target = e->st[i].voice.pending;
+            return 0;
+        }
+    return -1;
+}
+
+int bl_live_set_config(bl_live_t *e, int vid, const bl_vconfig_t *target)
+{
+    if (!target || vid < 0 || vid >= BL_NVIDS || !bl_config_valid(target)) return -1;
+    bl_vstate_t *s = state_of(e, (uint8_t)vid);
+    if (!s) return -1;
+    s->voice.pending = *target;
+    s->voice.config_dirty = bl_config_diff(&s->voice.config, target);
+    return 0;
+}
+
+int bl_live_set_config_field(bl_live_t *e, int vid, int field, int32_t value)
+{
+    bl_vconfig_t target;
+    if (bl_live_get_config(e, vid, NULL, &target) || bl_config_edit(&target, field, value)) return -1;
+    return bl_live_set_config(e, vid, &target);
 }
 
 /* the legitimization's repeats (Legitimizer.Config.default: 4), scaled at the project level by an ambient arranger
@@ -227,8 +288,19 @@ int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request)
         return enqueue_change(e, c, request);
     }
     case BL_A_KEY:
-        c.key = a->key;
-        return enqueue_change(e, c, request);
+        /* The legacy global key control broadcasts into the same per-voice
+         * pending frames; each voice crosses into the new key on its own loop. */
+        for (int i = 0; i < e->project.nvoices; i++) {
+            bl_vconfig_t target = e->st[i].voice.pending;
+            target.key = a->key;
+            if (!bl_config_valid(&target)) return -1;
+        }
+        e->project.key = a->key;
+        for (int i = 0; i < e->project.nvoices; i++) {
+            e->st[i].voice.pending.key = a->key;
+            e->st[i].voice.config_dirty = bl_config_diff(&e->st[i].voice.config, &e->st[i].voice.pending);
+        }
+        return 0;
     case BL_A_DENSITY:
         c.value = a->value;
         return enqueue_change(e, c, request);
@@ -260,9 +332,13 @@ void bl_live_capture(const bl_live_t *e, bl_state_t *out)
     out->n = e->project.nvoices;
     for (int i = 0; i < out->n; i++) {
         out->v[i] = e->st[i].voice;
+        /* A snapshot's offset is the audible source-loop phase at capture,
+         * not an absolute transport-grid offset. Keep this separate from the
+         * local completion clock (legacy activation can offset those clocks). */
+        out->v[i].pat.start_offset = bl_floor_mod(e->rendered + e->st[i].voice.pat.start_offset,
+                                                 e->st[i].voice.pat.length);
         out->generation[i] = e->st[i].generation;
-        out->motif_phase[i] = (e->st[i].voice.pat.generator == BL_GEN_MOTIF || e->st[i].voice.pat.generator == BL_GEN_ARP)
-            ? (uint32_t)bl_floor_mod(e->rendered - e->st[i].seg_start, e->st[i].voice.pat.length) : 0;
+        out->motif_phase[i] = (uint32_t)bl_floor_mod(e->rendered - e->st[i].seg_start, e->st[i].voice.pat.length);
         out->motif_flags[i] = (uint8_t)(e->st[i].active | e->st[i].blank << 1);
     }
     out->sched = e->sched;
@@ -296,9 +372,9 @@ int bl_initial_state(const bl_project_t *p, bl_state_t *out)
     return 0;
 }
 
-/* applyRecall(_:at:): the schedule; for each voice the pattern (the whole voice) and generation of the state's voice
- * of its id, if there is one; ARP/MOTIF resume their captured phase, other loops re-align on the bar, out of their blank and without blank and
- * regenerate requests (the arranger's nudge and accent move stay) */
+/* Recall restores musical frames, pending edits and the captured local phase
+ * for every matched voice. Requests to blank/regenerate are cleared as before;
+ * the arranger's nudge/accent requests stay. */
 static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
 {
     e->sched = snap->sched;
@@ -310,15 +386,15 @@ static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
             if (!strcmp(snap->v[j].id, s->voice.id)) {
                 s->voice = snap->v[j];
                 s->generation = snap->generation[j];
-                if (s->voice.pat.generator == BL_GEN_MOTIF || s->voice.pat.generator == BL_GEN_ARP) {
-                    phase = snap->motif_phase[j];
-                    motif_flags = snap->motif_flags[j];
-                }
+                phase = snap->motif_phase[j];
+                motif_flags = snap->motif_flags[j];
+                e->project.voice[i].config = s->voice.config;
+                e->project.voice[i].has_config = 1;
                 break;
             }
         s->seg_start = tick - phase;
-        if (s->voice.pat.generator == BL_GEN_MOTIF || s->voice.pat.generator == BL_GEN_ARP)
-            s->voice.pat.start_offset = bl_floor_mod((bl_tick_t)phase - tick, s->voice.pat.length);
+        if (motif_flags >= 0)
+            s->voice.pat.start_offset = bl_floor_mod(s->voice.pat.start_offset - tick, s->voice.pat.length);
         s->blank = 0;
         if (motif_flags >= 0) {
             s->active = (uint8_t)(motif_flags & 1);
@@ -390,6 +466,45 @@ static void apply_bpart(bl_live_t *e, bl_tick_t tick)
  * due blank freezes the rest; (2c) the arranger's accent move is the play's one change; (2d) its nudge fast-forwards
  * the lifecycle; (3) a regeneration beats the mutation; (4) the mutation, when the pattern may take one. Locked
  * patterns skip 2c, 2d and 3. (2b replace, 2c' and 2c'' melody and 5 accumulator: not ported) */
+/* Returns whether new source material started here. Register/root/gate and
+ * traversal-only edits retain the evolving motif and its independent streams. */
+static int apply_voice_config(bl_live_t *e, int i, bl_tick_t tick)
+{
+    bl_voice_t *v = &e->st[i].voice;
+    uint16_t mask = v->config_dirty;
+    if (!mask) return 0;       /* manual configuration is independent of LOCK */
+    int rebuild = (mask & ((1u << BL_CFG_GENERATOR) | (1u << BL_CFG_SCALE) |
+                           (1u << BL_CFG_RATE) | (1u << BL_CFG_LOOP))) != 0;
+    if (v->pending.gen.kind != BL_GEN_ARP && v->pending.gen.kind != BL_GEN_MOTIF &&
+        (mask & (1u << BL_CFG_GATE))) rebuild = 1; /* legacy b is not a gate */
+    v->config = v->pending;
+    v->reg_low = v->config.reg_low;
+    v->reg_high = v->config.reg_high;
+    if (rebuild) {
+        uint64_t seed = v->pat.seed;
+        uint8_t locked = v->pat.locked;
+        configured_pattern(&v->config, v->role, e->repeats, seed, &e->sched, &v->pat);
+        v->pat.locked = locked;
+        v->pat.start_offset = bl_floor_mod(-tick, v->pat.length);
+        memset(&v->motif, 0, sizeof v->motif);
+        if (v->pat.generator == BL_GEN_MOTIF)
+            bl_motif_evolution_init(&v->motif, &v->config.key, seed, v->id);
+        e->st[i].generation++;
+    } else if (v->pat.generator == BL_GEN_ARP || v->pat.generator == BL_GEN_MOTIF) {
+        if (mask & (1u << BL_CFG_GATE))
+            for (int j = 0; j < v->pat.n; j++) v->pat.note[j].gate = v->config.gen.b;
+        if (mask & (1u << BL_CFG_DIRECTION)) {
+            v->pat.direction = v->config.gen.direction;
+            v->pat.direction_cursor = 0;
+        }
+        v->pat.groove = v->config.gen.groove;
+    }
+    e->project.voice[i].has_config = 1;
+    e->project.voice[i].config = v->config;
+    v->config_dirty = 0;
+    return rebuild;
+}
+
 static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
 {
     bl_vstate_t *s = &e->st[i];
@@ -401,6 +516,9 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
     int was_blank = s->blank;
     s->blank = 0;
     if (!was_blank) bl_advance_boundary(p);
+    /* render_voice computed tick using the old length, so shortening only takes
+     * effect after that entire cycle has completed. */
+    int reconfigured = apply_voice_config(e, i, tick);
     if (s->blank_req >= 0 && tick >= s->blank_req) {
         s->blank_req = NONE;
         s->blank = 1;
@@ -429,31 +547,32 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
                                            (const char *)NULL);
             uint8_t direction = p->direction;
             uint8_t groove = p->groove;
-            make_pattern(&e->project, e->repeats, &e->project.voice[i], seed, &e->sched, p);
+            configured_pattern(&s->voice.config, s->voice.role, e->repeats, seed, &e->sched, p);
             if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
                 p->direction = direction < BL_NDIRS ? direction : BL_DIR_UP;
                 p->groove = groove < BL_NGROOVES ? groove : BL_GROOVE_STRAIGHT;
             }
             if (p->generator == BL_GEN_MOTIF) {
-                bl_motif_evolution_init(&s->voice.motif, &e->project.key, seed, s->voice.id);
+                bl_motif_evolution_init(&s->voice.motif, &s->voice.config.key, seed, s->voice.id);
                 p->start_offset = bl_floor_mod(-tick, p->length);
             }
             if (p->generator == BL_GEN_ARP &&
                 (p->direction != BL_DIR_UP || p->groove != BL_GROOVE_STRAIGHT))
                 p->start_offset = bl_floor_mod(-tick, p->length);
+            if (e->project.voice[i].has_config) p->start_offset = bl_floor_mod(-tick, p->length);
             s->generation++;
             return;
         }
     }
-    if (bl_is_mutable(p)) {
+    if (!reconfigured && bl_is_mutable(p)) {
         bl_dec(s->generation, gen);
         uint64_t seed = bl_seed_derive(e->project.seed, "voice", s->voice.id, "mut", gen, (const char *)NULL);
-        bl_mutate(&s->voice, &e->project.key, seed, e->repeats, project_ratchet(&e->project));
+        bl_mutate(&s->voice, &s->voice.config.key, seed, e->repeats, project_ratchet(&e->project));
         s->generation++;
     }
 motif_boundary:
-    if (!was_blank && p->generator == BL_GEN_MOTIF)
-        bl_motif_evolution_boundary(p, &s->voice.motif, &e->project.key);
+    if (!was_blank && !reconfigured && p->generator == BL_GEN_MOTIF)
+        bl_motif_evolution_boundary(p, &s->voice.motif, &s->voice.config.key);
 }
 
 /* -------------------------------------------------------------- render --- */
@@ -487,7 +606,7 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                     src = &e->capped;
                 }
                 int room = n < max ? max - n : 0;
-                int k = bl_render_voice(src, (uint8_t)i, &e->sched, &e->project.key, lower, upper,
+                int k = bl_render_voice(src, (uint8_t)i, &e->sched, &s->voice.config.key, lower, upper,
                                         room ? out + n : out, room);
                 for (int j = 0; j < k && j < room; j++) {
                     bl_note_t *q = &out[n + j];
@@ -524,14 +643,12 @@ static int render_window(bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_note_t *ou
         if (e->tension_note[k].tick < lo || e->tension_note[k].tick >= hi) continue;
         bl_tick_t tick = e->tension_note[k].tick;
         uint8_t vid = e->tension_note[k].voice;
+        uint8_t midi = e->tension_note[k].midi;
         memmove(&e->tension_note[k], &e->tension_note[k + 1],
                 (size_t)(e->ntension - k - 1) * sizeof e->tension_note[0]);
         e->ntension--;
         for (int i = 0; i < e->project.nvoices; i++) {
             if (bl_vid(e->project.voice[i].id) != vid || vid == BL_VID_NONE) continue;
-            const bl_vcfg_t *c = &e->project.voice[i];
-            bl_pitch_t pitch = {0, 0, 1};
-            uint8_t midi = bl_fold(c->reg_low, c->reg_high, bl_resolve(&e->project.key, pitch, c->ref_c));
             if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1};
             n++;
             break;
@@ -557,7 +674,13 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
         apply_recall(e, &e->recall[c->slot], c->tick);
         e->recall_used[c->slot] = 0;
         break;
-    case BL_A_KEY: e->project.key = c->key; break;      /* everything downstream follows */
+    case BL_A_KEY: {                    /* same boundary staging for any already-queued key change */
+        bl_action_t a = {0};
+        a.kind = BL_A_KEY;
+        a.key = c->key;
+        bl_live_enqueue(e, &a, c->tick);
+        break;
+    }
     case BL_A_DENSITY: e->density = clamp01(c->value); break;
     case BL_A_BPART: apply_bpart(e, c->tick); break;
     case BL_A_VOICE_ACTIVE:
@@ -565,7 +688,7 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
             s->active = c->on;
             if (c->on) {
                 s->seg_start = c->tick;
-                if (s->voice.pat.generator == BL_GEN_MOTIF ||
+                if (e->project.voice[(int)(s - e->st)].has_config || s->voice.pat.generator == BL_GEN_MOTIF ||
                     (s->voice.pat.generator == BL_GEN_ARP &&
                      (s->voice.pat.direction != BL_DIR_UP || s->voice.pat.groove != BL_GROOVE_STRAIGHT)))
                     s->voice.pat.start_offset = bl_floor_mod(-c->tick, s->voice.pat.length);
@@ -579,6 +702,13 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
             if (e->ntension < BL_MAX_TENSION) {
                 e->tension_note[e->ntension].tick = c->tick;
                 e->tension_note[e->ntension].voice = c->voice;
+                e->tension_note[e->ntension].midi = 0;
+                s = state_of(e, c->voice);
+                if (s) {
+                    bl_pitch_t pitch = {0, 0, 1};
+                    e->tension_note[e->ntension].midi = bl_fold(s->voice.reg_low, s->voice.reg_high,
+                        bl_resolve(&s->voice.config.key, pitch, s->voice.ref_c));
+                }
                 e->ntension++;
             }
         }
@@ -611,7 +741,7 @@ static void apply_directives(bl_live_t *e, const bl_dir_t *d, int n, bl_tick_t t
         case BL_DIR_ACTIVATE:
             s->active = 1;
             s->seg_start = tick;                        /* the loop restarts on the bar */
-            if (s->voice.pat.generator == BL_GEN_MOTIF ||
+            if (e->project.voice[d[k].voice].has_config || s->voice.pat.generator == BL_GEN_MOTIF ||
                 (s->voice.pat.generator == BL_GEN_ARP &&
                  (s->voice.pat.direction != BL_DIR_UP || s->voice.pat.groove != BL_GROOVE_STRAIGHT)))
                 s->voice.pat.start_offset = bl_floor_mod(-tick, s->voice.pat.length);

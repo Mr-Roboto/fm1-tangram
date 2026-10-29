@@ -26,7 +26,7 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 3u                   /* per-voice MIDI delay; no legacy migration */
+#define PROJ_FORMAT 4u                   /* per-voice musical configuration; no legacy migration */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
@@ -46,6 +46,8 @@ typedef struct {
     uint8_t ratchet_pct;                 /* Project.legitimization's ratchetProbability, 0-50 % in steps of 5;
                                           * 0 off, the FM-1's default (the Mac's nil is 15 %, with no control) */
     bl_delay_t delay[BL_MAX_VOICES];     /* template voice index; normalized output-effect settings */
+    uint8_t voice_configured[BL_MAX_VOICES];
+    bl_vconfig_t voice_config[BL_MAX_VOICES]; /* requested musical target; defaults inherited when not configured */
 } proj_t;
 
 extern proj_t proj;
@@ -77,6 +79,12 @@ int proj_set_ratchet(int pct);           /* the legitimization's ratchetProbabil
                                           * the Mac, so playing it waits for the next Play (1); 0; -1 out of range */
 int proj_form(void);                     /* the arrangement's preset (enabled aside), FORM_OTHER for none */
 void proj_set_channel(int voice, int ch);   /* setVoiceChannel: the template's voice i, 0-15 */
+/* Template voice-index addressing. Full target updates are atomic; field edits
+ * merge with the latest pending target. Playing: next local boundary, including while LOCK is set.
+ * Stopped: next Play's initial state. -1 on invalid/unavailable settings. */
+int proj_get_voice_config(int voice, bl_vconfig_t *target);
+int proj_set_voice_config(int voice, const bl_vconfig_t *target);
+int proj_set_voice_config_field(int voice, int field, int32_t value);
 int proj_set_sync(int ext);              /* stopped only */
 void proj_set_ext_ports(int mask);
 int proj_dice(void);                     /* UIState.newSeed: an undo point, then AppServices.reseed */

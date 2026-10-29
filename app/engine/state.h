@@ -7,12 +7,15 @@
  *   vid role reg_low reg_high ref_c     u8 each
  *   flags                               u8: participates 1, locked 2, anchor << 2
  *   generator remaining n               u8, i8 (-1: established), u8
- *   length start_offset generation      u32 each
+ *   length source-phase generation      u32 each (pat.start_offset holds source phase in a snapshot)
  *   seed                                u64
+ *   active config, pending config       28 bytes each: root/mode/count/off[12], generator,
+ *                                       a/b u16, direction/groove u8, length u32, register low/high u8
+ *   pending field mask                  u16
  *   delay enabled time feedback decay   u8 each (all generators)
  *   ARP/MOTIF only: direction cursor groove u8 each
  *   MOTIF only: interval_rng melody_rng u64 each; cycles_left scale_count chord[4] u8 each;
- *   ARP/MOTIF only: local phase         u32, active/blank flags u8
+ *   local phase                         u32, active/blank flags u8 (all generators)
  *   n notes: position gate              u16 each
  *            degree octave accidental   i8 each
  *            velocity flags             u8, u8: accent 1, ratchet << 1

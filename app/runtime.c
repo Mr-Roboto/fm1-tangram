@@ -693,6 +693,38 @@ int rt_action(const bl_action_t *a)
     return bl_live_enqueue(&rt_eng, a, rt.head - rt.origin);
 }
 
+int rt_has_voice_state(void) { return !rt.fresh; }
+
+int rt_get_voice_config(int vid, bl_vconfig_t *active, bl_vconfig_t *target)
+{
+    if (rt.playing) rt_take_over();
+    else if (rt.fresh) rt_engine_new(); /* existing engine memory doubles as the stopped preview */
+    return bl_live_get_config(&rt_eng, vid, active, target);
+}
+
+int rt_set_voice_config(int vid, const bl_vconfig_t *target)
+{
+    if (!target || !bl_config_valid(target)) return -1;
+    if (rt.playing) rt_take_over();
+    if (rt_loading()) return -1;
+    int index = -1;
+    for (int i = 0; i < rt_proj.nvoices; i++)
+        if (bl_vid(rt_proj.voice[i].id) == vid && vid >= 0 && vid < BL_NVIDS) index = i;
+    if (index < 0) return -1;
+    if (rt.playing && bl_live_set_config(&rt_eng, vid, target)) return -1;
+    rt_proj.voice[index].has_config = 1;
+    rt_proj.voice[index].config = *target;
+    if (!rt.playing) rt.fresh = 1;
+    return 0;
+}
+
+int rt_set_voice_config_field(int vid, int field, int32_t value)
+{
+    bl_vconfig_t target;
+    if (rt_get_voice_config(vid, NULL, &target) || bl_config_edit(&target, field, value)) return -1;
+    return rt_set_voice_config(vid, &target);
+}
+
 static void rt_stored(int32_t bpm)      /* stopped: the next Play's tempo (EXT: until the pulses lead) */
 {
     uint32_t f = plat_lock();
