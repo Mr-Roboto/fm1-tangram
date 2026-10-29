@@ -10,7 +10,8 @@
  *   C5-F5          the snapshot slots 1-6: recalled at the next bar; SAVE + a slot: stored
  *   F#5            >>: the arranger's next change         G5   one unit of tension
  *   PLAY           play / stop             REC   the B part          EDIT   re-roll every unlocked voice
- *   SEL            lock (on the Voice page) SAVE  saves             OCT- / OCT+   undo / Dice (a new seed)
+ *   SEL            lock (on ENV) SAVE saves     OCT- mutate (existing re-roll), OCT+ Dice
+ *   HOME + OCT-    undo, momentary: both button releases are consumed
  *   HOME ENV ARP LFO SEQ FX GLO   QUICK/PLAY, TIMING/ROUTING, HARMONY, CC, MOTION, MIDI DELAY, SETUP
  *   MASTER         density                 SELECT the voice (HOME held: tempo)
  *   ALGORITHM      the mode                PRESETS the template
@@ -693,6 +694,17 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
 }
 
 /* ------------------------------------------------------------ buttons --- */
+static void undo_action(void)            /* existing undo mechanism, now HOME + OCT- */
+{
+    int v = undo_pop();
+    if (v == UNDO_NONE)
+        warn("UNDO", "NOTHING TO UNDO");
+    else if (v == UNDO_FULL)
+        warn("UNDO", "QUEUE FULL");
+    else
+        say("UNDO", rt_playing() ? "NEXT BAR" : 0);
+}
+
 static void button(int b)                /* a button's job, on its release (PLAY: its press) */
 {
     int v, k = ui.combo[b] - 1;
@@ -735,13 +747,7 @@ static void button(int b)                /* a button's job, on its release (PLAY
         saved(v);
         break;
     case B_OCTDN:
-        v = undo_pop();
-        if (v == UNDO_NONE)
-            warn("UNDO", "NOTHING TO UNDO");
-        else if (v == UNDO_FULL)
-            warn("UNDO", "QUEUE FULL");
-        else
-            say("UNDO", rt_playing() ? "NEXT BAR" : 0);
+        if (plat_ms() - ui.down_t[B_OCTDN] < HELP_HOLD) reroll();
         break;
     case B_OCTUP:
         if (proj_dice())
@@ -788,7 +794,7 @@ static int help_lines(int b, const char *l[HELP_LINES])
     int n = 0;
 #define L(t) (l[n++] = (t))
     switch (b) {
-    case B_HOME: L("QUICK / PLAY"); L("TAP AGAIN: NEXT PAGE"); L("K1-K4: PAGE PARAMETERS"); L("+ SELECT: TEMPO"); break;
+    case B_HOME: L("QUICK / PLAY"); L("TAP AGAIN: NEXT PAGE"); L("+ OCT-: UNDO"); L("+ SELECT: TEMPO"); break;
     case B_ENV: L("TIMING / ROUTING"); L("TAP AGAIN: NEXT PAGE"); L("K1-K4: PAGE PARAMETERS"); L("SEL: LOCK SELECTED VOICE"); break;
     case B_ARP: L("HARMONY"); L("K1 GENERATOR, K2 ROOT"); L("K3 SCALE, K4 DIRECTION"); break;
     case B_LFO: L("CC AND MODULATION"); L("TARGET, CYCLE, DEPTH,"); L(" SCENE"); break;
@@ -799,7 +805,7 @@ static int help_lines(int b, const char *l[HELP_LINES])
     case B_REC: L("THE B PART"); L("WITH A VOICE KEY:"); L(" A BLANK CYCLE"); break;
     case B_SEL: L("WITH A VOICE KEY,"); L(" OR ON THE VOICE PAGE:"); L("LOCK OR UNLOCK IT"); break;
     case B_SAVE: L("SAVES THE PROJECT"); L(" AND THE SIX SLOTS"); L("+ A SLOT KEY: STORE"); break;
-    case B_OCTDN: L("UNDO"); L("WITH OCT+, 5 S: UPDATE MODE"); break;
+    case B_OCTDN: L("MUTATE: RE-ROLL UNLOCKED"); L("WITH HOME: UNDO"); L("WITH OCT+, 5 S: UPDATE MODE"); break;
     case B_OCTUP: L("DICE: A NEW SEED"); L(" AT THE NEXT BAR"); L("WITH OCT-, 5 S: UPDATE MODE"); break;
     default: break;
     }
@@ -868,16 +874,27 @@ static void pot(void)
 static void input(void)
 {
     uint32_t btn = plat_buttons(), keys = plat_keys(), ch, i;
+    const uint32_t shift_undo = 1u << B_HOME | 1u << B_OCTDN;
     int32_t e;
     ch = btn ^ ui.btn;
+    int was_undo_chord = (ui.btn & shift_undo) == shift_undo;
     ui.btn = btn;
+    /* Clear new presses together, before chord detection, so button index order
+     * cannot undo a consumption flag or let a chord's release navigate/mutate. */
+    ui.btn_used &= ~(ch & btn);
+    if ((btn & shift_undo) == shift_undo) {
+        ui.btn_used |= shift_undo;
+        ui.help = 0;
+        /* Preserve the OCT-/OCT+ update-mode combination; held frames do not
+         * repeat undo. Re-pressing either chord button is a distinct press. */
+        if (!was_undo_chord && !(btn & (1u << B_OCTUP))) undo_action();
+    }
     for (i = 0; i < NB; i++) {
         uint32_t m = 1u << i;
         if (!(ch & m))
             continue;
         if (btn & m) {
             int k = i == B_EDIT || i == B_REC || i == B_SEL ? held_voice() : -1;
-            ui.btn_used &= ~m;
             ui.down_t[i] = plat_ms();
             ui.combo[i] = (uint8_t)(k + 1);  /* a voice key held: the button is for that voice */
             if (k >= 0)

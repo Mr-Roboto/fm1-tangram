@@ -18,7 +18,12 @@ Switching away and returning restores that section's last page. Page memory is
 runtime-only and starts at QUICK/TIMING after initialization. Other sections
 have one page. Holding a section for about 1000 ms retains the existing help
 card; releasing a long press does not change pages. HOME + SELECT still changes
-tempo and consumes HOME's release. HOME has no new SHIFT behavior.
+tempo and consumes HOME's release. TGM-005D adds momentary HOME + OCT− undo:
+the chord acts once when both buttons become held, consumes both releases and
+suppresses HOME help/navigation and OCT− mutation. Re-pressing a chord button
+while the other remains held constitutes a new chord press. No SHIFT state is
+latched after release. OCT−/OCT+ update mode retains priority when both octave
+buttons are held at chord recognition. This chord handling is **NOT TESTED**.
 
 K1 TRACK and SELECT use the same existing voice selection and skip roles absent
 from the template. Duplicate page controls use the same CORE configuration,
@@ -50,9 +55,11 @@ screen-reader behavior have not been verified.
 LFO and GLO retain their existing pages and bindings. GLO ROOT and ALGORITHM
 retain their existing global key-control behavior; HOME/ARP ROOT and SCALE edit
 the selected voice. Transport, voice-key combinations, SEL lock on ENV, SAVE and
-snapshot keys, OCT− undo, OCT+ Dice, update-mode combination, MASTER density,
+snapshot keys, OCT+ Dice, update-mode combination, MASTER density,
 and PRESETS are retained. Parameter edits use the existing undo-point mechanism;
 existing stopped-transport undo semantics are unchanged.
+OCT− short alone now invokes MUTATE using the existing unlocked-voice re-roll
+mechanism (also retained on EDIT); HOME + OCT− invokes the existing undo path.
 
 AUTO, FORM, AMBIENT and RATCHET retain their implementations and stored settings;
 their old knob access is deferred. No replacement shortcuts or extra pages were
