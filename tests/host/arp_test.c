@@ -224,6 +224,9 @@ static void test_lifecycle_snapshot(void)
     static bl_state_t s, back;
     uint8_t buf[8192];
     bl_live_capture(&e, &s);
+    /* Capture at 7920: 240 ticks into the 3840-tick source and local cycle. */
+    CHECK(s.v[0].pat.start_offset == 240 && s.motif_phase[0] == 240,
+          "ARP capture preserves source and local cycle position");
     int n = state_pack(&s, buf, sizeof buf);
     CHECK(n > 0 && !state_unpack(buf, n, &back) && state_same(&s, &back), "ARP snapshot round trip");
     if (n > 0) {
@@ -236,7 +239,16 @@ static void test_lifecycle_snapshot(void)
     a.kind = BL_A_RECALL; a.state = &s;
     CHECK(bl_live_enqueue(&e, &a, 7920) == 0, "ARP snapshot recall enqueue");
     for (int t = 7920; t < 11760; t += 240) bl_live_render(&e, t, t + 240, notes, 8);
-    CHECK(e.st[0].voice.pat.generator == BL_GEN_ARP && material_same(&before, &e.st[0].voice.pat), "recall keeps ARP");
+    /* Recall binds at 11520 and resumes the captured position, rather than
+     * restarting the loop. By 11760 it has advanced another 240 ticks. */
+    CHECK(e.st[0].voice.pat.start_offset == 240, "recall restores 240-tick source-loop offset");
+    CHECK(e.st[0].seg_start == 11280 && e.rendered - e.st[0].seg_start == 480,
+          "recall preserves local position and subsequent progress");
+    bl_pattern_t recalled_material = e.st[0].voice.pat;
+    recalled_material.start_offset = before.start_offset;
+    CHECK(e.st[0].voice.pat.generator == BL_GEN_ARP && material_same(&before, &recalled_material), "recall keeps ARP");
+    CHECK(e.st[0].voice.config.phase == 0 && e.st[0].voice.pending.phase == 0 &&
+          e.st[0].voice.pat.pitch_phase == 0, "recall timing offset does not change pitch PHASE");
 
     /* Existing harmony and register folding still process ARP degree pitches. */
     bl_voice_t v = e.st[0].voice;
@@ -245,9 +257,14 @@ static void test_lifecycle_snapshot(void)
     bl_note_t transposed[16];
     int count = bl_render_voice(&v, 0, &sched, &p.key, 0, 3840, transposed, 16);
     CHECK(count == 16, "ARP uses existing harmony pipeline");
+    /* A natural minor's two-octave Am7 degrees; the known 240-tick offset
+     * orders the sixteen source slots as 1..15, 0. No traversal oracle. */
+    static const int8_t AM7_DEGREES[8] = {0, 2, 4, 6, 7, 9, 11, 13};
     for (int i = 0; i < count && i < 16; i++) {
-        bl_pitch_t pitch = v.pat.note[i].pitch;
+        int source_index = (i + 1) % 16;
+        bl_pitch_t pitch = {AM7_DEGREES[source_index % 8], 0, 0};
         pitch.degree += 2;
+        CHECK(transposed[i].at == i * 240, "restored offset preserves chronological onset grid");
         CHECK(transposed[i].midi == bl_fold(48, 72, bl_resolve(&p.key, pitch, 60)), "degree transpose and register fold");
     }
 }
