@@ -85,6 +85,10 @@ void proj_set_channel(int voice, int ch);   /* setVoiceChannel: the template's v
 int proj_get_voice_config(int voice, bl_vconfig_t *target);
 int proj_set_voice_config(int voice, const bl_vconfig_t *target);
 int proj_set_voice_config_field(int voice, int field, int32_t value);
+/* Per-template voice, next actually triggered original; no change to echo tails. */
+int proj_get_delay(int voice, bl_delay_t *out);
+int proj_set_delay(int voice, const bl_delay_t *settings);
+int proj_set_delay_field(int voice, int field, int value);
 int proj_set_sync(int ext);              /* stopped only */
 void proj_set_ext_ports(int mask);
 int proj_dice(void);                     /* UIState.newSeed: an undo point, then AppServices.reseed */

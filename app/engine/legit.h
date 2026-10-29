@@ -25,6 +25,7 @@ typedef struct {
     bl_pattern_t pat;
     bl_motif_evo_t motif;
     bl_delay_t delay;
+    uint8_t midi_channel;         /* snapshot-owned output configuration, 0..15 */
     bl_vconfig_t config, pending; /* active frame and coalesced target */
     uint16_t config_dirty;        /* pending field bits; zero means no boundary edit */
 } bl_voice_t;

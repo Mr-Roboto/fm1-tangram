@@ -14,6 +14,7 @@
  *                                       pat.pitch_phase is reconstructed from active PHASE
  *   pending field mask                  u16
  *   delay enabled time feedback decay   u8 each (all generators)
+ *   MIDI channel                        u8, 0..15 (all generators)
  *   ARP/MOTIF only: direction cursor groove u8 each
  *   MOTIF only: interval_rng melody_rng u64 each; cycles_left scale_count chord[4] u8 each;
  *   local phase                         u32, active/blank flags u8 (all generators)

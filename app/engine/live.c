@@ -100,6 +100,7 @@ static void materialize(const bl_project_t *p, int32_t repeats, const bl_vcfg_t 
     v->participates = 1;
     v->anchor = c->anchor;
     v->delay = bl_delay_config(c->delay);
+    v->midi_channel = c->channel & 15u;
     uint64_t seed = bl_seed_derive(p->seed, "voice", c->id, "gen0", (const char *)NULL);
     make_pattern(p, repeats, c, seed, &p->transposition, &v->pat);
     v->config.key = p->key;
@@ -391,6 +392,8 @@ static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
                 motif_flags = snap->motif_flags[j];
                 e->project.voice[i].config = s->voice.config;
                 e->project.voice[i].has_config = 1;
+                e->project.voice[i].delay = s->voice.delay;
+                e->project.voice[i].channel = s->voice.midi_channel;
                 break;
             }
         s->seg_start = tick - phase;
@@ -647,12 +650,14 @@ static int render_window(bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_note_t *ou
         bl_tick_t tick = e->tension_note[k].tick;
         uint8_t vid = e->tension_note[k].voice;
         uint8_t midi = e->tension_note[k].midi;
+        uint8_t channel = e->tension_note[k].channel;
+        bl_delay_t delay = e->tension_note[k].delay;
         memmove(&e->tension_note[k], &e->tension_note[k + 1],
                 (size_t)(e->ntension - k - 1) * sizeof e->tension_note[0]);
         e->ntension--;
         for (int i = 0; i < e->project.nvoices; i++) {
             if (bl_vid(e->project.voice[i].id) != vid || vid == BL_VID_NONE) continue;
-            if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1};
+            if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1, delay, channel};
             n++;
             break;
         }
@@ -706,8 +711,12 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
                 e->tension_note[e->ntension].tick = c->tick;
                 e->tension_note[e->ntension].voice = c->voice;
                 e->tension_note[e->ntension].midi = 0;
+                e->tension_note[e->ntension].channel = 0;
+                e->tension_note[e->ntension].delay = bl_delay_config((bl_delay_t){0});
                 s = state_of(e, c->voice);
                 if (s) {
+                    e->tension_note[e->ntension].channel = s->voice.midi_channel;
+                    e->tension_note[e->ntension].delay = s->voice.delay;
                     bl_pitch_t pitch = {0, 0, 1};
                     e->tension_note[e->ntension].midi = bl_fold(s->voice.reg_low, s->voice.reg_high,
                         bl_resolve(&s->voice.config.key, pitch, s->voice.ref_c));

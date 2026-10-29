@@ -119,7 +119,7 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
             if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));
             int32_t resolved = bl_resolve(key, pitch, v->ref_c);
             out[index] = (bl_note_t){occ[i].at, note->gate, voice_index, bl_fold(v->reg_low, v->reg_high, resolved),
-                                     note->velocity, accent, note->ratchet};
+                                     note->velocity, accent, note->ratchet, v->delay, v->midi_channel};
         }
     }
     return total;

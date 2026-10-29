@@ -107,6 +107,8 @@ typedef struct bl_live {
         bl_tick_t tick;
         uint8_t voice;              /* a BL_VID_ */
         uint8_t midi;               /* resolved in the voice's effective frame at the action tick */
+        uint8_t channel;
+        bl_delay_t delay;
     } tension_note[BL_MAX_TENSION];
     uint8_t nmorph;
     bl_smorph_t morph[BL_MAX_MORPHS];

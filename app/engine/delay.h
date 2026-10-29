@@ -10,6 +10,8 @@ typedef struct {
     uint8_t enabled, time, feedback, decay;
 } bl_delay_t;
 
+enum { BL_DELAY_ENABLED, BL_DELAY_TIME, BL_DELAY_FEEDBACK, BL_DELAY_DECAY };
+
 static inline bl_delay_t bl_delay_config(bl_delay_t d)
 {
     d.enabled = d.enabled ? 1 : 0;
@@ -23,4 +25,21 @@ static inline int bl_delay_valid(bl_delay_t d)
 {
     return d.enabled <= 1 && d.time >= 1 && d.time <= 7 &&
         d.feedback >= 25 && d.feedback <= 100 && !(d.feedback % 25) && d.decay >= 50 && d.decay <= 100;
+}
+
+/* Explicit live edits are strict; OFF changes only enabled, preserving feedback. */
+static inline int bl_delay_edit(bl_delay_t *d, int field, int value)
+{
+    bl_delay_t next = *d;
+    if (value < 0 || value > 255) return -1;
+    switch (field) {
+    case BL_DELAY_ENABLED: next.enabled = (uint8_t)value; break;
+    case BL_DELAY_TIME: next.time = (uint8_t)value; break;
+    case BL_DELAY_FEEDBACK: next.feedback = (uint8_t)value; break;
+    case BL_DELAY_DECAY: next.decay = (uint8_t)value; break;
+    default: return -1;
+    }
+    if (!bl_delay_valid(next)) return -1;
+    *d = next;
+    return 0;
 }

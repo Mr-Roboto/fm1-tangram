@@ -40,6 +40,8 @@ int32_t bl_quantized_bar(bl_tick_t request);
 typedef struct {
     bl_tick_t at, gate;
     uint8_t voice, midi, velocity, accent, ratchet;
+    bl_delay_t delay;             /* prospective output frame; live setters can still edit a queued original */
+    uint8_t channel;
 } bl_note_t;
 
 /* HarmonyEngine.render(voices: [v], schedule:key:meter: 4/4, in: lo..<hi): the voice's onsets in the window in

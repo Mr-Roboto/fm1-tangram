@@ -24,7 +24,7 @@
  *   drops CC), clockTicks of its range (INT), in that order into the queue, which keeps them by tick, a stable
  *   order: what goes out is the stable sort by tick of every window's list, as CoreMIDI sends the Mac's.
  * - Stop: MIDI Stop (INT), then explicit offs for Tangram-held notes. Mute releases only the selected voice's
- *   current strikes; a channel change releases its strikes on the old channel. No channel-wide CC 123 is needed.
+ *   current strikes; channel edits leave old strikes and echo tails alone. No channel-wide CC 123 is needed.
  *   The arranger's ending stops at its tick. The registry holds what was handed to plat_midi_out.
  * Where it is the FM-1's own:
  * - The windows are those of the reference's `window 240` (tests/equiv/README.md): to the next multiple of 240, the
@@ -36,7 +36,8 @@
  *   never past the next pulse; after RT_FREEWHEEL_MS without one it runs on at that rate (the router unplugged, the
  *   DAW paused), and the next pulse takes up from the tick reached, never back. FA / FB start, FC stops. The tempo
  *   (rt_bpm) is the followed one.
- * - Per-voice discrete MIDI delay adds at most four on/off pairs to the same tick queue, never recursively.
+ * - Lookahead prepares editable original notes. At dispatch each original secures its concrete off and captures
+ *   up to four immutable echo pairs in the same tick queue, never recursively. Live edits touch only unsent originals.
  * - The registry tracks each key's latest strike, voice and end tick. A retrigger sends its old off first;
  *   scheduled offs that do not match the current strike's end are discarded, including across voices/projects. */
 #include "runtime.h"
@@ -56,11 +57,15 @@
 #define RT_RING 25                       /* the pulse times the EXT rate is measured over: one beat */
 #define RT_NONE 0xFFu                    /* the channel of a voice the running project lacks */
 
+enum { RT_EV_MIDI, RT_EV_ORIGINAL, RT_EV_ORIGINAL_OFF, RT_EV_ECHO, RT_EV_ECHO_OFF };
+
 typedef struct {
     bl_tick_t tick;
     bl_tick_t end;                       /* note-on's paired end tick; other events zero */
     uint32_t pkt;                        /* a USB-MIDI packet (plat.h) */
     uint8_t vid;                         /* the voice's BL_VID_ (BL_VID_NONE: the clock, a flush) */
+    uint8_t kind;
+    bl_delay_t delay;                    /* editable prospective settings on an unsent original only */
 } rt_ev_t;
 
 static bl_live_t rt_eng PLAT_POOL;       /* the running engine */
@@ -145,22 +150,43 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
 /* A retrigger is two packets, reserved together in this ms's output budget.
  * Older offs may coincide with the new end; releasing then is also correct.
  * Earlier/later stale offs cannot terminate a newer strike. */
-static int rt_dispatch(const rt_ev_t *e, uint32_t *room)
+static rt_ev_t *rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid);
+static void rt_echoes(const rt_ev_t *original, uint32_t ch);
+
+static int rt_dispatch(uint32_t *room)
 {
-    uint32_t st = (e->pkt >> 8) & 0xFFu, ch = st & 15u, n = (e->pkt >> 16) & 0x7Fu;
-    if ((st & 0xF0u) == 0x80u && (!rt.snd[ch][n] || rt.until[ch][n] != e->tick)) return 1;
+    /* Take a value copy: inserting the paired off/echoes may move ring entries.
+     * Do not remove the head until enough wire budget exists for its retrigger. */
+    rt_ev_t e = RT_Q(0);
+    uint32_t st = (e.pkt >> 8) & 0xFFu, ch = st & 15u, n = (e.pkt >> 16) & 0x7Fu;
+    int discard = 0;
+    if (e.kind == RT_EV_ORIGINAL && (e.vid >= BL_NVIDS || (rt.muted >> e.vid & 1u) || e.end <= e.tick))
+        discard = 1;
+    if ((st & 0xF0u) == 0x80u && (!rt.snd[ch][n] || rt.until[ch][n] != e.tick ||
+        (e.vid != BL_VID_NONE && rt.owner[ch][n] != e.vid))) discard = 1;
+    if (!discard && *room < ((st & 0xF0u) == 0x90u && rt.snd[ch][n] ? 2u : 1u)) return 0;
+    rt.qr = (uint16_t)((rt.qr + 1u) & (RT_QUEUE - 1u));
+    rt.qn--;
+    if (discard) return 1;
     if ((st & 0xF0u) == 0x90u) {
-        if (*room < (rt.snd[ch][n] ? 2u : 1u)) return 0;
+        if (e.kind == RT_EV_ORIGINAL) {
+            /* Popping this original guarantees one free slot. Secure its off
+             * before emitting any on; optional echoes cannot consume that slot. */
+            rt_insert(e.end, rt_pkt(0x80u | ch, n, 0), e.vid)->kind = RT_EV_ORIGINAL_OFF;
+        }
         if (rt.snd[ch][n]) {
-            rt_send(e->tick, rt_pkt(0x80u | ch, n, 0));
+            rt_send(e.tick, rt_pkt(0x80u | ch, n, 0));
             --*room;
         }
-        rt_send(e->tick, e->pkt);
-        rt.until[ch][n] = e->end;
-        rt.owner[ch][n] = e->vid;
+        rt_send(e.tick, e.pkt);
+        rt.until[ch][n] = e.end;
+        rt.owner[ch][n] = e.vid;
+        if (e.kind == RT_EV_ORIGINAL) {
+            rt.chan[e.vid] = (uint8_t)ch;
+            rt_echoes(&e, ch);           /* capture only now; echoes never enter this branch */
+        }
     } else {
-        if (!*room) return 0;
-        rt_send(e->tick, e->pkt);
+        rt_send(e.tick, e.pkt);
     }
     --*room;
     return 1;
@@ -179,6 +205,8 @@ static void rt_now(uint32_t pkt)
     e->end = 0;
     e->pkt = pkt;
     e->vid = BL_VID_NONE;
+    e->kind = RT_EV_MIDI;
+    e->delay = (bl_delay_t){0};
 }
 
 /* Request explicit offs, bounded by the registry rather than the immediate
@@ -213,6 +241,8 @@ static rt_ev_t *rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after 
     e->end = 0;
     e->pkt = pkt;
     e->vid = vid;
+    e->kind = RT_EV_MIDI;
+    e->delay = (bl_delay_t){0};
     rt.qn++;
     return e;
 }
@@ -367,9 +397,7 @@ void app_tick(void)
     if (!rt.playing || !rt.started)
         return;
     for (; room && rt.qn && rt_q[rt.qr].tick <= rt.tick && (rt.stop_at < 0 || rt_q[rt.qr].tick <= rt.stop_at);) {
-        if (!rt_dispatch(&rt_q[rt.qr], &room)) break;
-        rt.qr = (uint16_t)((rt.qr + 1u) & (RT_QUEUE - 1u));
-        rt.qn--;
+        if (!rt_dispatch(&room)) break;
     }
     if (rt.stop_at >= 0 && rt.tick >= rt.stop_at && (!rt.qn || rt_q[rt.qr].tick > rt.stop_at))
         rt_halt();                       /* the arranger's ending, once all of its tick is out */
@@ -378,6 +406,7 @@ void app_tick(void)
 /* ---- the main loop */
 static void rt_channels(const bl_project_t *p)   /* channelMap from a project */
 {
+    uint32_t f = plat_lock();
     int i;
     for (i = 0; i < BL_NVIDS; i++)
         rt.chan[i] = RT_NONE;
@@ -386,6 +415,7 @@ static void rt_channels(const bl_project_t *p)   /* channelMap from a project */
         if (v != BL_VID_NONE)
             rt.chan[v] = p->voice[i].channel & 15u;
     }
+    plat_unlock(f);
 }
 
 static void rt_engine_new(void)          /* LiveEngine(project:) of rt_proj */
@@ -409,11 +439,13 @@ static void rt_put(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* one event int
 }
 
 /* Under the lock: reject a complete pair on overflow, never leave an orphan on. */
-static void rt_pair(bl_tick_t at, bl_tick_t gate, uint32_t ch, uint8_t pitch, uint8_t velocity, uint8_t vid)
+static void rt_echo_pair(bl_tick_t at, bl_tick_t gate, uint32_t ch, uint8_t pitch, uint8_t velocity, uint8_t vid)
 {
     if (rt.playing && rt_room(2)) {
-        rt_insert(at, rt_pkt(0x90u | ch, pitch & 0x7Fu, velocity), vid)->end = at + gate;
-        rt_insert(at + gate, rt_pkt(0x80u | ch, pitch & 0x7Fu, 0), vid);
+        rt_ev_t *on = rt_insert(at, rt_pkt(0x90u | ch, pitch & 0x7Fu, velocity), vid);
+        on->end = at + gate;
+        on->kind = RT_EV_ECHO;
+        rt_insert(at + gate, rt_pkt(0x80u | ch, pitch & 0x7Fu, 0), vid)->kind = RT_EV_ECHO_OFF;
     } else if (rt.playing) {
         rt.dropped += 2;
     }
@@ -434,20 +466,34 @@ static __attribute__((noinline)) uint8_t rt_echo_velocity(uint8_t velocity, uint
     return (uint8_t)(v > 127 ? 127 : v); /* caller skips zero before clamping */
 }
 
-static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q, uint8_t vid,
-                   const bl_delay_t *settings)
+/* The tick calls this once an original has actually been handed to MIDI.
+ * Echo packets are immutable captures; their delay metadata is never read. */
+static void rt_echoes(const rt_ev_t *original, uint32_t ch)
 {
-    bl_delay_t d = bl_delay_config(*settings);
-    uint32_t f = plat_lock();
-    rt_pair(at, gate, ch, q->midi, q->velocity, vid);
+    bl_delay_t d = bl_delay_config(original->delay);
     if (d.enabled) {
         int32_t spacing = d.time * RT_STEP;
+        uint8_t pitch = (uint8_t)((original->pkt >> 16) & 0x7Fu);
+        uint8_t original_velocity = (uint8_t)((original->pkt >> 24) & 0x7Fu);
         for (int echo = 1; echo <= d.feedback / 25; echo++) {
-            uint8_t velocity = rt_echo_velocity(q->velocity, d.decay, echo);
+            uint8_t velocity = rt_echo_velocity(original_velocity, d.decay, echo);
             if (!velocity) continue;
-            rt_pair(at + echo * spacing, gate, ch, q->midi, velocity, vid);
+            rt_echo_pair(original->tick + echo * spacing, original->end - original->tick,
+                         ch, pitch, velocity, original->vid);
         }
     }
+}
+
+/* Lookahead holds one prospective original, not a captured off/echo family. */
+static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q, uint8_t vid)
+{
+    uint32_t f = plat_lock();
+    if (rt.playing && rt_room(1)) {
+        rt_ev_t *e = rt_insert(at, rt_pkt(0x90u | ch, q->midi & 0x7Fu, q->velocity & 0x7Fu), vid);
+        e->end = at + gate;
+        e->kind = RT_EV_ORIGINAL;
+        e->delay = bl_delay_config(q->delay);
+    } else if (rt.playing) rt.dropped++;
     plat_unlock(f);
 }
 
@@ -463,11 +509,11 @@ static void rt_window(bl_tick_t lo, bl_tick_t hi)
     for (i = 0; i < n; i++) {            /* NoteEventConverter.events */
         const bl_note_t *q = &rt_note[i];
         uint8_t vid = rt.vid[q->voice];
-        uint32_t ch = vid == BL_VID_NONE ? RT_NONE : rt.chan[vid];
+        uint32_t ch = q->channel;
         bl_tick_t at = q->at + rt.origin, gate = q->gate;
         int r = q->ratchet > 1 ? q->ratchet : 1;
         int32_t slice = RT_STEP / r;
-        if ((vid != BL_VID_NONE && rt.muted >> vid & 1u) || ch == RT_NONE)
+        if (vid == BL_VID_NONE || (rt.muted >> vid & 1u) || ch > 15u)
             continue;
         if (r > 1) {                     /* Ratchet.expand: r hits a slice apart, each its sub-gate */
             bl_tick_t sub = slice * 9 / 10;
@@ -475,7 +521,7 @@ static void rt_window(bl_tick_t lo, bl_tick_t hi)
             gate = gate > 1 ? gate : 1;
         }
         for (k = 0; k < r; k++)
-            rt_hit(at + k * slice, gate, ch, q, vid, &rt_eng.st[q->voice].voice.delay);
+            rt_hit(at + k * slice, gate, ch, q, vid);
     }
     m = bl_live_render_cc(&rt_eng, lo - rt.origin, hi - rt.origin, rt_cc, RT_CC);
     if (m > RT_CC) {
@@ -485,7 +531,7 @@ static void rt_window(bl_tick_t lo, bl_tick_t hi)
     for (i = 0; i < m; i++) {            /* ccEvents: never muted */
         const bl_cc_t *c = &rt_cc[i];
         uint8_t vid = rt.vid[c->voice];
-        uint32_t ch = vid == BL_VID_NONE ? RT_NONE : rt.chan[vid];
+        uint32_t ch = vid == BL_VID_NONE ? RT_NONE : rt_eng.st[c->voice].voice.midi_channel;
         if (ch != RT_NONE)
             rt_put(c->at + rt.origin, rt_pkt(0xB0u | ch, c->controller & 0x7Fu, c->value & 0x7Fu), vid);
     }
@@ -776,8 +822,53 @@ void rt_set_mute(int vid, int on)
     plat_unlock(f);
 }
 
-/* Transport.setChannel, voice a BL_VID_, ch 0-15: the running project's, a pending one's; playing, release
- * this voice's old-channel strikes and purge its queued pairs there. */
+int rt_get_delay(int vid, bl_delay_t *out)
+{
+    if (!out || vid < 0 || vid >= BL_NVIDS) return -1;
+    if (rt.playing) rt_take_over();
+    else if (rt.fresh) rt_engine_new();
+    for (int i = 0; i < rt_eng.project.nvoices; i++)
+        if (rt.vid[i] == vid) {
+            *out = rt_eng.st[i].voice.delay;
+            return 0;
+        }
+    return -1;
+}
+
+int rt_set_delay(int vid, const bl_delay_t *settings)
+{
+    if (!settings || !bl_delay_valid(*settings) || vid < 0 || vid >= BL_NVIDS) return -1;
+    if (rt.playing) rt_take_over();
+    if (rt_loading()) return -1;
+    int index = -1;
+    for (int i = 0; i < rt_proj.nvoices; i++)
+        if (bl_vid(rt_proj.voice[i].id) == vid) index = i;
+    if (index < 0) return -1;
+    rt_proj.voice[index].delay = *settings;
+    if (rt.playing) {
+        /* Only the main loop owns engine state. The lock makes the queued
+         * prospective edits atomic against note dispatch in the interrupt. */
+        uint32_t f = plat_lock();
+        for (int i = 0; i < rt_eng.project.nvoices; i++) if (rt.vid[i] == vid) {
+            rt_eng.st[i].voice.delay = *settings;
+            rt_eng.project.voice[i].delay = *settings;
+        }
+        for (uint32_t i = 0; i < rt.qn; i++)
+            if (RT_Q(i).vid == vid && RT_Q(i).kind == RT_EV_ORIGINAL) RT_Q(i).delay = *settings;
+        plat_unlock(f);
+    } else rt.fresh = 1;
+    return 0;
+}
+
+int rt_set_delay_field(int vid, int field, int value)
+{
+    bl_delay_t settings;
+    if (rt_get_delay(vid, &settings) || bl_delay_edit(&settings, field, value)) return -1;
+    return rt_set_delay(vid, &settings);
+}
+
+/* Next-note channel selection: change prospective originals and future source
+ * frames only. Sounding notes' offs and already captured echo pairs keep their channels. */
 static void rt_chan_of(bl_project_t *p, int vid, uint8_t ch)
 {
     int i;
@@ -788,18 +879,21 @@ static void rt_chan_of(bl_project_t *p, int vid, uint8_t ch)
 void rt_set_channel(int vid, uint8_t ch)
 {
     uint32_t f;
-    uint8_t old;
-    if (vid < 0 || vid >= BL_NVIDS || ch > 15u || (old = rt.chan[vid]) == RT_NONE || old == ch)
+    if (vid < 0 || vid >= BL_NVIDS || ch > 15u || rt.chan[vid] == RT_NONE)
         return;
-    rt.chan[vid] = ch;
     rt_chan_of(&rt_proj, vid, ch);
     if (rt.has_next)
         rt_chan_of(&rt_next, vid, ch);
-    if (!rt.playing)
-        return;
     f = plat_lock();
-    rt_purge((uint8_t)vid, old);
-    rt_flush_owned(vid, old);
+    rt.chan[vid] = ch;
+    if (rt.playing) {
+        rt_chan_of(&rt_eng.project, vid, ch);
+        for (int i = 0; i < rt_eng.project.nvoices; i++)
+            if (rt.vid[i] == vid) rt_eng.st[i].voice.midi_channel = ch;
+        for (uint32_t i = 0; i < rt.qn; i++)
+            if (RT_Q(i).vid == vid && RT_Q(i).kind == RT_EV_ORIGINAL)
+                RT_Q(i).pkt = (RT_Q(i).pkt & ~0x0F00u) | (uint32_t)ch << 8;
+    } else rt.fresh = 1;
     plat_unlock(f);
 }
 

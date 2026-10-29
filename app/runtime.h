@@ -29,6 +29,11 @@ int rt_set_voice_config_field(int vid, int field, int32_t value);
 void rt_set_tempo(int32_t bpm);          /* playing: from the head's next bar line */
 void rt_load(const bl_project_t *p);     /* playing: Transport.loadProject; stopped: the next Play's project */
 void rt_set_mute(int vid, int on);
+/* Next actually dispatched original, including originals already in lookahead.
+ * Echoes and concrete offs are immutable. Delay setters reject invalid values. */
+int rt_get_delay(int vid, bl_delay_t *out);
+int rt_set_delay(int vid, const bl_delay_t *settings);
+int rt_set_delay_field(int vid, int field, int value);
 void rt_set_channel(int vid, uint8_t ch);
 void rt_set_sync(int ext);               /* INT 0, EXT 1: stopped only */
 void rt_set_ext_port(int mask);          /* bits 1 << PORT_USB, 1 << PORT_TRS */

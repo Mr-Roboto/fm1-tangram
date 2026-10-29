@@ -34,7 +34,7 @@
 #include "state.h"
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
-#define SLOT_FORMAT 7u                  /* active/pending pitch PHASE */
+#define SLOT_FORMAT 8u                  /* snapshot-owned MIDI channel alongside delay settings */
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
 #define PORTS_ALL (1u << PORT_USB | 1u << PORT_TRS)
@@ -317,6 +317,12 @@ static void sync_voice_configs(void)
             proj.voice_config[i] = *target;
             proj_stale = 1;
         }
+        if (memcmp(&proj.delay[i], &proj_st.v[i].delay, sizeof proj.delay[i]) ||
+            proj.channel[i] != proj_st.v[i].midi_channel) {
+            proj.delay[i] = proj_st.v[i].delay;
+            proj.channel[i] = proj_st.v[i].midi_channel;
+            proj_stale = 1;
+        }
     }
 }
 
@@ -519,6 +525,35 @@ void proj_set_channel(int voice, int ch)
     }
     proj_stale = 1;
     rt_set_channel(bl_vid(proj_eng.voice[voice].id), (uint8_t)ch);   /* Transport.setChannel: at once */
+}
+
+int proj_get_delay(int voice, bl_delay_t *out)
+{
+    if (!out || rt_loading()) return -1;
+    bl_template(proj.tpl, &proj_eng);
+    if (voice < 0 || voice >= proj_eng.nvoices) return -1;
+    if (rt_playing()) return rt_get_delay(bl_vid(proj_eng.voice[voice].id), out);
+    *out = proj.delay[voice];
+    return 0;
+}
+
+int proj_set_delay(int voice, const bl_delay_t *settings)
+{
+    if (!settings || !bl_delay_valid(*settings) || rt_loading()) return -1;
+    bl_template(proj.tpl, &proj_eng);
+    if (voice < 0 || voice >= proj_eng.nvoices) return -1;
+    if (rt_playing() && rt_set_delay(bl_vid(proj_eng.voice[voice].id), settings)) return -1;
+    proj.delay[voice] = *settings;
+    proj_stale = 1;
+    if (!rt_playing()) proj_apply();
+    return 0;
+}
+
+int proj_set_delay_field(int voice, int field, int value)
+{
+    bl_delay_t settings;
+    if (proj_get_delay(voice, &settings) || bl_delay_edit(&settings, field, value)) return -1;
+    return proj_set_delay(voice, &settings);
 }
 
 int proj_set_sync(int ext)

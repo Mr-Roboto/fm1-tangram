@@ -109,6 +109,7 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put8(&o, v->delay.time);
         put8(&o, v->delay.feedback);
         put8(&o, v->delay.decay);
+        put8(&o, in_range(&o, v->midi_channel, 0, 15));
         if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             if (!bl_direction_valid(p)) o.bad = 1;
             put8(&o, p->direction);
@@ -272,6 +273,8 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         v->delay.time = (uint8_t)get8(&in);
         v->delay.feedback = (uint8_t)get8(&in);
         v->delay.decay = (uint8_t)get8(&in);
+        v->midi_channel = (uint8_t)get8(&in);
+        check(&in, v->midi_channel, 0, 15);
         if (!bl_delay_valid(v->delay)) in.bad = 1;
         if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             p->direction = (uint8_t)get8(&in);
