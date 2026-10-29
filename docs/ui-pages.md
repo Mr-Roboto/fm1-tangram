@@ -65,3 +65,17 @@ AUTO, FORM, AMBIENT and RATCHET retain their implementations and stored settings
 their old knob access is deferred. No replacement shortcuts or extra pages were
 added. There are no engine, MIDI scheduler, persistence-format, startup branding
 or general palette/layout changes in this task.
+
+## Readability pass — TGM-005C
+
+**NOT TESTED.** No tests, scripts, sanitizers, builds or device previews were run.
+The replaced Tangram pages retain their assignments and use bounded text areas
+within the existing 240×240 display layout. K1–K4 identifiers and compact labels
+are separated from indicators and values; font selection checks both width and
+height, with dots for text that cannot fit. Section titles stay inside the
+display band, and HOME/ENV show their existing page position as 1/2 or 2/2.
+Voice titles reserve room for status badges, while routing/voice rows and MIDI
+delay table columns have explicit text bounds. Musical values are unchanged.
+LFO/GLO keep their original rendering path; all input/SHIFT/help handling remains
+unchanged. Long text may still require a small font or truncation. Physical
+legibility, font metrics and final appearance remain unverified.

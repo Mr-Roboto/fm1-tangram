@@ -8,7 +8,7 @@
  * only). The pages are the Mac's views on 240 x 240 px: PERFORM the voice lanes (VoiceLaneView), the horizon
  * (HorizonStripView), the convergence (ConvergenceView) and the tension left; VOICE and PATTERN the selected voice
  * and its pattern in steps; CC its lanes and the template's scenes; ARRANGER the arranger's phases and settings;
- * DELAY the Delay Cheat Sheet (DelayHint); SETUP the root, the clock, the lights and the seed. Playing, they show
+ * DELAY the actual MIDI delay settings; SETUP the root, the clock, the lights and the seed. Playing, they show
  * the running engine (bl_live_status, its patterns); stopped, the transport's preview (the state its next Play
  * starts from, rt_capture) and the project's values. Everything on the screen is told to a screen reader too
  * (announce.c, fm1-reader), in the screen's own words: app/words.tsv says the short ones in full. */
@@ -625,6 +625,38 @@ static const felucca_font_t *fit(const felucca_font_t *f, const char *s, int32_t
     return text_w(&FONT_XS, s) <= w ? &FONT_XS : &FONT_T;
 }
 
+/* Single-line text with explicit pixel bounds. Used only by the replaced
+ * Tangram pages; legacy LFO/GLO retain their existing font/layout path.
+ * Shrink first, then truncate with dots if even the smallest font is too wide. */
+static void text_box(int32_t x, int32_t y, int32_t w, int32_t h,
+                     const felucca_font_t *preferred, const char *s, uint16_t color, int align)
+{
+    if (w <= 0 || h <= 0) return;
+    const felucca_font_t *fonts[4] = {preferred, &FONT_B, &FONT_XS, &FONT_T};
+    const felucca_font_t *f = &FONT_T;
+    char t[64];
+    int n = 0;
+    while (s[n] && n < (int)sizeof t - 4) { t[n] = s[n]; n++; }
+    t[n] = 0;
+    for (int i = 0; i < 4; i++)
+        if (fonts[i]->h <= h && text_w(fonts[i], t) <= w) {
+            f = fonts[i];
+            break;
+        }
+    if (f->h > h) return;
+    if (text_w(f, t) > w || s[n]) {
+        do {
+            if (n) n--;
+            t[n] = '.'; t[n + 1] = '.'; t[n + 2] = '.'; t[n + 3] = 0;
+        } while (n && text_w(f, t) > w);
+        if (text_w(f, t) > w) return;
+    }
+    int32_t width = text_w(f, t);
+    if (align == 1) x += (w - width) / 2;
+    else if (align == 2) x += w - width;
+    cv_text(x, y + (h - f->h) / 2, f, t, color);
+}
+
 static uint16_t mix(uint16_t a, uint16_t b, int t)   /* t 0..16: a -> b */
 {
     int r, g, bl;
@@ -1079,6 +1111,11 @@ static void draw_perform(void)
 /* a row of a page: a label (FONT_T, dim) and its value (FONT_XS) */
 static void row(int32_t x, int32_t y, int32_t vx, const char *label, const char *val, uint16_t c)
 {
+    if (ui.view != V_CC && ui.view != V_SETUP) {
+        text_box(x, y, vx - x - 8, 14, &FONT_T, label, K_TEXT2, 0);
+        text_box(vx, y, 236 - vx, 14, &FONT_XS, val, c, 0);
+        return;
+    }
     cv_text(x, y + 2, &FONT_T, label, K_DIM);
     cv_text(vx, y, fit(&FONT_XS, val, 236 - vx), val, c);
 }
@@ -1092,17 +1129,25 @@ static void voice_title(const felucca_font_t *f, int32_t y)
     char t[16];
     int vid = key_vid(ui.sel), n = l ? marks(l, m, mc) : 0, j;
     int32_t x = 236;
+    int title_h = f->h;
+    if (ui.view != V_CC && ui.view != V_SETUP) {
+        int available = ui.view == V_VOICE ? 28 : 20;
+        if (title_h > available) title_h = available;
+    }
     caps(t, vid_name(vid), sizeof t);
-    cv_text(6, y, f, t, l && lane_dim(l) ? K_DIM2 : vid_color(vid));
+    if (ui.view == V_CC || ui.view == V_SETUP)
+        cv_text(6, y, f, t, l && lane_dim(l) ? K_DIM2 : vid_color(vid));
     for (j = n - 1; j >= 0; j--) {
         x -= text_w(&FONT_T, m[j]) + 6;
-        tag(x, y + (f->h - 14) / 2, 14, m[j], mc[j]);
+        tag(x, y + (title_h - 14) / 2, 14, m[j], mc[j]);
         x -= 4;
     }
     if (!l) {
         x -= text_w(&FONT_T, "NOT PLAYING") + 6;
-        tag(x, y + (f->h - 14) / 2, 14, "NOT PLAYING", K_DIM);
+        tag(x, y + (title_h - 14) / 2, 14, "NOT PLAYING", K_DIM);
     }
+    if (ui.view != V_CC && ui.view != V_SETUP)
+        text_box(6, y, x - 12, title_h, f, t, l && lane_dim(l) ? K_DIM2 : vid_color(vid), 0);
 }
 
 /* ---- VOICE: the selected voice: its strip, its generation and lifecycle, what waits for its loop, its CC */
@@ -1293,21 +1338,21 @@ static void draw_delay(void)
     const felucca_font_t *f = p->nvoices > 6 ? &FONT_T : &FONT_XS;
     int32_t rh = p->nvoices > 6 ? 12 : 14, i, y;
     char t[40];
-    cv_text(4, 2, &FONT_B, "MIDI NOTE DELAY", K_ACC);
+    text_box(4, 0, 232, 22, &FONT_B, "MIDI DELAY", K_ACC, 0);
     t[0] = 0;
     cat_u(cat(t, "per voice @ "), (uint32_t)bpm_now());
     cat(t, " BPM");
-    cv_text(4, 20, &FONT_XS, t, K_DIM);
-    cv_text(4, 40, &FONT_T, "VOICE", K_DIM);
-    cv_text(96, 40, &FONT_T, "DELAY", K_DIM);
-    text_r(236, 40, &FONT_T, "TIME", K_DIM);
-    cv_rect(4, 53, 232, 1, K_LINE);
-    for (i = 0, y = 56; i < p->nvoices; i++, y += rh) {
+    text_box(4, 24, 232, 12, &FONT_T, t, K_TEXT2, 0);
+    text_box(4, 42, 84, 12, &FONT_T, "VOICE", K_TEXT2, 0);
+    text_box(96, 42, 44, 12, &FONT_T, "STATE", K_TEXT2, 0);
+    text_box(152, 42, 84, 12, &FONT_T, "TIME", K_TEXT2, 2);
+    cv_rect(4, 55, 232, 1, K_LINE);
+    for (i = 0, y = 58; i < p->nvoices; i++, y += rh) {
         const bl_voice_t *v = voice_material(bl_vid(p->voice[i].id));
         bl_delay_t d = v ? v->delay : proj.delay[i];
-        cv_text(4, y, f, vid_name(bl_vid(p->voice[i].id)), K_TEXT);
-        cv_text(96, y, f, d.enabled ? "ON" : "OFF", d.enabled ? K_CYAN : K_DIM);
-        text_r(236, y, f, TIME_LABEL[d.time - 1], K_TEXT2);
+        text_box(4, y, 84, rh, f, vid_name(bl_vid(p->voice[i].id)), K_TEXT, 0);
+        text_box(96, y, 44, rh, f, d.enabled ? "ON" : "OFF", d.enabled ? K_CYAN : K_TEXT2, 0);
+        text_box(152, y, 84, rh, f, TIME_LABEL[d.time - 1], K_TEXT, 2);
     }
 }
 
@@ -1433,12 +1478,61 @@ static void draw_main(void)
     cv_blit(0, MAIN_Y);
 }
 
+/* Tangram's four 60px columns keep labels, indicators and values in separate
+ * bands. Large values must fit the remaining height, not just column width. */
+static const char *compact_knob_label(int k, int i)
+{
+    switch (k) {
+    case KN_GENERATOR: return "GEN";
+    case KN_DIRECTION: return "DIR";
+    case KN_LOOP: return "STEPS";
+    case KN_REGISTER: return "REG";
+    case KN_CHANNEL: return "CH";
+    case KN_FEEDBACK: return "FDBK";
+    case KN_DELAY_TIME: return "TIME";
+    case KN_NONE: return "-";
+    default: return knob_label(ui.view, i);
+    }
+}
+
+static void draw_parameter_cell(int i, const cell_t *c, int hot)
+{
+    int k = view_knob(ui.view, i);
+    int32_t x = i * 60, cx = x + 30;
+    uint16_t bg = hot ? K_PANEL : K_BG;
+    if (i) cv_rect(x, 14, 1, 52, K_LINE);
+    if (hot) cv_round(x + 3, 14, 54, 52, 5, K_PANEL);
+    char number[3] = {'K', (char)('1' + i), 0}, label[16];
+    caps(label, compact_knob_label(k, i), sizeof label);
+    text_box(x + 4, 14, 14, 12, &FONT_T, number, K_ACC, 0);
+    text_box(x + 21, 14, 36, 12, &FONT_T, label, k == KN_NONE ? K_DIM : K_TEXT2, 0);
+    if (c->kind == CELL_TEXT) {
+        int has_sub = c->sub[0] != 0;
+        text_box(x + 3, has_sub ? 30 : 46, 54, 20, &FONT_B, c->val,
+                 k == KN_NONE ? K_DIM : K_TEXT2, 1);
+        if (has_sub) text_box(x + 3, 52, 54, 12, &FONT_T, c->sub, K_TEXT2, 1);
+        return;
+    }
+    if (c->kind == CELL_PIPS) {
+        int n = c->hi - c->lo + 1, pw = n > 4 ? 6 : 8, gap = 3;
+        int width = n * (pw + gap) - gap;
+        for (int j = 0; j < n; j++)
+            cv_round(cx - width / 2 + j * (pw + gap), 33, pw, 6, 2,
+                     j == c->v - c->lo ? K_ACC : K_LINE);
+    } else {
+        int fraction = c->hi > c->lo ? (clamp(c->v, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo) : 0;
+        knob_ring(cx, 35, 8, fraction, K_LINE, K_ACC, bg);
+    }
+    text_box(x + 3, 46, 54, 20, &FONT_B, c->val, hot ? K_ACC : K_TEXT, 1);
+}
+
 /* the knob strip (AMB-1's): a rule with the page's name and seven page dots at its right end; under it a cell a
  * knob: its name, a ring (or pips, for a switch of a few positions) and the value where the knob changes it, the
  * value alone (and a line under it) where it is shown only. The knob being turned is drawn on a tint */
 static void draw_knobs(void)
 {
     cell_t c[4];
+    int tangram = ui.view != V_CC && ui.view != V_SETUP;
     int now_touch = plat_ms() < ui.touch_until, i;
     uint32_t h = hash(2166136261u, ui.view | (uint32_t)(ui.touched + 1) << 8 | (uint32_t)now_touch << 16);
     h = hash(h, ui.page[ui.view]);
@@ -1455,14 +1549,26 @@ static void draw_knobs(void)
         int k;
         int32_t xd = 237 - NVIEWS * 6, xt;
         caps(t, view_name(ui.view), sizeof t);
-        xt = xd - 5 - text_w(&FONT_XS, t);
-        cv_rect(4, 5, xt - 9, 1, K_LINE);
-        cv_text(xt, -1, &FONT_XS, t, K_ACC);
+        if (tangram) {
+            text_box(4, 0, 150, 12, &FONT_XS, t, K_ACC, 0);
+            if (VIEW_PAGES[ui.view] > 1) {
+                char page[4] = {(char)('1' + ui.page[ui.view]), '/', (char)('0' + VIEW_PAGES[ui.view]), 0};
+                text_box(162, 0, 24, 12, &FONT_T, page, K_TEXT2, 2);
+            }
+        } else {
+            xt = xd - 5 - text_w(&FONT_XS, t);
+            cv_rect(4, 5, xt - 9, 1, K_LINE);
+            cv_text(xt, -1, &FONT_XS, t, K_ACC);
+        }
         for (k = 0; k < NVIEWS; k++)
             cv_round(xd + k * 6, 3, 4, 4, 2, k == ui.view ? K_ACC : K_LINE);
     }
     for (i = 0; i < 4; i++) {
         int k = view_knob(ui.view, i), hot = now_touch && ui.touched == i && k != KN_NONE && k < KN_SHOWN;
+        if (tangram) {
+            draw_parameter_cell(i, &c[i], hot);
+            continue;
+        }
         int32_t x = i * 60, cx = x + 30;
         char t[16];
         const felucca_font_t *f;
@@ -1471,20 +1577,7 @@ static void draw_knobs(void)
             cv_rect(x, 16, 1, 46, K_LINE);
         if (hot)
             cv_round(x + 3, 11, 54, 57, 6, K_PANEL);
-        if (ui.view == V_CC || ui.view == V_SETUP) caps(t, knob_label(ui.view, i), sizeof t);
-        else {
-            const char *label = knob_label(ui.view, i);
-            if (k == KN_GENERATOR) label = "GEN";
-            if (k == KN_DIRECTION) label = "DIR";
-            if (k == KN_LOOP) label = "STEPS";
-            if (k == KN_REGISTER) label = "REG";
-            if (k == KN_CHANNEL) label = "MIDI";
-            if (k == KN_FEEDBACK) label = "FDBK";
-            if (k == KN_DELAY_TIME) label = "TIME";
-            if (k == KN_NONE) label = "-";
-            t[0] = 'K'; t[1] = (char)('1' + i); t[2] = ' ';
-            caps(t + 3, label, sizeof t - 3);
-        }
+        caps(t, knob_label(ui.view, i), sizeof t);
         f = fit(&FONT_XS, t, 56);
         text_c(cx, f == &FONT_T ? 14 : 12, f, t, hot ? K_TEXT : K_DIM);
         if (c[i].kind == CELL_TEXT) {    /* shown only */
