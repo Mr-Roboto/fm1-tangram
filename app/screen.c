@@ -13,6 +13,8 @@
  * starts from, rt_capture) and the project's values. Everything on the screen is told to a screen reader too
  * (announce.c, fm1-reader), in the screen's own words: app/words.tsv says the short ones in full. */
 
+#include <stddef.h>
+
 static const char *const TPL_TITLE[BL_NTPL] = {"Demo trio", "Full ensemble", "Ambient drift"};   /* the Mac's */
 /* by voice id (BL_VID_ order): the Mac's names (VoiceRole.displayName) and colours (VoiceColor) */
 static const char *const VID_NAME[BL_NVIDS] = {"Pluck 1", "Pluck 2", "Bass", "Pad", "Lead", "Heartbeat", "Drone"};

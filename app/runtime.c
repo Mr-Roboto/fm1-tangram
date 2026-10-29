@@ -40,6 +40,7 @@
  *   up to four immutable echo pairs in the same tick queue, never recursively. Live edits touch only unsent originals.
  * - The registry tracks each key's latest strike, voice and end tick. A retrigger sends its old off first;
  *   scheduled offs that do not match the current strike's end are discarded, including across voices/projects. */
+#include <stddef.h>
 #include "runtime.h"
 
 #define RT_WINDOW 240                   /* the windows' grid, in ticks: the longest window */

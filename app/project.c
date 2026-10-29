@@ -31,6 +31,7 @@
  * - A channel is the template's voice i's (the UI's voice i).
  * - The slots and the undo points are kept packed (a bl_state_t is 16.8 KB), the undo points in 32 KB: 20 of the
  *   templates' states fit with room to spare, a larger state takes the room of more than one. */
+#include <stddef.h>
 #include "state.h"
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
