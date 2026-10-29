@@ -26,11 +26,13 @@ enum {
  * b = gate ticks (0 -> half spacing; negative or >= spacing -> half spacing).
  * Gate is independent of rate. Two octaves, one bar before phase_steps.
  * direction = BL_DIR_* for ARP/MOTIF only; omitted/zero -> UP, invalid -> UP.
- * Direction is applied during rendering, not to the stored musical foundation. */
+ * groove = BL_GROOVE_* for ARP/MOTIF only; omitted/invalid -> STRAIGHT.
+ * Direction and groove apply during rendering, not to the stored foundation. */
 typedef struct {
     uint8_t kind;
     int16_t a, b;
     uint8_t direction;
+    uint8_t groove;
 } bl_gencfg_t;
 
 struct bl_sched;                /* harmony.h */

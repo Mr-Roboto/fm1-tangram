@@ -105,17 +105,20 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
     for (bl_tick_t a = lo; a < hi; a += p->length) {
         bl_tick_t b = hi - a > p->length ? a + p->length : hi;
         int n = bl_occurrences(p, a, b, occ, BL_MAX_NOTES);
-        for (int i = 0; i < n; i++, total++) {
-            if (total >= max) continue;
+        for (int i = 0; i < n; i++) {
             const bl_pnote_t *note = &p->note[occ[i].index];
+            uint8_t accent = note->accent;
+            if (!bl_groove_onset(p, note->position, &accent)) continue;
+            int index = total++;
+            if (index >= max) continue;
             bl_pitch_t pitch = note->pitch;
             if ((p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) && p->direction != BL_DIR_UP)
                 pitch = bl_direction_pitch(p, occ[i].index,
                     bl_floor_div(occ[i].at + p->start_offset, p->length));
             if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));
             int32_t resolved = bl_resolve(key, pitch, v->ref_c);
-            out[total] = (bl_note_t){occ[i].at, note->gate, voice_index, bl_fold(v->reg_low, v->reg_high, resolved),
-                                     note->velocity, note->accent, note->ratchet};
+            out[index] = (bl_note_t){occ[i].at, note->gate, voice_index, bl_fold(v->reg_low, v->reg_high, resolved),
+                                     note->velocity, accent, note->ratchet};
         }
     }
     return total;

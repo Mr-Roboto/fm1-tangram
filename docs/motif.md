@@ -101,11 +101,11 @@ are handled by the transport. Undo uses the same capture/pack/recall path.
 ARP also resumes its saved local phase and direction cursor; other generators
 retain their original recall behavior.
 
-The snapshot slot wrapper is now format 3; no historical snapshot migration is
+The snapshot slot wrapper is now format 4; no historical snapshot migration is
 provided in this greenfield project. Relative to pre-evolution records, MOTIF
-adds 29 bytes per voice: two u64 RNG states, six u8 countdown/foundation fields,
-one u32 phase, one u8 active/blank flag and two u8 direction/cursor fields.
-ARP adds seven bytes for direction/cursor, local phase and active/blank flags.
+adds 30 bytes per voice: two u64 RNG states, six u8 countdown/foundation fields,
+one u32 phase, one u8 active/blank flag and three u8 direction/cursor/groove fields.
+ARP adds eight bytes for direction/cursor/groove, local phase and active/blank flags.
 Other generator records are unchanged. Invalid metadata and slot overflows are
 rejected. See the direction note for TGM-003A's untested state extension.
 
@@ -120,7 +120,10 @@ Limits inherited from ARP include 64 stored notes and natural shortened-loop
 boundary intervals; gates are not clipped at those boundaries. Sparse scales
 may offer little or no suitable non-chord color. There are no physical selection
 controls or preset changes. Evolution probability controls, phrase changes,
-grooves, rests and MIDI effects are deferred.
+additional groove modes, evolution of rhythm and MIDI effects are deferred.
+The [playback groove masks](grooves.md) leave the stored motif and its evolution
+cycle counting unchanged; they can suppress audible onsets without removing
+protected source anchors.
 
 Run `sh tests/host/run_motif.sh`; optional `MOTIF_TEST_FLAGS` adds compiler/linker
 flags, including AddressSanitizer and UndefinedBehaviorSanitizer. The runner

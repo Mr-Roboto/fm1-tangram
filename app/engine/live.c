@@ -427,14 +427,18 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
             uint64_t seed = bl_seed_derive(e->project.seed, "voice", e->project.voice[i].id, "regen", gen,
                                            (const char *)NULL);
             uint8_t direction = p->direction;
+            uint8_t groove = p->groove;
             make_pattern(&e->project, e->repeats, &e->project.voice[i], seed, &e->sched, p);
-            if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF)
+            if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
                 p->direction = direction < BL_NDIRS ? direction : BL_DIR_UP;
+                p->groove = groove < BL_NGROOVES ? groove : BL_GROOVE_STRAIGHT;
+            }
             if (p->generator == BL_GEN_MOTIF) {
                 bl_motif_evolution_init(&s->voice.motif, &e->project.key, seed, s->voice.id);
                 p->start_offset = bl_floor_mod(-tick, p->length);
             }
-            if (p->generator == BL_GEN_ARP && p->direction != BL_DIR_UP)
+            if (p->generator == BL_GEN_ARP &&
+                (p->direction != BL_DIR_UP || p->groove != BL_GROOVE_STRAIGHT))
                 p->start_offset = bl_floor_mod(-tick, p->length);
             s->generation++;
             return;
@@ -561,7 +565,8 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
             if (c->on) {
                 s->seg_start = c->tick;
                 if (s->voice.pat.generator == BL_GEN_MOTIF ||
-                    (s->voice.pat.generator == BL_GEN_ARP && s->voice.pat.direction != BL_DIR_UP))
+                    (s->voice.pat.generator == BL_GEN_ARP &&
+                     (s->voice.pat.direction != BL_DIR_UP || s->voice.pat.groove != BL_GROOVE_STRAIGHT)))
                     s->voice.pat.start_offset = bl_floor_mod(-c->tick, s->voice.pat.length);
                 s->blank = 0;
             }
@@ -606,7 +611,8 @@ static void apply_directives(bl_live_t *e, const bl_dir_t *d, int n, bl_tick_t t
             s->active = 1;
             s->seg_start = tick;                        /* the loop restarts on the bar */
             if (s->voice.pat.generator == BL_GEN_MOTIF ||
-                (s->voice.pat.generator == BL_GEN_ARP && s->voice.pat.direction != BL_DIR_UP))
+                (s->voice.pat.generator == BL_GEN_ARP &&
+                 (s->voice.pat.direction != BL_DIR_UP || s->voice.pat.groove != BL_GROOVE_STRAIGHT)))
                 s->voice.pat.start_offset = bl_floor_mod(-tick, s->voice.pat.length);
             s->blank = 0;
             break;

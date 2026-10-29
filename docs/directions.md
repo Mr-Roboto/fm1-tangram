@@ -59,7 +59,7 @@ direction, restarts its traversal and resets MOTIF's evolution lifecycle.
 
 Snapshots and undo store the direction and cursor, plus local tick phase and
 active/blank state for both ARP and MOTIF. Recall resumes that traversal and
-phase through the existing recall queue. Project slots use format 3 with no
+phase through the existing recall queue. TGM-003A introduced slot format 3 with no
 legacy migration. Packed records add two bytes per MOTIF voice relative to
 TGM-002B, and seven per ARP voice (direction/cursor plus phase/flags). Other
 generator records are unchanged. Invalid direction/cursor metadata is rejected.
@@ -69,6 +69,11 @@ Runtime state adds two `uint8_t` fields per pattern; configuration adds one
 phase/flag arrays and the existing render scratch voice are reused. There are
 no extra full patterns, queues, heap allocations or schedulers.
 
-Selection is programmatic; no presets, physical controls, pages, grooves or
+Selection is programmatic; no presets, physical controls, pages or
 additional mutation behavior are introduced. The existing 64-note capacity
 applies. Additional directions require extending the enum and traversal mapping.
+
+TGM-003B adds [playback grooves](grooves.md), independently of direction.
+Its slot format 4 adds one groove byte to each ARP/MOTIF record; the format-3
+costs above describe the direction extension alone. Groove rests leave direction
+traversal intact and retain the timing grid.

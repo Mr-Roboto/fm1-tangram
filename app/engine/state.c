@@ -83,6 +83,7 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
             if (!bl_direction_valid(p)) o.bad = 1;
             put8(&o, p->direction);
             put8(&o, p->direction_cursor);
+            put8(&o, in_range(&o, p->groove, BL_GROOVE_STRAIGHT, BL_NGROOVES - 1));
         }
         if (p->generator == BL_GEN_MOTIF) {
             const bl_motif_evo_t *m = &v->motif;
@@ -217,6 +218,8 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             p->direction = (uint8_t)get8(&in);
             p->direction_cursor = (uint8_t)get8(&in);
+            p->groove = (uint8_t)get8(&in);
+            check(&in, p->groove, BL_GROOVE_STRAIGHT, BL_NGROOVES - 1);
             if (!bl_direction_valid(p)) in.bad = 1;
         }
         if (p->generator == BL_GEN_MOTIF) {

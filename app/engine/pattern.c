@@ -6,6 +6,30 @@
 #include "rng.h"
 #include "gen.h"
 
+int bl_groove_onset(const bl_pattern_t *p, bl_tick_t position, uint8_t *accent)
+{
+    if ((p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) || position < 0) return 1;
+    /* Tick positions survive direction mapping and density filtering. Use them
+     * rather than compacted note indices so silent positions keep their phase. */
+    switch (p->groove) {
+    case BL_GROOVE_PULSE_8:
+        if (bl_floor_mod(position, BL_PPQN / 2)) return 0;
+        if (!bl_floor_mod(position, 2 * BL_PPQN)) *accent = 1;
+        return 1;
+    case BL_GROOVE_DRIVE_16:
+        if (!bl_floor_mod(position, BL_PPQN)) *accent = 1;
+        return 1;
+    case BL_GROOVE_BROKEN_8: {
+        if (bl_floor_mod(position, BL_PPQN / 2)) return 0;
+        int slot = (int)bl_floor_mod(bl_floor_div(position, BL_PPQN / 2), 8);
+        if (!(0xADu & (1u << slot))) return 0; /* PLAY REST PLAY PLAY REST PLAY REST PLAY */
+        if (0x89u & (1u << slot)) *accent = 1; /* active slots 1, 4, 8 */
+        return 1;
+    }
+    default: return 1;          /* STRAIGHT, including safe invalid-value fallback */
+    }
+}
+
 /* ARP has one ordered, two-octave chord cycle (eight tones). MOTIF uses
  * its complete stored phrase so color in either half remains available.
  * A short pattern supplies only the tones actually present. */

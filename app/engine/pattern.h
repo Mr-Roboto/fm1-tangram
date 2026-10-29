@@ -21,11 +21,15 @@ typedef struct {
 /* Pitch traversal only; zero-initialized configuration retains UP. */
 enum { BL_DIR_UP, BL_DIR_DOWN, BL_DIR_M_DOWN, BL_DIR_PENDULUM, BL_DIR_M_PENDULUM, BL_NDIRS };
 
+/* Playback-only rhythm; zero preserves every source onset and accent. */
+enum { BL_GROOVE_STRAIGHT, BL_GROOVE_PULSE_8, BL_GROOVE_DRIVE_16, BL_GROOVE_BROKEN_8, BL_NGROOVES };
+
 /* Pattern: generator and seed are its provenance (a BL_GEN_ of gen.h), remaining its lifecycle */
 typedef struct {
     bl_tick_t length, start_offset;
     uint8_t n, generator, locked;
     uint8_t direction, direction_cursor; /* ARP/MOTIF source traversal at the local loop's first onset */
+    uint8_t groove;             /* ARP/MOTIF playback mask, never edits source notes */
     int16_t remaining;          /* .repeating(remaining:); -1 = .established */
     uint64_t seed;
     bl_pnote_t note[BL_MAX_NOTES];
@@ -62,6 +66,10 @@ int bl_first_sounding(const bl_pattern_t *p);
 bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops);
 void bl_direction_advance(bl_pattern_t *p);
 int bl_direction_valid(const bl_pattern_t *p);
+
+/* Whether a source onset sounds. Local tick position supplies the groove phase;
+ * active groove accents are ORed into *accent, leaving source accents intact. */
+int bl_groove_onset(const bl_pattern_t *p, bl_tick_t position, uint8_t *accent);
 
 /* Pattern.withLength(_:), in place: the notes at or beyond the new end are dropped. new_len <= 0 (Swift traps)
  * leaves the pattern unchanged and returns -1; else 0 */

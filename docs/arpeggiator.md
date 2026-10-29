@@ -23,6 +23,7 @@ Thus default gates are 240 and 120 ticks. An explicit gate of 73 ticks stays
 These are programmatic fields, with no new physical control or page.
 `direction` now selects the [five playback directions](directions.md);
 zero retains UP. Direction does not change either timing field.
+`groove` selects the [playback groove](grooves.md); zero retains STRAIGHT.
 
 ## Material and duration
 
@@ -83,7 +84,7 @@ with independent duration and onset spacing. Existing source licensing is retain
 Tangram is greenfield: no historical project/state migration is added.
 
 MOTIF and the five directions are described in their dedicated notes.
-Deferred: groove/rest masks, independent pitch/gate
+Playback groove masks are documented separately. Deferred: independent pitch/gate
 cycles, progression logic, MIDI delay/effects, new presets, length controls and
 physical generator selection (TGM-005).
 
