@@ -41,8 +41,14 @@ int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint6
  * cfg uses the ARP a/b meanings above; provenance is always BL_GEN_ARP. */
 int bl_make_arp(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_tick_t length, bl_pattern_t *out);
 /* The same duration/rate/gate contract, with restrained seeded melodic color on
- * the ARP foundation. Root and local midpoint anchors stay; no automatic evolution.
+ * the ARP foundation. Root and local midpoint anchors stay; factory output is stable.
  * Provenance is BL_GEN_MOTIF. See docs/motif.md for candidate and budget rules. */
 int bl_make_motif(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_tick_t length, bl_pattern_t *out);
+/* Initialize a voice's independent evolution streams and four-cycle delay.
+ * boundary counts one completed, audible, unlocked local cycle. Returns 0 when
+ * not due, 1 for a no-change opportunity, 2 for a pitch-changing opportunity.
+ * Only pitch degrees may change; caller handles LOCK/blank and local timing. */
+void bl_motif_evolution_init(bl_motif_evo_t *e, const bl_key_t *key, uint64_t seed, const char *voice_id);
+int bl_motif_evolution_boundary(bl_pattern_t *p, bl_motif_evo_t *e, const bl_key_t *key);
 /* PatternFactory.makeBassMelody(id:bars:schedule:meter:seed:); a NULL schedule is the pedal */
 int bl_make_bass_melody(int bars, const struct bl_sched *sched, uint64_t seed, bl_pattern_t *out);

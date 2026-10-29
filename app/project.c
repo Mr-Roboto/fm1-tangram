@@ -34,7 +34,7 @@
 #include "state.h"
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
-#define SLOT_FORMAT 1u
+#define SLOT_FORMAT 2u                  /* MOTIF evolution streams/countdown/local phase */
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
 #define PORTS_ALL (1u << PORT_USB | 1u << PORT_TRS)

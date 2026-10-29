@@ -21,6 +21,7 @@ typedef struct {
     uint8_t role, reg_low, reg_high, participates, anchor;
     int32_t ref_c;
     bl_pattern_t pat;
+    bl_motif_evo_t motif;
 } bl_voice_t;
 
 /* Legitimizer.Config's ratchetProbability nil: 0.15 */

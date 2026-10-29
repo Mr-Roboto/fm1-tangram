@@ -83,6 +83,7 @@ static void materialize(const bl_project_t *p, int32_t repeats, const bl_vcfg_t 
     v->anchor = c->anchor;
     uint64_t seed = bl_seed_derive(p->seed, "voice", c->id, "gen0", (const char *)NULL);
     make_pattern(p, repeats, c, seed, &p->transposition, &v->pat);
+    if (v->pat.generator == BL_GEN_MOTIF) bl_motif_evolution_init(&v->motif, &p->key, seed, c->id);
 }
 
 /* the legitimization's repeats (Legitimizer.Config.default: 4), scaled at the project level by an ambient arranger
@@ -259,6 +260,9 @@ void bl_live_capture(const bl_live_t *e, bl_state_t *out)
     for (int i = 0; i < out->n; i++) {
         out->v[i] = e->st[i].voice;
         out->generation[i] = e->st[i].generation;
+        out->motif_phase[i] = e->st[i].voice.pat.generator == BL_GEN_MOTIF
+            ? (uint32_t)bl_floor_mod(e->rendered - e->st[i].seg_start, e->st[i].voice.pat.length) : 0;
+        out->motif_flags[i] = (uint8_t)(e->st[i].active | e->st[i].blank << 1);
     }
     out->sched = e->sched;
 }
@@ -273,27 +277,52 @@ int bl_initial_state(const bl_project_t *p, bl_state_t *out)
     for (int i = 0; i < p->nvoices; i++) {
         materialize(p, repeats, &p->voice[i], &out->v[i]);
         out->generation[i] = 1;
+        out->motif_phase[i] = 0;
+        out->motif_flags[i] = 1;
+    }
+    if (p->has_arr && p->arr.enabled) {
+        bl_arr_t arr;
+        uint8_t roles[BL_MAX_VOICES];
+        arr_roles(p, roles);
+        bl_arr_init(&arr, &p->arr, roles, p->nvoices, bl_seed_derive(p->seed, "arrangement", (const char *)NULL),
+                    0, 0, ambient_period(p));
+        for (int i = 0; i < p->nvoices; i++) {
+            out->motif_flags[i] = 0;
+            for (int k = 0; k < arr.nactive; k++) if (arr.active[k] == i) out->motif_flags[i] = 1;
+        }
     }
     out->sched = p->transposition;
     return 0;
 }
 
 /* applyRecall(_:at:): the schedule; for each voice the pattern (the whole voice) and generation of the state's voice
- * of its id, if there is one; every loop re-aligned on the bar, out of its blank and without its blank and
+ * of its id, if there is one; MOTIF resumes its captured phase, other loops re-align on the bar, out of their blank and without blank and
  * regenerate requests (the arranger's nudge and accent move stay) */
 static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
 {
     e->sched = snap->sched;
     for (int i = 0; i < e->project.nvoices; i++) {
         bl_vstate_t *s = &e->st[i];
+        uint32_t phase = 0;
+        int motif_flags = -1;
         for (int j = 0; j < snap->n; j++)
             if (!strcmp(snap->v[j].id, s->voice.id)) {
                 s->voice = snap->v[j];
                 s->generation = snap->generation[j];
+                if (s->voice.pat.generator == BL_GEN_MOTIF) {
+                    phase = snap->motif_phase[j];
+                    motif_flags = snap->motif_flags[j];
+                }
                 break;
             }
-        s->seg_start = tick;
+        s->seg_start = tick - phase;
+        if (s->voice.pat.generator == BL_GEN_MOTIF)
+            s->voice.pat.start_offset = bl_floor_mod((bl_tick_t)phase - tick, s->voice.pat.length);
         s->blank = 0;
+        if (motif_flags >= 0) {
+            s->active = (uint8_t)(motif_flags & 1);
+            s->blank = (uint8_t)(motif_flags >> 1 & 1);
+        }
         s->blank_req = s->regen_req = NONE;
     }
 }
@@ -371,7 +400,7 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
     if (s->blank_req >= 0 && tick >= s->blank_req) {
         s->blank_req = NONE;
         s->blank = 1;
-        return;
+        goto motif_boundary;
     }
     if (s->accent_req >= 0 && tick >= s->accent_req) {
         s->accent_req = NONE;
@@ -381,7 +410,7 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
                                               (const char *)NULL));
             p->remaining = (int16_t)(e->repeats - 1);
             s->generation++;
-            return;
+            goto motif_boundary;
         }
     }
     if (s->nudge_req >= 0 && tick >= s->nudge_req) {
@@ -395,6 +424,10 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
             uint64_t seed = bl_seed_derive(e->project.seed, "voice", e->project.voice[i].id, "regen", gen,
                                            (const char *)NULL);
             make_pattern(&e->project, e->repeats, &e->project.voice[i], seed, &e->sched, p);
+            if (p->generator == BL_GEN_MOTIF) {
+                bl_motif_evolution_init(&s->voice.motif, &e->project.key, seed, s->voice.id);
+                p->start_offset = bl_floor_mod(-tick, p->length);
+            }
             s->generation++;
             return;
         }
@@ -405,6 +438,9 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
         bl_mutate(&s->voice, &e->project.key, seed, e->repeats, project_ratchet(&e->project));
         s->generation++;
     }
+motif_boundary:
+    if (!was_blank && p->generator == BL_GEN_MOTIF)
+        bl_motif_evolution_boundary(p, &s->voice.motif, &e->project.key);
 }
 
 /* -------------------------------------------------------------- render --- */
@@ -506,6 +542,8 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
             s->active = c->on;
             if (c->on) {
                 s->seg_start = c->tick;
+                if (s->voice.pat.generator == BL_GEN_MOTIF)
+                    s->voice.pat.start_offset = bl_floor_mod(-c->tick, s->voice.pat.length);
                 s->blank = 0;
             }
         }
@@ -548,6 +586,8 @@ static void apply_directives(bl_live_t *e, const bl_dir_t *d, int n, bl_tick_t t
         case BL_DIR_ACTIVATE:
             s->active = 1;
             s->seg_start = tick;                        /* the loop restarts on the bar */
+            if (s->voice.pat.generator == BL_GEN_MOTIF)
+                s->voice.pat.start_offset = bl_floor_mod(-tick, s->voice.pat.length);
             s->blank = 0;
             break;
         case BL_DIR_DEACTIVATE: s->active = 0; break;

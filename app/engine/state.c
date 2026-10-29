@@ -79,6 +79,20 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put32(&o, in_range(&o, p->start_offset, 0, p->length - 1));
         put32(&o, in_range(&o, s->generation[i], 0, UINT32_MAX));
         put64(&o, p->seed);
+        if (p->generator == BL_GEN_MOTIF) {
+            const bl_motif_evo_t *m = &v->motif;
+            put64(&o, m->interval_rng);
+            put64(&o, m->melody_rng);
+            put8(&o, in_range(&o, m->cycles_left, 1, 8));
+            put8(&o, in_range(&o, m->scale_count, p->n ? 4 : 0, 12));
+            if (m->scale_count && m->scale_count < 4) o.bad = 1;
+            for (int j = 0; j < 4; j++) {
+                if ((!j && m->chord[j]) || (j && m->scale_count && m->chord[j] <= m->chord[j - 1])) o.bad = 1;
+                put8(&o, in_range(&o, m->chord[j], 0, m->scale_count ? m->scale_count - 1 : 0));
+            }
+            put32(&o, in_range(&o, s->motif_phase[i], 0, p->length - 1));
+            put8(&o, in_range(&o, s->motif_flags[i], 0, 3));
+        }
         for (int k = 0; k < p->n && k < BL_MAX_NOTES; k++) {
             const bl_pnote_t *q = &p->note[k];
             put16(&o, in_range(&o, q->position, 0, p->length - 1 < 0xFFFF ? p->length - 1 : 0xFFFF));
@@ -193,6 +207,25 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         check(&in, p->start_offset, 0, p->length - 1);
         out->generation[i] = get32(&in);
         p->seed = get64(&in);
+        if (p->generator == BL_GEN_MOTIF) {
+            bl_motif_evo_t *m = &v->motif;
+            m->interval_rng = get64(&in);
+            m->melody_rng = get64(&in);
+            m->cycles_left = (uint8_t)get8(&in);
+            m->scale_count = (uint8_t)get8(&in);
+            check(&in, m->cycles_left, 1, 8);
+            check(&in, m->scale_count, p->n ? 4 : 0, 12);
+            if (m->scale_count && m->scale_count < 4) in.bad = 1;
+            for (int j = 0; j < 4; j++) {
+                m->chord[j] = (uint8_t)get8(&in);
+                check(&in, m->chord[j], 0, m->scale_count ? m->scale_count - 1 : 0);
+                if ((!j && m->chord[j]) || (j && m->scale_count && m->chord[j] <= m->chord[j - 1])) in.bad = 1;
+            }
+            out->motif_phase[i] = get32(&in);
+            check(&in, out->motif_phase[i], 0, p->length - 1);
+            out->motif_flags[i] = (uint8_t)get8(&in);
+            check(&in, out->motif_flags[i], 0, 3);
+        }
         for (int k = 0; k < p->n && !in.bad; k++) {
             bl_pnote_t *q = &p->note[k];
             q->position = get16(&in);

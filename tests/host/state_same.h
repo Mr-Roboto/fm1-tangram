@@ -14,6 +14,12 @@ static int state_same(const bl_state_t *a, const bl_state_t *b)
     for (int i = 0; i < a->n; i++) {
         const bl_voice_t *x = &a->v[i], *y = &b->v[i];
         const bl_pattern_t *p = &x->pat, *q = &y->pat;
+        if (p->generator == BL_GEN_MOTIF || q->generator == BL_GEN_MOTIF) {
+            if (a->motif_phase[i] != b->motif_phase[i] || a->motif_flags[i] != b->motif_flags[i] ||
+                x->motif.interval_rng != y->motif.interval_rng ||
+                x->motif.melody_rng != y->motif.melody_rng || x->motif.cycles_left != y->motif.cycles_left ||
+                x->motif.scale_count != y->motif.scale_count || memcmp(x->motif.chord,y->motif.chord,4)) return 0;
+        }
         if (strcmp(x->id, y->id) || x->role != y->role || x->reg_low != y->reg_low || x->reg_high != y->reg_high ||
             x->participates != y->participates || x->anchor != y->anchor || x->ref_c != y->ref_c ||
             a->generation[i] != b->generation[i])

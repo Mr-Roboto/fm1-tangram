@@ -31,10 +31,13 @@
 #define BL_MAX_MORPHS (2 * BL_MAX_VOICES)     /* sceneMorphs: a voice's two CC targets */
 #define BL_MAX_UPCOMING (BL_MAX_PENDING + BL_MAX_ENABLES + BL_MAX_ADVANCES)
 
-/* StateSnapshot: the voices (patterns inside) and generations of an engine in project order, and the schedule */
+/* StateSnapshot: voices (patterns + MOTIF evolution), generations and schedule.
+ * MOTIF also captures local phase for continuation; other generators retain their recall behavior. */
 typedef struct {
     bl_voice_t v[BL_MAX_VOICES];
     int64_t generation[BL_MAX_VOICES];
+    uint32_t motif_phase[BL_MAX_VOICES]; /* MOTIF only: captured local ticks into its cycle */
+    uint8_t motif_flags[BL_MAX_VOICES];  /* MOTIF only: active bit 0, blank-cycle bit 1 */
     bl_sched_t sched;
     uint8_t n;
 } bl_state_t;

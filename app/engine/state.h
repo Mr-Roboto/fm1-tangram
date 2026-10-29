@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 Jiří Píša */
 /* A state (bl_state_t, Swift's StateSnapshot: the voices with their patterns, the generations, the schedule) as
- * bytes, for the flash's slots and the undo stack: a bl_state_t is 16.8 KB and holds its voices' ids as pointers,
+ * bytes, for the flash's slots and the undo stack: a bl_state_t is about 17 KB and holds its voices' ids as pointers,
  * the bytes hold only what the state holds, a voice by its id code (BL_VID_). Little-endian:
  *   n                                   the voices, then per voice:
  *   vid role reg_low reg_high ref_c     u8 each
@@ -9,6 +9,8 @@
  *   generator remaining n               u8, i8 (-1: established), u8
  *   length start_offset generation      u32 each
  *   seed                                u64
+ *   MOTIF only: interval_rng melody_rng u64 each; cycles_left scale_count chord[4] u8 each;
+ *                                       local phase u32, active/blank flags u8 (27 bytes total)
  *   n notes: position gate              u16 each
  *            degree octave accidental   i8 each
  *            velocity flags             u8, u8: accent 1, ratchet << 1

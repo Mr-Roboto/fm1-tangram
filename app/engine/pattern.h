@@ -27,6 +27,14 @@ typedef struct {
     bl_pnote_t note[BL_MAX_NOTES];
 } bl_pattern_t;
 
+/* MOTIF's bounded runtime state, separate from the generic pattern lifecycle.
+ * Four degree indices + scale count reconstruct the original eight-tone ARP
+ * cycle; the current substitutions already live in pattern.note[]. */
+typedef struct {
+    uint64_t interval_rng, melody_rng;
+    uint8_t cycles_left, scale_count, chord[4];
+} bl_motif_evo_t;
+
 /* one onset of occurrences(in:): the global tick and the note's index */
 typedef struct {
     bl_tick_t at;

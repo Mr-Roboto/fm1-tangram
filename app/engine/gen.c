@@ -299,15 +299,15 @@ int bl_make_arp(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_t
 /* Non-chord scale neighbors inside the surrounding ascending contour. The
  * perfect-fourth cap is deliberately conservative, including in sparse scales.
  * Wraps and phrase ends are left alone; this is not loop-boundary correction. */
-static int motif_candidates(const bl_key_t *key, const bl_pattern_t *p, int i, const int chord[4], int out[2])
+static int motif_neighbors(const bl_key_t *key, int before, int center, int after, const int chord[4], int out[2])
 {
     int count = key->scale.count, n = 0;
-    int32_t previous = bl_resolve(key, p->note[i - 1].pitch, 0);
-    int32_t next = bl_resolve(key, p->note[i + 1].pitch, 0);
-    int32_t original = bl_resolve(key, p->note[i].pitch, 0);
+    int32_t previous = bl_resolve(key, degree(before), 0);
+    int32_t next = bl_resolve(key, degree(after), 0);
+    int32_t original = bl_resolve(key, degree(center), 0);
     if (previous >= original || original >= next) return 0;
     for (int delta = -1; delta <= 1; delta += 2) {
-        int d = p->note[i].pitch.degree + delta, is_chord = 0;
+        int d = center + delta, is_chord = 0;
         if (d < 0 || d >= 2 * count) continue;
         for (int j = 0; j < 4; j++) is_chord |= d % count == chord[j];
         if (is_chord) continue;
@@ -316,6 +316,12 @@ static int motif_candidates(const bl_key_t *key, const bl_pattern_t *p, int i, c
             out[n++] = d;
     }
     return n;
+}
+
+static int motif_candidates(const bl_key_t *key, const bl_pattern_t *p, int i, const int chord[4], int out[2])
+{
+    return motif_neighbors(key, p->note[i - 1].pitch.degree, p->note[i].pitch.degree,
+                           p->note[i + 1].pitch.degree, chord, out);
 }
 
 int bl_make_motif(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_tick_t length, bl_pattern_t *out)
@@ -348,6 +354,105 @@ int bl_make_motif(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl
         blocked[i - 1] = blocked[i] = blocked[i + 1] = 1;
     }
     return omitted;
+}
+
+/* --------------------------------------------------- bounded MOTIF evolution --- */
+void bl_motif_evolution_init(bl_motif_evo_t *e, const bl_key_t *key, uint64_t seed, const char *voice_id)
+{
+    e->interval_rng = bl_seed_derive(seed, "motif-interval", voice_id, (const char *)NULL);
+    e->melody_rng = bl_seed_derive(seed, "motif-melody", voice_id, (const char *)NULL);
+    e->cycles_left = 4;
+    int chord[4];
+    e->scale_count = arp_chord(&key->scale, chord) ? key->scale.count : 0;
+    for (int i = 0; i < 4; i++) e->chord[i] = e->scale_count ? (uint8_t)chord[i] : 0;
+}
+
+static int motif_base(const bl_motif_evo_t *e, int i)
+{
+    return e->chord[i % 4] + ((i % 8) / 4) * e->scale_count;
+}
+
+static int evolution_candidates(const bl_key_t *key, const bl_pattern_t *p, const bl_motif_evo_t *e, int i, int out[2])
+{
+    if (!i || i + 1 >= p->n) return 0;
+    /* First onset at/after the local midpoint. */
+    if (p->note[i].position >= (p->length + 1) / 2 && p->note[i - 1].position < (p->length + 1) / 2) return 0;
+    int chord[4];
+    for (int j = 0; j < 4; j++) chord[j] = e->chord[j];
+    return motif_neighbors(key, motif_base(e, i - 1), motif_base(e, i), motif_base(e, i + 1), chord, out);
+}
+
+/* Refuse altered grids, unsupported scale-frame changes, or invalid incoming
+ * material rather than compound drift after an external pattern/key action. */
+static int evolution_frame(const bl_pattern_t *p, const bl_motif_evo_t *e, const bl_key_t *key, uint8_t slots[8])
+{
+    int chord[4], changes = 0;
+    if (p->n < 8 || p->n > BL_MAX_NOTES || e->scale_count != key->scale.count || !arp_chord(&key->scale, chord)) return -1;
+    for (int j = 0; j < 4; j++) if (e->chord[j] != chord[j]) return -1;
+    if (p->note[1].position != 240 && p->note[1].position != 480) return -1;
+    int32_t spacing = (int32_t)p->note[1].position; /* keep onset products 32-bit (FM-1 CPU.md) */
+    bl_tick_t expected = (p->length - 1) / spacing + 1;
+    if (p->n != (expected < BL_MAX_NOTES ? expected : BL_MAX_NOTES)) return -1;
+    for (int i = 0; i < p->n; i++) {
+        if (p->note[i].position != i * spacing || p->note[i].pitch.octave || p->note[i].pitch.accidental) return -1;
+        if (p->note[i].pitch.degree == motif_base(e, i)) continue;
+        int candidates[2], n = evolution_candidates(key, p, e, i, candidates), valid = 0;
+        for (int j = 0; j < n; j++) valid |= candidates[j] == p->note[i].pitch.degree;
+        if (!valid || changes >= p->n / 8 || (changes && slots[changes - 1] + 1 == i)) return -1;
+        slots[changes++] = (uint8_t)i;
+    }
+    return changes;
+}
+
+static int evolve_melody(bl_pattern_t *p, const bl_motif_evo_t *e, const bl_key_t *key, bl_rng_t *r)
+{
+    uint8_t slots[8];
+    int changes = evolution_frame(p, e, key, slots);
+    if (changes < 0) return 0;
+    int slot = (int)bl_rand_index(r, p->n / 8);
+    int old = slot < changes ? slots[slot] : -1;
+    int old_degree = old >= 0 ? p->note[old].pitch.degree : 0;
+    /* A vacant variation slot may be filled. Occupied slots can restore,
+     * replace, or relocate; all selection is against the immutable foundation. */
+    int operation = old >= 0 ? (int)bl_rand_index(r, 3) : 2;
+    if (old >= 0) p->note[old].pitch.degree = motif_base(e, old);
+    if (operation == 0) return 1;        /* restore one substitution */
+    uint8_t positions[BL_MAX_NOTES];
+    int npositions = 0;
+    for (int i = 1; i + 1 < p->n; i++) {
+        if ((operation == 1 && i != old) || (operation == 2 && i == old)) continue;
+        if (p->note[i].pitch.degree != motif_base(e, i) ||
+            p->note[i - 1].pitch.degree != motif_base(e, i - 1) ||
+            p->note[i + 1].pitch.degree != motif_base(e, i + 1)) continue;
+        int candidates[2], n = evolution_candidates(key, p, e, i, candidates), kept = 0;
+        for (int j = 0; j < n; j++)
+            if (i != old || candidates[j] != old_degree) kept++;
+        if (kept) {
+            positions[npositions++] = (uint8_t)i;
+        }
+    }
+    if (!npositions) {
+        if (old >= 0) p->note[old].pitch.degree = old_degree;
+        return 0;
+    }
+    int i = positions[bl_rand_index(r, npositions)], candidates[2], kept = 0;
+    int n = evolution_candidates(key, p, e, i, candidates);
+    for (int j = 0; j < n; j++)
+        if (i != old || candidates[j] != old_degree) candidates[kept++] = candidates[j];
+    p->note[i].pitch.degree = candidates[bl_rand_index(r, kept)];
+    return 1;
+}
+
+int bl_motif_evolution_boundary(bl_pattern_t *p, bl_motif_evo_t *e, const bl_key_t *key)
+{
+    if (p->generator != BL_GEN_MOTIF || p->locked || !e->cycles_left) return 0;
+    if (--e->cycles_left) return 0;
+    bl_rng_t interval = {e->interval_rng}, melody = {e->melody_rng};
+    e->cycles_left = (uint8_t)(2 * (1 + bl_rand_index(&interval, 4)));
+    int changed = evolve_melody(p, e, key, &melody);
+    e->interval_rng = interval.state;
+    e->melody_rng = melody.state;
+    return changed ? 2 : 1;
 }
 
 /* PatternFactory.make */
