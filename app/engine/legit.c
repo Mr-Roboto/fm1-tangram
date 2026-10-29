@@ -41,7 +41,10 @@ void bl_advance_boundary(bl_pattern_t *p)
 }
 
 /* Legitimizer.isMutable */
-int bl_is_mutable(const bl_pattern_t *p) { return p->remaining == -1 && !p->locked; }
+int bl_is_mutable(const bl_pattern_t *p)
+{
+    return p->generator != BL_GEN_ARP && p->remaining == -1 && !p->locked;
+}
 
 /* ------------------------------------------------------------- mutation --- */
 /* anchors.contains(position): the set is bar * ticksPerBar + tick for each of the loop's whole bars (at least one:

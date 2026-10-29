@@ -70,6 +70,46 @@ static const uint64_t EDGE[] = {
 
 static int nan_bits(uint64_t b) { return (b & 0x7FF0000000000000u) == 0x7FF0000000000000u && (b << 12) != 0; }
 
+/* IEEE arithmetic does not require identical NaN signs/payloads across targets.
+ * SoftFloat's specialization chooses its generated NaN and propagation policy:
+ * https://www.jhauser.us/arithmetic/SoftFloat-3/doc/SoftFloat-source.html#specialize
+ * Only add/sub/mul/div use this comparison. Their NaN results must be quiet;
+ * finite values, signed zeros and infinities must still match every bit.
+ * Swift-style min/max select an operand, so even their NaNs stay bit-exact. */
+static int same_arithmetic_result(uint64_t got, uint64_t want)
+{
+    if (nan_bits(got) || nan_bits(want))
+        return nan_bits(got) && nan_bits(want) &&
+               (got & UINT64_C(0x0008000000000000)) && (want & UINT64_C(0x0008000000000000));
+    return got == want;
+}
+
+static void test_f64_result_comparison(void)
+{
+    static const struct { uint64_t got, want; int same; } CASES[] = {
+        {0x7FF8000000000001u, 0xFFF8000000001234u, 1}, /* quiet NaN sign/payload */
+        {0x7FF8000000000000u, 0x7FF8000000000000u, 1},
+        {0x7FF0000000000001u, 0x7FF0000000000001u, 0}, /* unquieted signaling NaN */
+        {0x7FF0000000000001u, 0x7FF8000000000001u, 0},
+        {0x7FF8000000000000u, 0x3FF0000000000000u, 0}, /* NaN vs finite */
+        {0x7FF8000000000000u, 0x7FF0000000000000u, 0}, /* NaN vs infinity */
+        {0x7FF8000000000000u, 0x0000000000000000u, 0}, /* NaN vs zero */
+        {0x3FF0000000000000u, 0x3FF0000000000000u, 1},
+        {0x3FF0000000000000u, 0x3FF0000000000001u, 0}, /* one ulp */
+        {0x0000000000000001u, 0x0000000000000000u, 0}, /* subnormal vs zero */
+        {0x0000000000000000u, 0x8000000000000000u, 0}, /* signed zeros */
+        {0x8000000000000000u, 0x8000000000000000u, 1},
+        {0x7FF0000000000000u, 0x7FF0000000000000u, 1},
+        {0xFFF0000000000000u, 0xFFF0000000000000u, 1},
+        {0x7FF0000000000000u, 0xFFF0000000000000u, 0}, /* opposite infinities */
+        {0x7FF0000000000000u, 0x7FEFFFFFFFFFFFFFu, 0}, /* infinity vs finite */
+    };
+    for (unsigned i = 0; i < sizeof CASES / sizeof CASES[0]; i++) {
+        CHECK(same_arithmetic_result(CASES[i].got, CASES[i].want) == CASES[i].same, "result comparison %u", i);
+        CHECK(same_arithmetic_result(CASES[i].want, CASES[i].got) == CASES[i].same, "reverse comparison %u", i);
+    }
+}
+
 /* one operand: a raw pattern, an edge value, or (to reach the rounding paths) a value near the other's exponent */
 static uint64_t operand(uint64_t near)
 {
@@ -84,6 +124,7 @@ static uint64_t operand(uint64_t near)
 }
 
 static int nfail_op;
+static unsigned nan_sign_diff[4], nan_payload_diff[4];
 static void check_pair(uint64_t a, uint64_t b)
 {
     double x = dbl(a), y = dbl(b);
@@ -102,10 +143,16 @@ static void check_pair(uint64_t a, uint64_t b)
         {"min", f64_min((f64){a}, (f64){b}).bits, bits(y < x ? y : x)},
     };
     int i;
-    for (i = 0; i < (int)(sizeof r / sizeof r[0]); i++)
-        if (r[i].got != r[i].want && nfail_op++ < 20)
+    for (i = 0; i < (int)(sizeof r / sizeof r[0]); i++) {
+        int same = i < 4 ? same_arithmetic_result(r[i].got, r[i].want) : r[i].got == r[i].want;
+        if (i < 4 && same && r[i].got != r[i].want) {
+            if ((r[i].got ^ r[i].want) == UINT64_C(0x8000000000000000)) nan_sign_diff[i]++;
+            else nan_payload_diff[i]++;
+        }
+        if (!same && nfail_op++ < 20)
             CHECK(0, "%s(%016llx, %016llx) = %016llx, want %016llx", r[i].name, (unsigned long long)a,
                   (unsigned long long)b, (unsigned long long)r[i].got, (unsigned long long)r[i].want);
+    }
 }
 
 /* the conversions and roundings of one pattern (finite values; to_i64 where Swift's Int(x) does not trap) */
@@ -144,6 +191,8 @@ static void test_f64_ops(void)
     uint64_t a, b;
     sm_state = 20261026;
     nfail_op = 0;
+    memset(nan_sign_diff, 0, sizeof nan_sign_diff);
+    memset(nan_payload_diff, 0, sizeof nan_payload_diff);
     for (i = 0; i < NEDGE; i++) {
         for (j = 0; j < NEDGE; j++)
             check_pair(EDGE[i], EDGE[j]);
@@ -164,6 +213,33 @@ static void test_f64_ops(void)
     CHECK(f64_round(to_f64(2.5)).bits == bits(3.0) && f64_round(to_f64(-2.5)).bits == bits(-3.0), "ties away");
     CHECK(F64(0x3FB999999999999A).bits == bits(0.1), "F64() is the pattern");
     printf("  f64: %d pairs with a NaN operand among the 2000000\n", n);
+    static const char *const OPS[] = {"add", "sub", "mul", "div"};
+    for (i = 0; i < 4; i++)
+        printf("  f64 %s: NaN representation differences: %u sign-only, %u payload\n",
+               OPS[i], nan_sign_diff[i], nan_payload_diff[i]);
+    /* Limit detailed diagnostics, never the total mismatch count or failure. */
+    CHECK(nfail_op == 0, "f64: %d actual mismatches (first 20 detailed above)", nfail_op);
+    printf("  f64: %d actual mismatches\n", nfail_op);
+}
+
+/* Explicit NaN payload/sign and signaling cases supplement the unchanged random
+ * corpus. Arithmetic must quiet NaNs; comparisons remain unordered and min/max
+ * must preserve the selected operand, including its original NaN bits. */
+static void test_f64_nan_operands(void)
+{
+    static const uint64_t VALUES[] = {
+        0x7FF8000000000001u, 0xFFF8000000001234u, /* quiet, distinct payload/sign */
+        0x7FF0000000000001u, 0xFFF0000000005678u, /* signaling, distinct payload/sign */
+        0x0000000000000000u, 0x8000000000000000u,
+        0x7FF0000000000000u, 0xFFF0000000000000u,
+        0x3FF0000000000000u, 0xBFF0000000000000u,
+    };
+    int before = nfail_op;
+    for (unsigned i = 0; i < sizeof VALUES / sizeof VALUES[0]; i++)
+        for (unsigned j = 0; j < sizeof VALUES / sizeof VALUES[0]; j++)
+            check_pair(VALUES[i], VALUES[j]);
+    CHECK(nfail_op == before, "explicit NaN operands: %d actual mismatches", nfail_op - before);
+    printf("  f64: explicit NaN/zero/infinity operands: %d actual mismatches\n", nfail_op - before);
 }
 
 /* --------------------------------------------------------------- sine --- */
@@ -639,7 +715,7 @@ static void test_gen_max_notes(void)
     int d = bl_make_pattern(&big, BL_ROLE_BED1, &a, 1, &p);
     CHECK(d == 4 && p.n == BL_MAX_NOTES, "seedProcedure(17, 0): %d notes, %d dropped", p.n, d);
     /* a kind that is not ported: an empty bar */
-    bl_gencfg_t none = {BL_GEN_DRONE + 1, 8, 0};
+    bl_gencfg_t none = {BL_NGENS, 8, 0};
     CHECK(bl_make_pattern(&none, BL_ROLE_AUX, &a, 1, &p) == 0 && p.n == 0 && p.length == BL_TICKS_PER_BAR,
           "unported kind: %d notes, length %lld", p.n, (long long)p.length);
 
@@ -1979,7 +2055,7 @@ static void test_state_caps(void)
         uint8_t value;
         const char *what;
     } BAD[] = {
-        {7, BL_GEN_DRONE + 1, "a generator past the last"}, {10, 239, "a loop of 239 ticks"},
+        {7, BL_NGENS, "a generator past the last"}, {10, 239, "a loop of 239 ticks"},
         {36, 3, "accidental 3"}, {36, 0xFD, "accidental -3"}, {37, 0, "velocity 0"}, {37, 128, "velocity 128"},
         {38, 0, "ratchet 0"}, {38, 8, "ratchet 4"},
     };
@@ -2021,12 +2097,23 @@ static void test_state_caps(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && !strcmp(argv[1], "--arithmetic-only")) {
+        test_f64_result_comparison();
+        test_f64_ops();
+        test_f64_nan_operands();
+        test_sin_cc_level();
+        test_sin_range();
+        printf(fails ? "arithmetic: %d FAILED\n" : "arithmetic: ok\n", fails);
+        return fails != 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "--music-only")) {
         test_music();
         printf(fails ? "music regression: %d FAILED\n" : "music regression: ok\n", fails);
         return fails != 0;
     }
+    test_f64_result_comparison();
     test_f64_ops();
+    test_f64_nan_operands();
     test_sin_cc_level();
     test_sin_range();
     test_rng_vectors();

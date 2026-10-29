@@ -239,6 +239,62 @@ static void begin(bl_pattern_t *p, int generator, bl_tick_t length, uint64_t see
     dropped = 0;
 }
 
+/* ------------------------------------------------------- Tangram ARP (UP) --- */
+/* Choose unique degrees nearest the interval roles [3,4], 7, [10,11], with
+ * lower semitones winning ties. Root is fixed; sort the result for UP order.
+ * This uses musical intervals rather than assuming seven-note scale degrees. */
+static int arp_chord(const bl_scale_t *scale, int chord[4])
+{
+    static const int8_t LOW[3] = {3, 7, 10}, HIGH[3] = {4, 7, 11};
+    if (scale->count < 4 || scale->count > 12 || scale->off[0] != 0) return 0;
+    for (int d = 1; d < scale->count; d++)
+        if (scale->off[d] <= scale->off[d - 1] || scale->off[d] > 11) return 0;
+    chord[0] = 0;
+    for (int role = 0; role < 3; role++) {
+        int best = -1, distance = 12;
+        for (int d = 1; d < scale->count; d++) {
+            int used = 0, semitone = scale->off[d];
+            for (int j = 0; j <= role; j++) used |= chord[j] == d;
+            if (used) continue;
+            int delta = semitone < LOW[role] ? LOW[role] - semitone :
+                        semitone > HIGH[role] ? semitone - HIGH[role] : 0;
+            if (delta < distance) best = d, distance = delta;
+        }
+        chord[role + 1] = best;
+    }
+    for (int i = 1; i < 4; i++) {
+        int d = chord[i], j = i;
+        while (j > 0 && chord[j - 1] > d) {
+            chord[j] = chord[j - 1];
+            j--;
+        }
+        chord[j] = d;
+    }
+    return 4;
+}
+
+int bl_make_arp(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_tick_t length, bl_pattern_t *out)
+{
+    int32_t spacing = cfg->a == BL_PPQN / 4 ? BL_PPQN / 4 : BL_PPQN / 2;
+    int32_t gate = cfg->b > 0 && cfg->b < spacing ? cfg->b : spacing / 2;
+    if (length < BL_PPQN / 4 || length > INT32_MAX) length = BL_TICKS_PER_BAR;
+    begin(out, BL_GEN_ARP, length, seed);
+    int chord[4];
+    int tones = arp_chord(&key->scale, chord);
+    if (!tones) return 0;
+    /* Duration determines the available onset slots. Occupancy is straight for
+     * now; the pitch cycle advances once per sounding note, not per bar. */
+    int32_t slots = (int32_t)((length - 1) / spacing + 1);
+    int32_t kept = slots < BL_MAX_NOTES ? slots : BL_MAX_NOTES;
+    for (int32_t i = 0; i < kept; i++) {
+        int cycle = i % (2 * tones);
+        int d = chord[cycle % tones] + (cycle / tones) * key->scale.count;
+        add_note(out, i * spacing, degree(d), 100, gate, 0);
+    }
+    dropped = slots - kept;
+    return dropped;
+}
+
 /* PatternFactory.make */
 int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint64_t seed, bl_pattern_t *out)
 {
@@ -273,6 +329,8 @@ int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint6
         add_note(out, 0, degree(0), 64, out->length, 0);
         add_note(out, 0, degree(4), 60, out->length, 0);
         break;
+    case BL_GEN_ARP:
+        return bl_make_arp(cfg, key, seed, bl_ticks_per_bar(M), out);
     default:                    /* not a ported generator: an empty bar */
         begin(out, cfg->kind, bl_ticks_per_bar(M), seed);
         break;

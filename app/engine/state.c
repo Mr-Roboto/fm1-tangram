@@ -9,7 +9,7 @@
 /* what an engine state holds, beyond the fields' own ranges: a slot read from the flash that holds anything else is
  * not one (a corrupt record that still parses is refused, never played) */
 #define MIN_LENGTH (BL_PPQN / 4)         /* a loop: a 16th at least */
-#define GENERATORS (BL_GEN_DRONE + 1)
+#define GENERATORS BL_NGENS
 #define MAX_ACCIDENTAL 2                 /* -2 ... 2 */
 #define MAX_RATCHET 3                    /* 1 ... 3: the mutation's 2-3, else 1 */
 
