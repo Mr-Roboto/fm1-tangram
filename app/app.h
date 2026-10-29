@@ -8,6 +8,8 @@
 #include "runtime.h"
 
 #define APP_NAME "BERLINAN"
+#define APP_SPLASH                       /* startup-only Tangram branding; APP_NAME/firmware identity stay intact */
+void app_splash(void);
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz (the FM-1 makes no sound) */
 #define APP_TICK                         /* the 1 kHz tick: the sequencer's clock (app_tick) */
 #define APP_LOOP                         /* every pass of the main loop: the sequencer's queue (app_loop) */

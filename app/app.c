@@ -11,6 +11,7 @@
 #ifndef PLAT_HOST
 #include "libc/libc.c"                   /* the libc the engine calls beyond felucca-bsp's (the host has its own) */
 #endif
+#include "splash.c"
 #include "runtime.c"
 #include "project.c"
 #include "ui.c"
