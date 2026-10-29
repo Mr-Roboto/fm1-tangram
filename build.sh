@@ -13,4 +13,12 @@ export AC79_SDK="${AC79_SDK:-$HOME/fw-AC79_AIoT_SDK}"
 PY="${PYTHON:-python3}"
 [ -f base/tools/build.py ] || { echo "build.sh: no fm1-base in base/ (git submodule update --init --recursive)"; exit 1; }
 "$PY" -c 'import PIL' 2>/dev/null || { echo "build.sh: $PY has no Pillow (pip3 install Pillow)"; exit 1; }
+# The vendor host builder accepts CC as one executable, without a host CFLAGS hook.
+for arg in "$@"; do
+    if [ "$arg" = "--host" ]; then
+        export TANGRAM_HOST_CC="${CC:-cc}"
+        export CC="$PWD/tools/host-cc.sh"
+        break
+    fi
+done
 exec "$PY" base/tools/build.py app "$@"
