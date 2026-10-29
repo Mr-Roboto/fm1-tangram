@@ -26,7 +26,7 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 2u                   /* 2: the ratchet; a format-1 record loads with it off (proj_load) */
+#define PROJ_FORMAT 3u                   /* per-voice MIDI delay; no legacy migration */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
@@ -43,9 +43,9 @@ typedef struct {
     int16_t arr_min, arr_max;            /* its minPeriodBars ... maxPeriodBars, 1 <= min <= max */
     uint8_t density_pct, has_density;    /* density 0-100 %; has_density 0: the template's (nil: 1) */
     uint8_t channel[BL_MAX_VOICES];      /* the template's voice i's MIDI channel, 0-15 */
-    uint8_t ratchet_pct;                 /* Project.legitimization's ratchetProbability, 0-50 % in steps of 5; 0 off,
-                                          * the FM-1's default (the Mac's nil is 15 %, with no control). Format 2:
-                                          * in format 1 this byte was the struct's padding */
+    uint8_t ratchet_pct;                 /* Project.legitimization's ratchetProbability, 0-50 % in steps of 5;
+                                          * 0 off, the FM-1's default (the Mac's nil is 15 %, with no control) */
+    bl_delay_t delay[BL_MAX_VOICES];     /* template voice index; normalized output-effect settings */
 } proj_t;
 
 extern proj_t proj;

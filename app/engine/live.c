@@ -81,6 +81,7 @@ static void materialize(const bl_project_t *p, int32_t repeats, const bl_vcfg_t 
     v->ref_c = c->ref_c;
     v->participates = 1;
     v->anchor = c->anchor;
+    v->delay = bl_delay_config(c->delay);
     uint64_t seed = bl_seed_derive(p->seed, "voice", c->id, "gen0", (const char *)NULL);
     make_pattern(p, repeats, c, seed, &p->transposition, &v->pat);
     if (v->pat.generator == BL_GEN_MOTIF) bl_motif_evolution_init(&v->motif, &p->key, seed, c->id);

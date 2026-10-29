@@ -23,9 +23,9 @@
  *   ratchet, sub-gate max(1, min(slice * 9 / 10, gate)); the off at at + gate), ccEvents of its CC (a mute never
  *   drops CC), clockTicks of its range (INT), in that order into the queue, which keeps them by tick, a stable
  *   order: what goes out is the stable sort by tick of every window's list, as CoreMIDI sends the Mac's.
- * - Stop: MIDI Stop (INT), then the registry's flush: a note-off for every note sounding, by (channel, note), then
- *   CC 123 (All Notes Off) on each channel that had one. Mute flushes the voice's channel; a channel change the old
- *   one; the arranger's ending stops at its tick. The registry holds what was handed to plat_midi_send.
+ * - Stop: MIDI Stop (INT), then explicit offs for Tangram-held notes. Mute releases only the selected voice's
+ *   current strikes; a channel change releases its strikes on the old channel. No channel-wide CC 123 is needed.
+ *   The arranger's ending stops at its tick. The registry holds what was handed to plat_midi_out.
  * Where it is the FM-1's own:
  * - The windows are those of the reference's `window 240` (tests/equiv/README.md): to the next multiple of 240, the
  *   bar line of a pending change, rendered while the head is less than RT_LOOKAHEAD_MS ahead of the sounding tick
@@ -36,8 +36,9 @@
  *   never past the next pulse; after RT_FREEWHEEL_MS without one it runs on at that rate (the router unplugged, the
  *   DAW paused), and the next pulse takes up from the tick reached, never back. FA / FB start, FC stops. The tempo
  *   (rt_bpm) is the followed one.
- * - The registry knows what went out on the wire (the tick sends it), not what was scheduled, so it counts each key's
- *   ons: an old piece's off on a key the new piece has struck again (a template switch) leaves it sounding. */
+ * - Per-voice discrete MIDI delay adds at most four on/off pairs to the same tick queue, never recursively.
+ * - The registry tracks each key's latest strike, voice and end tick. A retrigger sends its old off first;
+ *   scheduled offs that do not match the current strike's end are discarded, including across voices/projects. */
 #include "runtime.h"
 
 #define RT_WINDOW 240                   /* the windows' grid, in ticks: the longest window */
@@ -57,6 +58,7 @@
 
 typedef struct {
     bl_tick_t tick;
+    bl_tick_t end;                       /* note-on's paired end tick; other events zero */
     uint32_t pkt;                        /* a USB-MIDI packet (plat.h) */
     uint8_t vid;                         /* the voice's BL_VID_ (BL_VID_NONE: the clock, a flush) */
 } rt_ev_t;
@@ -93,7 +95,10 @@ static struct {
     int32_t swap_rate;
     bl_tick_t pulse_tick;                /* EXT: the last pulse's tick */
     uint32_t last_pulse, fa_ms, pulse_ms[RT_RING];   /* its ms; the FA's; the latest pulses' ms (npm of them) */
-    uint8_t snd[16][128];                /* NoteRegistry: the note-ons per (channel, note) still to be ended */
+    uint8_t snd[16][128];                /* 0 silent, 1 sounding, 2 release requested */
+    uint8_t owner[16][128];              /* current strike's voice, including echoes */
+    bl_tick_t until[16][128];            /* current strike's scheduled end; rejects stale offs */
+    uint16_t nrelease, release_cursor;   /* bounded registry flush, drained within the MIDI packet budget */
 } rt;
 
 #ifdef PLAT_HOST
@@ -116,23 +121,49 @@ static bl_tick_t rt_next_bar(bl_tick_t t)
 }
 
 /* ---- the wire (the tick's) */
-/* NoteRegistry.track: an on sounds (whatever its velocity), an off ends one on of its key (one engine's off never
- * ends another's strike of the same key: an old piece's drone under a new one's); a flush's off (all) ends them all */
-static void rt_send(bl_tick_t tick, uint32_t pkt, int all)
+/* Raw wire send. Scheduled notes pass through rt_dispatch below; release requests
+ * use this directly. Every held key represents exactly the latest strike. */
+static void rt_send(bl_tick_t tick, uint32_t pkt)
 {
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
     uint8_t *k = &rt.snd[st & 15u][n];
     plat_midi_out(pkt);
     rt.sent_ms = plat_ms();
-    if ((st & 0xF0u) == 0x90u && *k < 255u)
-        ++*k;
-    else if ((st & 0xF0u) == 0x80u && *k)
-        *k = all ? 0 : (uint8_t)(*k - 1u);
+    if ((st & 0xF0u) == 0x90u)
+        *k = 1;
+    else if ((st & 0xF0u) == 0x80u) {
+        if (*k == 2) rt.nrelease--;
+        *k = 0;
+    }
 #ifdef PLAT_HOST
     host_sent(tick, pkt);
 #else
     (void)tick;
 #endif
+}
+
+/* A retrigger is two packets, reserved together in this ms's output budget.
+ * Older offs may coincide with the new end; releasing then is also correct.
+ * Earlier/later stale offs cannot terminate a newer strike. */
+static int rt_dispatch(const rt_ev_t *e, uint32_t *room)
+{
+    uint32_t st = (e->pkt >> 8) & 0xFFu, ch = st & 15u, n = (e->pkt >> 16) & 0x7Fu;
+    if ((st & 0xF0u) == 0x80u && (!rt.snd[ch][n] || rt.until[ch][n] != e->tick)) return 1;
+    if ((st & 0xF0u) == 0x90u) {
+        if (*room < (rt.snd[ch][n] ? 2u : 1u)) return 0;
+        if (rt.snd[ch][n]) {
+            rt_send(e->tick, rt_pkt(0x80u | ch, n, 0));
+            --*room;
+        }
+        rt_send(e->tick, e->pkt);
+        rt.until[ch][n] = e->end;
+        rt.owner[ch][n] = e->vid;
+    } else {
+        if (!*room) return 0;
+        rt_send(e->tick, e->pkt);
+    }
+    --*room;
+    return 1;
 }
 
 /* to send at once, ahead of the queue (under the lock): it carries the sounding tick */
@@ -145,33 +176,31 @@ static void rt_now(uint32_t pkt)
     }
     e = &rt_nq[(rt.nr + rt.nn++) & (RT_NOW - 1u)];
     e->tick = rt.started ? rt.tick : 0;
+    e->end = 0;
     e->pkt = pkt;
     e->vid = BL_VID_NONE;
 }
 
-/* NoteRegistry.flushEvents (one channel, or ch -1 all), locked: an off for every key sounding, by (channel, note),
- * then CC 123 per channel that had one; the registry lets the keys go as their offs go out */
-static void rt_flush(int ch)
+/* Request explicit offs, bounded by the registry rather than the immediate
+ * event ring. Voice-local flushes never send channel-wide All Notes Off. */
+static void rt_flush_owned(int vid, int ch)
 {
-    uint32_t touched = 0, c, n;
+    uint32_t c, n;
     for (c = 0; c < 16u; c++) {
         if (ch >= 0 && c != (uint32_t)ch)
             continue;
         for (n = 0; n < 128u; n++)
-            if (rt.snd[c][n]) {
-                rt_now(rt_pkt(0x80u | c, n, 0));
-                touched |= 1u << c;
+            if (rt.snd[c][n] == 1 && (vid < 0 || rt.owner[c][n] == (uint8_t)vid)) {
+                rt.snd[c][n] = 2;
+                rt.nrelease++;
             }
     }
-    for (c = 0; c < 16u; c++)
-        if (touched >> c & 1u)
-            rt_now(rt_pkt(0xB0u | c, 123, 0));
 }
 
 /* ---- the queue (under the lock) */
 static int rt_room(uint32_t n) { return rt.qn + n <= RT_QUEUE; }
 
-static void rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after those of its tick */
+static rt_ev_t *rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after those of its tick */
 {
     uint32_t j = rt.qn;
     rt_ev_t *e;
@@ -181,20 +210,23 @@ static void rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after thos
     }
     e = &RT_Q(j);
     e->tick = tick;
+    e->end = 0;
     e->pkt = pkt;
     e->vid = vid;
     rt.qn++;
+    return e;
 }
 
-/* out of the queue: the voice's notes on channel ch, which its flush silences (elsewhere they go on: an old
- * engine's offs on the voice's former channel) */
+/* Remove queued note pairs belonging to a voice: one channel, or RT_NONE for
+ * every channel (mute also removes old project/channel echo tails). */
 static void rt_purge(uint8_t vid, uint32_t ch)
 {
     uint32_t i, w = 0;
     for (i = 0; i < rt.qn; i++) {
         rt_ev_t *e = &RT_Q(i);
         uint32_t st = (e->pkt >> 8) & 0xFFu;
-        if (e->vid != vid || (st & 15u) != ch || ((st & 0xF0u) != 0x80u && (st & 0xF0u) != 0x90u))
+        if (e->vid != vid || (ch != RT_NONE && (st & 15u) != ch) ||
+            ((st & 0xF0u) != 0x80u && (st & 0xF0u) != 0x90u))
             RT_Q(w++) = *e;
     }
     rt.qn = (uint16_t)w;
@@ -209,7 +241,7 @@ static void rt_halt(void)
     rt.qn = 0;
     if (rt.clock_out)
         rt_now(rt_pkt(0xFCu, 0, 0));
-    rt_flush(-1);
+    rt_flush_owned(-1, -1);
 }
 
 /* ---- the tick */
@@ -319,15 +351,23 @@ void app_tick(void)
     rt_midi_in(now);
     for (; room && rt.nn; room--) {      /* what goes out at once, first */
         rt_ev_t *e = &rt_nq[rt.nr];
-        rt_send(e->tick, e->pkt, 1);
+        rt_send(e->tick, e->pkt);
         rt.nr = (uint16_t)((rt.nr + 1u) & (RT_NOW - 1u));
         rt.nn--;
     }
+    /* Flush before any new timed note, also while stopped. At most 2048 keys
+     * can be pending, and repeated mute/stop requests cannot duplicate them. */
+    while (room && rt.nrelease) {
+        uint32_t key = rt.release_cursor;
+        rt.release_cursor = (uint16_t)((key + 1u) & 2047u);
+        if (rt.snd[key >> 7][key & 127u] != 2) continue;
+        rt_send(rt.started ? rt.tick : 0, rt_pkt(0x80u | (key >> 7), key & 127u, 0));
+        room--;
+    }
     if (!rt.playing || !rt.started)
         return;
-    for (; room && rt.qn && rt_q[rt.qr].tick <= rt.tick && (rt.stop_at < 0 || rt_q[rt.qr].tick <= rt.stop_at);
-         room--) {                       /* then what is due */
-        rt_send(rt_q[rt.qr].tick, rt_q[rt.qr].pkt, 0);
+    for (; room && rt.qn && rt_q[rt.qr].tick <= rt.tick && (rt.stop_at < 0 || rt_q[rt.qr].tick <= rt.stop_at);) {
+        if (!rt_dispatch(&rt_q[rt.qr], &room)) break;
         rt.qr = (uint16_t)((rt.qr + 1u) & (RT_QUEUE - 1u));
         rt.qn--;
     }
@@ -368,14 +408,45 @@ static void rt_put(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* one event int
     plat_unlock(f);
 }
 
-static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q, uint8_t vid)   /* on, then off */
+/* Under the lock: reject a complete pair on overflow, never leave an orphan on. */
+static void rt_pair(bl_tick_t at, bl_tick_t gate, uint32_t ch, uint8_t pitch, uint8_t velocity, uint8_t vid)
 {
-    uint32_t f = plat_lock();
     if (rt.playing && rt_room(2)) {
-        rt_insert(at, rt_pkt(0x90u | ch, q->midi & 0x7Fu, q->velocity & 0x7Fu), vid);
-        rt_insert(at + gate, rt_pkt(0x80u | ch, q->midi & 0x7Fu, 0), vid);
+        rt_insert(at, rt_pkt(0x90u | ch, pitch & 0x7Fu, velocity), vid)->end = at + gate;
+        rt_insert(at + gate, rt_pkt(0x80u | ch, pitch & 0x7Fu, 0), vid);
     } else if (rt.playing) {
         rt.dropped += 2;
+    }
+}
+
+/* Exact positive half-up rounding; compute from the original velocity rather
+ * than recursively rounding earlier echoes. 64-bit products stay out of line
+ * (FM-1 CPU constraint). At four echoes the denominator is at most 100^4. */
+static __attribute__((noinline)) uint8_t rt_echo_velocity(uint8_t velocity, uint8_t decay, int index)
+{
+    uint64_t numerator = velocity;
+    uint32_t denominator = 1;
+    for (int i = 0; i < index; i++) {
+        numerator *= decay;
+        denominator *= 100u;
+    }
+    uint32_t v = (uint32_t)((numerator + denominator / 2u) / denominator);
+    return (uint8_t)(v > 127 ? 127 : v); /* caller skips zero before clamping */
+}
+
+static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q, uint8_t vid,
+                   const bl_delay_t *settings)
+{
+    bl_delay_t d = bl_delay_config(*settings);
+    uint32_t f = plat_lock();
+    rt_pair(at, gate, ch, q->midi, q->velocity, vid);
+    if (d.enabled) {
+        int32_t spacing = d.time * RT_STEP;
+        for (int echo = 1; echo <= d.feedback / 25; echo++) {
+            uint8_t velocity = rt_echo_velocity(q->velocity, d.decay, echo);
+            if (!velocity) continue;
+            rt_pair(at + echo * spacing, gate, ch, q->midi, velocity, vid);
+        }
     }
     plat_unlock(f);
 }
@@ -404,7 +475,7 @@ static void rt_window(bl_tick_t lo, bl_tick_t hi)
             gate = gate > 1 ? gate : 1;
         }
         for (k = 0; k < r; k++)
-            rt_hit(at + k * slice, gate, ch, q, vid);
+            rt_hit(at + k * slice, gate, ch, q, vid, &rt_eng.st[q->voice].voice.delay);
     }
     m = bl_live_render_cc(&rt_eng, lo - rt.origin, hi - rt.origin, rt_cc, RT_CC);
     if (m > RT_CC) {
@@ -569,7 +640,7 @@ int rt_playing(void) { return rt.playing; }
 int rt_idle(void)
 {
     uint32_t f = plat_lock();
-    int r = !rt.playing && !rt.nn && plat_ms() - rt.sent_ms >= RT_DRAIN_MS;
+    int r = !rt.playing && !rt.nn && !rt.nrelease && plat_ms() - rt.sent_ms >= RT_DRAIN_MS;
     plat_unlock(f);
     return r;
 }
@@ -657,26 +728,24 @@ void rt_load(const bl_project_t *p)
     rt.fresh = 1;
 }
 
-/* Transport.setMuted, voice a BL_VID_: from the next window; muting silences what the voice's channel sounds (and
- * what the queue holds of the voice's notes) */
+/* Transport.setMuted, voice a BL_VID_: purge its original/echo pairs on all
+ * channels and release only its currently owned strikes. Other voices survive. */
 void rt_set_mute(int vid, int on)
 {
     uint32_t f;
     if (vid < 0 || vid >= BL_NVIDS)
         return;
-    rt.muted = (uint8_t)(on ? rt.muted | 1u << vid : rt.muted & ~(1u << vid));
-    if (!on)
-        return;
-    if (rt.chan[vid] == RT_NONE)         /* (no channel: nothing of it to silence; an old engine's offs go on) */
-        return;
     f = plat_lock();
-    rt_purge((uint8_t)vid, rt.chan[vid]);
-    rt_flush(rt.chan[vid]);
+    rt.muted = (uint8_t)(on ? rt.muted | 1u << vid : rt.muted & ~(1u << vid));
+    if (on) {
+        rt_purge((uint8_t)vid, RT_NONE);
+        rt_flush_owned(vid, -1);
+    }
     plat_unlock(f);
 }
 
-/* Transport.setChannel, voice a BL_VID_, ch 0-15: the running project's, a pending one's; playing, the old channel
- * silenced (and the voice's notes the queue holds) */
+/* Transport.setChannel, voice a BL_VID_, ch 0-15: the running project's, a pending one's; playing, release
+ * this voice's old-channel strikes and purge its queued pairs there. */
 static void rt_chan_of(bl_project_t *p, int vid, uint8_t ch)
 {
     int i;
@@ -698,7 +767,7 @@ void rt_set_channel(int vid, uint8_t ch)
         return;
     f = plat_lock();
     rt_purge((uint8_t)vid, old);
-    rt_flush(old);
+    rt_flush_owned(vid, old);
     plat_unlock(f);
 }
 

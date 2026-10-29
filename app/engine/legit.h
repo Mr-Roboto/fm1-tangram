@@ -10,6 +10,7 @@
 #include "f64.h"
 #include "music.h"
 #include "pattern.h"
+#include "delay.h"
 
 /* AnchorPolicy (in this order here, not Swift's) */
 enum { BL_ANCHOR_NONE, BL_ANCHOR_BEAT1, BL_ANCHOR_BEATS13 };
@@ -22,6 +23,7 @@ typedef struct {
     int32_t ref_c;
     bl_pattern_t pat;
     bl_motif_evo_t motif;
+    bl_delay_t delay;
 } bl_voice_t;
 
 /* Legitimizer.Config's ratchetProbability nil: 0.15 */

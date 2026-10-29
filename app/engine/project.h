@@ -16,6 +16,7 @@
 #include "harmony.h"
 #include "arrange.h"
 #include "cc.h"
+#include "delay.h"
 
 /* The voice ids and scene names of the templates. An action names a voice or a scene by one of these codes rather
  * than by its place in a project, because the app's project and the running engine's may differ (a template loaded
@@ -43,6 +44,7 @@ typedef struct {
     uint8_t ncc;
     const char *cc_name[2];
     uint8_t cc_num[2];
+    bl_delay_t delay;             /* output effect; zero fields retain OFF / 3/16 / 75% / 70% defaults */
 } bl_vcfg_t;
 
 /* CCScene: per entry a voice (its index in the project), a target (the index of its name in that voice's CC map)

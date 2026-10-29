@@ -79,6 +79,11 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put32(&o, in_range(&o, p->start_offset, 0, p->length - 1));
         put32(&o, in_range(&o, s->generation[i], 0, UINT32_MAX));
         put64(&o, p->seed);
+        if (!bl_delay_valid(v->delay)) o.bad = 1;
+        put8(&o, v->delay.enabled);
+        put8(&o, v->delay.time);
+        put8(&o, v->delay.feedback);
+        put8(&o, v->delay.decay);
         if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             if (!bl_direction_valid(p)) o.bad = 1;
             put8(&o, p->direction);
@@ -215,6 +220,11 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         check(&in, p->start_offset, 0, p->length - 1);
         out->generation[i] = get32(&in);
         p->seed = get64(&in);
+        v->delay.enabled = (uint8_t)get8(&in);
+        v->delay.time = (uint8_t)get8(&in);
+        v->delay.feedback = (uint8_t)get8(&in);
+        v->delay.decay = (uint8_t)get8(&in);
+        if (!bl_delay_valid(v->delay)) in.bad = 1;
         if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             p->direction = (uint8_t)get8(&in);
             p->direction_cursor = (uint8_t)get8(&in);

@@ -34,7 +34,7 @@
 #include "state.h"
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
-#define SLOT_FORMAT 4u                  /* ARP/MOTIF playback groove */
+#define SLOT_FORMAT 5u                  /* per-voice MIDI delay settings */
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
 #define PORTS_ALL (1u << PORT_USB | 1u << PORT_TRS)
@@ -122,6 +122,7 @@ static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: 
     proj.density_pct = 100;
     proj.has_density = 0;
     memset(proj.channel, 0, sizeof proj.channel);
+    for (i = 0; i < BL_MAX_VOICES; i++) proj.delay[i] = bl_delay_config((bl_delay_t){0});
     for (i = 0; i < proj_eng.nvoices; i++)
         proj.channel[i] = proj_eng.voice[i].channel;
     proj.seed = seed;
@@ -139,13 +140,13 @@ void proj_defaults(void)
     proj_unseeded = 1;
 }
 
-/* a record of this format, or of format 1 (the same layout, the ratchet's byte its padding, not read) */
+/* Greenfield project records: only the current format is accepted. */
 static int proj_valid(const proj_t *p)
 {
     int i;
-    if (p->magic != PROJ_MAGIC || (p->format != PROJ_FORMAT && p->format != 1u))
+    if (p->magic != PROJ_MAGIC || p->format != PROJ_FORMAT)
         return 0;
-    if (p->format == PROJ_FORMAT && (p->ratchet_pct > 50 || p->ratchet_pct % 5))
+    if (p->ratchet_pct > 50 || p->ratchet_pct % 5)
         return 0;
     if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES || p->sync > 1 || (p->ext_ports & ~PORTS_ALL)
         || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
@@ -156,7 +157,7 @@ static int proj_valid(const proj_t *p)
                    : p->arr_on || p->arr_ambient || p->arr_reprise || p->arr_min || p->arr_max)
         return 0;
     for (i = 0; i < BL_MAX_VOICES; i++)
-        if (p->channel[i] > 15)
+        if (p->channel[i] > 15 || !bl_delay_valid(p->delay[i]))
             return 0;
     return 1;
 }
@@ -188,10 +189,6 @@ int proj_load(void)
     memset(&rec, 0, sizeof rec);
     n = plat_store_load(OBJ_PROJ, &rec, sizeof rec);
     if (n == (int)sizeof rec && proj_valid(&rec)) {
-        if (rec.format == 1u) {          /* format 1: everything kept, the ratchet off */
-            rec.format = PROJ_FORMAT;
-            rec.ratchet_pct = 0;
-        }
         proj = rec;
         proj_unseeded = 0;
         return 0;
@@ -260,8 +257,10 @@ void proj_to_engine(bl_project_t *out)
         out->density = pct_of(proj.density_pct);
     out->has_ratchet = 1;
     out->ratchet_p = pct_of(proj.ratchet_pct);
-    for (i = 0; i < out->nvoices; i++)
+    for (i = 0; i < out->nvoices; i++) {
         out->voice[i].channel = proj.channel[i];
+        out->voice[i].delay = bl_delay_config(proj.delay[i]);
+    }
 }
 
 void proj_apply(void)                    /* rebuildTransport: a stopped transport takes the project */
