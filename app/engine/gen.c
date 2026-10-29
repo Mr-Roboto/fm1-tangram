@@ -234,6 +234,8 @@ static void begin(bl_pattern_t *p, int generator, bl_tick_t length, uint64_t see
     p->n = 0;
     p->generator = (uint8_t)generator;
     p->locked = 0;
+    p->direction = BL_DIR_UP;
+    p->direction_cursor = 0;
     p->remaining = 4;           /* .repeating(remaining: 4) */
     p->seed = seed;
     dropped = 0;
@@ -279,6 +281,7 @@ int bl_make_arp(const bl_gencfg_t *cfg, const bl_key_t *key, uint64_t seed, bl_t
     int32_t gate = cfg->b > 0 && cfg->b < spacing ? cfg->b : spacing / 2;
     if (length < BL_PPQN / 4 || length > INT32_MAX) length = BL_TICKS_PER_BAR;
     begin(out, BL_GEN_ARP, length, seed);
+    out->direction = cfg->direction < BL_NDIRS ? cfg->direction : BL_DIR_UP;
     int chord[4];
     int tones = arp_chord(&key->scale, chord);
     if (!tones) return 0;

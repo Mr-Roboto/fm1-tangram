@@ -24,10 +24,13 @@ enum {
  * chordLayer: a = periodBars; heartbeat: none.
  * ARP/MOTIF: a = onset spacing in ticks (480 eighths or 240 sixteenths; 0/invalid -> 480);
  * b = gate ticks (0 -> half spacing; negative or >= spacing -> half spacing).
- * Gate is independent of rate. UP, two octaves, one bar before phase_steps. */
+ * Gate is independent of rate. Two octaves, one bar before phase_steps.
+ * direction = BL_DIR_* for ARP/MOTIF only; omitted/zero -> UP, invalid -> UP.
+ * Direction is applied during rendering, not to the stored musical foundation. */
 typedef struct {
     uint8_t kind;
     int16_t a, b;
+    uint8_t direction;
 } bl_gencfg_t;
 
 struct bl_sched;                /* harmony.h */

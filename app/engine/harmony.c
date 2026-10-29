@@ -5,6 +5,7 @@
  * its bound (Swift's has none) is the compaction of bl_sched_merge. */
 #include <stddef.h>
 #include "harmony.h"
+#include "gen.h"
 #include "rng.h"
 
 static const bl_meter_t M = {4, 4};                 /* Meter.fourFour */
@@ -108,6 +109,9 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
             if (total >= max) continue;
             const bl_pnote_t *note = &p->note[occ[i].index];
             bl_pitch_t pitch = note->pitch;
+            if ((p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) && p->direction != BL_DIR_UP)
+                pitch = bl_direction_pitch(p, occ[i].index,
+                    bl_floor_div(occ[i].at + p->start_offset, p->length));
             if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));
             int32_t resolved = bl_resolve(key, pitch, v->ref_c);
             out[total] = (bl_note_t){occ[i].at, note->gate, voice_index, bl_fold(v->reg_low, v->reg_high, resolved),

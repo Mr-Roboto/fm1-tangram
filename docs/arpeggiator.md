@@ -21,6 +21,8 @@ The existing `int16_t` fields represent independent timing quantities:
 Thus default gates are 240 and 120 ticks. An explicit gate of 73 ticks stays
 73 at either RATE. Gates do not determine note count or pattern duration.
 These are programmatic fields, with no new physical control or page.
+`direction` now selects the [five playback directions](directions.md);
+zero retains UP. Direction does not change either timing field.
 
 ## Material and duration
 
@@ -64,7 +66,8 @@ is **240 ticks**, naturally shorter than the interior 480 ticks. Default gate
 cross it, even though they are shorter than RATE spacing; very short phase-adjusted
 loops have the same consideration. No gate clipping, forced onset, stretching,
 boundary correction or resynchronization is applied. Musical boundary treatment
-is deferred. The pitch cycle restarts with the existing pattern loop.
+is deferred. UP retains the existing pattern-loop pitch restart; the other
+directions carry their traversal cursor across local boundaries.
 
 ARP is excluded from Legitimizer automatic mutation, without setting LOCK.
 Its normal repeat lifecycle counts down, but reaching established does not mutate
@@ -79,7 +82,8 @@ is retained conceptually; its pitch-cycle-derived duration is deliberately repla
 with independent duration and onset spacing. Existing source licensing is retained.
 Tangram is greenfield: no historical project/state migration is added.
 
-Deferred: MOTIF, other directions, groove/rest masks, independent pitch/gate
+MOTIF and the five directions are described in their dedicated notes.
+Deferred: groove/rest masks, independent pitch/gate
 cycles, progression logic, MIDI delay/effects, new presets, length controls and
 physical generator selection (TGM-005).
 

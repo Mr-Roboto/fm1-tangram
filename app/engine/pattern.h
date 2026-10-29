@@ -18,10 +18,14 @@ typedef struct {
     uint8_t velocity, accent, ratchet;
 } bl_pnote_t;
 
+/* Pitch traversal only; zero-initialized configuration retains UP. */
+enum { BL_DIR_UP, BL_DIR_DOWN, BL_DIR_M_DOWN, BL_DIR_PENDULUM, BL_DIR_M_PENDULUM, BL_NDIRS };
+
 /* Pattern: generator and seed are its provenance (a BL_GEN_ of gen.h), remaining its lifecycle */
 typedef struct {
     bl_tick_t length, start_offset;
     uint8_t n, generator, locked;
+    uint8_t direction, direction_cursor; /* ARP/MOTIF source traversal at the local loop's first onset */
     int16_t remaining;          /* .repeating(remaining:); -1 = .established */
     uint64_t seed;
     bl_pnote_t note[BL_MAX_NOTES];
@@ -49,6 +53,15 @@ int bl_occurrences(const bl_pattern_t *p, bl_tick_t lo, bl_tick_t hi, bl_occ_t *
 int bl_has_onset(const bl_pattern_t *p, bl_tick_t global);
 /* Pattern.firstSoundingNote: the index of the first note with the least position, -1 when there is none */
 int bl_first_sounding(const bl_pattern_t *p);
+
+/* Map a local onset index to a stored pitch without moving its timing/gate or
+ * altering MOTIF's protected foundation. Live rendering passes completed_loops=0
+ * and advances the cursor once per completed local loop, never per render call.
+ * Direct rendering passes the loop ordinal relative to its cursor's origin.
+ * Non-ARP/MOTIF callers leave these fields zero. */
+bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops);
+void bl_direction_advance(bl_pattern_t *p);
+int bl_direction_valid(const bl_pattern_t *p);
 
 /* Pattern.withLength(_:), in place: the notes at or beyond the new end are dropped. new_len <= 0 (Swift traps)
  * leaves the pattern unchanged and returns -1; else 0 */

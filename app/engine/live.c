@@ -260,7 +260,7 @@ void bl_live_capture(const bl_live_t *e, bl_state_t *out)
     for (int i = 0; i < out->n; i++) {
         out->v[i] = e->st[i].voice;
         out->generation[i] = e->st[i].generation;
-        out->motif_phase[i] = e->st[i].voice.pat.generator == BL_GEN_MOTIF
+        out->motif_phase[i] = (e->st[i].voice.pat.generator == BL_GEN_MOTIF || e->st[i].voice.pat.generator == BL_GEN_ARP)
             ? (uint32_t)bl_floor_mod(e->rendered - e->st[i].seg_start, e->st[i].voice.pat.length) : 0;
         out->motif_flags[i] = (uint8_t)(e->st[i].active | e->st[i].blank << 1);
     }
@@ -296,7 +296,7 @@ int bl_initial_state(const bl_project_t *p, bl_state_t *out)
 }
 
 /* applyRecall(_:at:): the schedule; for each voice the pattern (the whole voice) and generation of the state's voice
- * of its id, if there is one; MOTIF resumes its captured phase, other loops re-align on the bar, out of their blank and without blank and
+ * of its id, if there is one; ARP/MOTIF resume their captured phase, other loops re-align on the bar, out of their blank and without blank and
  * regenerate requests (the arranger's nudge and accent move stay) */
 static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
 {
@@ -309,14 +309,14 @@ static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
             if (!strcmp(snap->v[j].id, s->voice.id)) {
                 s->voice = snap->v[j];
                 s->generation = snap->generation[j];
-                if (s->voice.pat.generator == BL_GEN_MOTIF) {
+                if (s->voice.pat.generator == BL_GEN_MOTIF || s->voice.pat.generator == BL_GEN_ARP) {
                     phase = snap->motif_phase[j];
                     motif_flags = snap->motif_flags[j];
                 }
                 break;
             }
         s->seg_start = tick - phase;
-        if (s->voice.pat.generator == BL_GEN_MOTIF)
+        if (s->voice.pat.generator == BL_GEN_MOTIF || s->voice.pat.generator == BL_GEN_ARP)
             s->voice.pat.start_offset = bl_floor_mod((bl_tick_t)phase - tick, s->voice.pat.length);
         s->blank = 0;
         if (motif_flags >= 0) {
@@ -393,6 +393,9 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
 {
     bl_vstate_t *s = &e->st[i];
     bl_pattern_t *p = &s->voice.pat;
+    /* Timing-grid traversal continues through blank loops and LOCK. Neither is
+     * a request to restart the pitch order. Explicit regeneration starts anew. */
+    bl_direction_advance(p);
     char gen[24];
     int was_blank = s->blank;
     s->blank = 0;
@@ -423,11 +426,16 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
             bl_dec(s->generation, gen);
             uint64_t seed = bl_seed_derive(e->project.seed, "voice", e->project.voice[i].id, "regen", gen,
                                            (const char *)NULL);
+            uint8_t direction = p->direction;
             make_pattern(&e->project, e->repeats, &e->project.voice[i], seed, &e->sched, p);
+            if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF)
+                p->direction = direction < BL_NDIRS ? direction : BL_DIR_UP;
             if (p->generator == BL_GEN_MOTIF) {
                 bl_motif_evolution_init(&s->voice.motif, &e->project.key, seed, s->voice.id);
                 p->start_offset = bl_floor_mod(-tick, p->length);
             }
+            if (p->generator == BL_GEN_ARP && p->direction != BL_DIR_UP)
+                p->start_offset = bl_floor_mod(-tick, p->length);
             s->generation++;
             return;
         }
@@ -458,9 +466,19 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                 uint64_t seed = s->voice.pat.seed;
                 bl_tick_t offset = s->voice.pat.start_offset;
                 const bl_voice_t *src = &s->voice;
-                if (f64_lt(e->density, ONE)) {
+                int directed = (src->pat.generator == BL_GEN_ARP || src->pat.generator == BL_GEN_MOTIF)
+                    && src->pat.direction != BL_DIR_UP;
+                if (directed || f64_lt(e->density, ONE)) {
                     e->capped = s->voice;
-                    bl_density_cap(&s->voice.pat, e->density, &e->capped.pat);
+                    /* Map pitches before density removes onset slots; gates,
+                     * accents and velocities still belong to their grid slots. */
+                    if (directed) {
+                        for (int j = 0; j < src->pat.n; j++)
+                            e->capped.pat.note[j].pitch = bl_direction_pitch(&src->pat, j, 0);
+                        e->capped.pat.direction = BL_DIR_UP;
+                        e->capped.pat.direction_cursor = 0;
+                    }
+                    bl_density_cap(&e->capped.pat, e->density, &e->capped.pat);
                     src = &e->capped;
                 }
                 int room = n < max ? max - n : 0;
@@ -542,7 +560,8 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
             s->active = c->on;
             if (c->on) {
                 s->seg_start = c->tick;
-                if (s->voice.pat.generator == BL_GEN_MOTIF)
+                if (s->voice.pat.generator == BL_GEN_MOTIF ||
+                    (s->voice.pat.generator == BL_GEN_ARP && s->voice.pat.direction != BL_DIR_UP))
                     s->voice.pat.start_offset = bl_floor_mod(-c->tick, s->voice.pat.length);
                 s->blank = 0;
             }
@@ -586,7 +605,8 @@ static void apply_directives(bl_live_t *e, const bl_dir_t *d, int n, bl_tick_t t
         case BL_DIR_ACTIVATE:
             s->active = 1;
             s->seg_start = tick;                        /* the loop restarts on the bar */
-            if (s->voice.pat.generator == BL_GEN_MOTIF)
+            if (s->voice.pat.generator == BL_GEN_MOTIF ||
+                (s->voice.pat.generator == BL_GEN_ARP && s->voice.pat.direction != BL_DIR_UP))
                 s->voice.pat.start_offset = bl_floor_mod(-tick, s->voice.pat.length);
             s->blank = 0;
             break;

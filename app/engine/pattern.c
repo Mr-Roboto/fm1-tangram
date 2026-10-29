@@ -4,6 +4,69 @@
  * sorts: a pattern has at most 64 notes). */
 #include "pattern.h"
 #include "rng.h"
+#include "gen.h"
+
+/* ARP has one ordered, two-octave chord cycle (eight tones). MOTIF uses
+ * its complete stored phrase so color in either half remains available.
+ * A short pattern supplies only the tones actually present. */
+static int direction_tones(const bl_pattern_t *p)
+{
+    return p->generator == BL_GEN_ARP && p->n > 8 ? 8 : p->n;
+}
+
+static int direction_period(const bl_pattern_t *p)
+{
+    int n = direction_tones(p);
+    if (n < 2) return 1;
+    return p->direction == BL_DIR_PENDULUM || p->direction == BL_DIR_M_PENDULUM ? 2 * (n - 1) : n;
+}
+
+int bl_direction_valid(const bl_pattern_t *p)
+{
+    if (p->direction >= BL_NDIRS) return 0;
+    int period = direction_period(p);
+    /* M-PENDULUM's zero is a one-time root pickup. Thereafter 1..period
+     * encodes its regular traversal, keeping the pickup out of later loops. */
+    return p->direction == BL_DIR_M_PENDULUM ? p->direction_cursor <= period : p->direction_cursor < period;
+}
+
+bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops)
+{
+    if (onset < 0 || onset >= p->n) return (bl_pitch_t){0};
+    if ((p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) ||
+        p->direction == BL_DIR_UP || !bl_direction_valid(p)) return p->note[onset].pitch;
+    int n = direction_tones(p), period = direction_period(p);
+    /* Reduce before multiplication: bounded 32-bit arithmetic on the FM-1.
+     * Live rendering passes zero (its cursor is advanced at boundaries); direct
+     * harmony rendering supplies the absolute loop ordinal for window independence. */
+    int step = p->direction_cursor + onset + (int)bl_floor_mod(completed_loops, period) * p->n, index;
+    if (p->direction == BL_DIR_M_PENDULUM && !step && completed_loops) step = period;
+    if (n < 2) return p->note[0].pitch;
+    switch (p->direction) {
+    case BL_DIR_DOWN: index = n - 1 - step % n; break;
+    case BL_DIR_M_DOWN: index = (n - step % n) % n; break;
+    case BL_DIR_PENDULUM:
+    case BL_DIR_M_PENDULUM: {
+        int period = 2 * (n - 1);
+        int phase = p->direction == BL_DIR_M_PENDULUM && step ? (step + n - 2) % period : step % period;
+        index = phase < n ? phase : period - phase;
+        break;
+    }
+    default: return p->note[onset].pitch;
+    }
+    return p->note[index].pitch;
+}
+
+void bl_direction_advance(bl_pattern_t *p)
+{
+    if ((p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) || !p->n) return;
+    if (!bl_direction_valid(p)) {
+        p->direction = BL_DIR_UP;
+        p->direction_cursor = 0;
+    }
+    int period = direction_period(p), next = p->direction_cursor + p->n;
+    p->direction_cursor = (uint8_t)(p->direction == BL_DIR_M_PENDULUM ? (next - 1) % period + 1 : next % period);
+}
 
 /* a * b of ticks, out of line: a 64-bit multiply beside a load may corrupt a register on the FM-1 (felucca-bsp
  * docs/CPU.md) */
@@ -64,6 +127,7 @@ int bl_with_length(bl_pattern_t *p, bl_tick_t new_len)
     for (int i = 0; i < p->n; i++)
         if (p->note[i].position < new_len) p->note[n++] = p->note[i];
     p->n = (uint8_t)n;
+    if (!bl_direction_valid(p)) p->direction_cursor = 0;
     p->start_offset = bl_floor_mod(p->start_offset, new_len);
     return 0;
 }

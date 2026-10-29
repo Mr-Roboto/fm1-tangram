@@ -42,6 +42,8 @@ gates, velocities, accents, ratchets and pattern duration stay as ARP generated
 them. Identical key/configuration/seed/duration produces identical material;
 different seeds can select different color tones. Existing rendered velocity
 humanization still applies.
+The [five playback directions](directions.md) reorder pitch selection from this
+source phrase without changing its protected anchors or evolution constraints.
 
 The factory still generates the stable TGM-002A motif. In the live engine,
 TGM-002B adds the following independent lifecycle, bypassing the unrestricted
@@ -96,16 +98,18 @@ states, the compact original foundation, active/blank status and the captured lo
 that local phase rather than restarting its loop. Subsequent onsets and evolution
 match uninterrupted continuation of the captured motif. Existing queued note-offs
 are handled by the transport. Undo uses the same capture/pack/recall path.
-Non-MOTIF recall behavior is unchanged.
+ARP also resumes its saved local phase and direction cursor; other generators
+retain their original recall behavior.
 
-The snapshot slot wrapper is now format 2; no historical snapshot migration is
-provided in this greenfield project. Raw state records add 27 bytes per MOTIF
-voice (two u64 RNG states, six u8 countdown/foundation fields, one u32 phase, one u8 active/blank flag).
+The snapshot slot wrapper is now format 3; no historical snapshot migration is
+provided in this greenfield project. Relative to pre-evolution records, MOTIF
+adds 29 bytes per voice: two u64 RNG states, six u8 countdown/foundation fields,
+one u32 phase, one u8 active/blank flag and two u8 direction/cursor fields.
+ARP adds seven bytes for direction/cursor, local phase and active/blank flags.
 Other generator records are unchanged. Invalid metadata and slot overflows are
-rejected. A pair of 16/15-onset MOTIF voices with an empty harmony schedule
-needs 394 packed bytes.
+rejected. See the direction note for TGM-003A's untested state extension.
 
-Evolution state occupies 24 bytes per voice; snapshot structures also have four
+Before TGM-003A, evolution state occupied 24 bytes per voice; snapshot structures also had four
 phase bytes and one active/blank flag byte per voice. On the host ABI, `bl_state_t` grows from 16840 to 17048
 bytes (+208), and `bl_live_t` from 76096 to 76912 (+816), including its embedded
 recall/theme/capped copies. Device ABI padding may differ. Scratch arrays hold
@@ -116,7 +120,7 @@ Limits inherited from ARP include 64 stored notes and natural shortened-loop
 boundary intervals; gates are not clipped at those boundaries. Sparse scales
 may offer little or no suitable non-chord color. There are no physical selection
 controls or preset changes. Evolution probability controls, phrase changes,
-other directions, grooves, rests and MIDI effects are deferred.
+grooves, rests and MIDI effects are deferred.
 
 Run `sh tests/host/run_motif.sh`; optional `MOTIF_TEST_FLAGS` adds compiler/linker
 flags, including AddressSanitizer and UndefinedBehaviorSanitizer. The runner

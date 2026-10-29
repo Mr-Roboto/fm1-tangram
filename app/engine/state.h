@@ -9,8 +9,9 @@
  *   generator remaining n               u8, i8 (-1: established), u8
  *   length start_offset generation      u32 each
  *   seed                                u64
+ *   ARP/MOTIF only: direction cursor    u8 each
  *   MOTIF only: interval_rng melody_rng u64 each; cycles_left scale_count chord[4] u8 each;
- *                                       local phase u32, active/blank flags u8 (27 bytes total)
+ *   ARP/MOTIF only: local phase         u32, active/blank flags u8
  *   n notes: position gate              u16 each
  *            degree octave accidental   i8 each
  *            velocity flags             u8, u8: accent 1, ratchet << 1

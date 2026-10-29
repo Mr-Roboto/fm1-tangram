@@ -79,6 +79,11 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
         put32(&o, in_range(&o, p->start_offset, 0, p->length - 1));
         put32(&o, in_range(&o, s->generation[i], 0, UINT32_MAX));
         put64(&o, p->seed);
+        if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
+            if (!bl_direction_valid(p)) o.bad = 1;
+            put8(&o, p->direction);
+            put8(&o, p->direction_cursor);
+        }
         if (p->generator == BL_GEN_MOTIF) {
             const bl_motif_evo_t *m = &v->motif;
             put64(&o, m->interval_rng);
@@ -90,6 +95,8 @@ int state_pack(const bl_state_t *s, uint8_t *buf, int max)
                 if ((!j && m->chord[j]) || (j && m->scale_count && m->chord[j] <= m->chord[j - 1])) o.bad = 1;
                 put8(&o, in_range(&o, m->chord[j], 0, m->scale_count ? m->scale_count - 1 : 0));
             }
+        }
+        if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             put32(&o, in_range(&o, s->motif_phase[i], 0, p->length - 1));
             put8(&o, in_range(&o, s->motif_flags[i], 0, 3));
         }
@@ -207,6 +214,11 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
         check(&in, p->start_offset, 0, p->length - 1);
         out->generation[i] = get32(&in);
         p->seed = get64(&in);
+        if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
+            p->direction = (uint8_t)get8(&in);
+            p->direction_cursor = (uint8_t)get8(&in);
+            if (!bl_direction_valid(p)) in.bad = 1;
+        }
         if (p->generator == BL_GEN_MOTIF) {
             bl_motif_evo_t *m = &v->motif;
             m->interval_rng = get64(&in);
@@ -221,6 +233,8 @@ int state_unpack(const uint8_t *buf, int n, bl_state_t *out)
                 check(&in, m->chord[j], 0, m->scale_count ? m->scale_count - 1 : 0);
                 if ((!j && m->chord[j]) || (j && m->scale_count && m->chord[j] <= m->chord[j - 1])) in.bad = 1;
             }
+        }
+        if (p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) {
             out->motif_phase[i] = get32(&in);
             check(&in, out->motif_phase[i], 0, p->length - 1);
             out->motif_flags[i] = (uint8_t)get8(&in);
