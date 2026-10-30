@@ -13,6 +13,7 @@
 #endif
 #include "splash.c"
 #include "runtime.c"
+#include "device_settings.c"
 #include "project.c"
 #include "ui.c"
 #include "screen.c"
@@ -21,6 +22,7 @@
 void app_init(void)                      /* the transport, then the saved project (or the defaults) on it */
 {
     rt_init();
+    device_settings_init();             /* storage foundation only; global runtime binding follows in GLOBAL2 */
     proj_load();
     proj_apply();
 }
@@ -33,8 +35,8 @@ void app_render(int32_t *lr, uint32_t n, uint32_t gain_q12)   /* the FM-1 makes 
 }
 void app_panic(void) { rt_stop(); }
 void app_ui_init(void) { ui_init(); }
-void app_frame(void) { ui_frame(); }
-void app_input_only(void) { ui_input_only(); }
+void app_frame(void) { ui_frame(); device_settings_poll(); }
+void app_input_only(void) { ui_input_only(); device_settings_poll(); }
 void app_say(const char *a, const char *b) { ui_say(a, b); }
 
 #ifdef PLAT_HOST

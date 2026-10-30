@@ -1,0 +1,46 @@
+# Global device-settings foundation (GLOBAL1)
+
+Status: **NOT TESTED**. This stage stores INTERNAL/EXTERNAL synchronization and
+USB/TRS/BOTH clock input, defaulting to INTERNAL/BOTH. It does not apply them to
+runtime or replace existing project/UI bindings. Project format 5 and snapshot
+slot format 8 are unchanged; removing project clock fields belongs to GLOBAL2.
+
+`OBJ_DEVICE_SETTINGS` is appended as ID 8; IDs 0..7 and their locations remain
+unchanged. Its A/B sectors are `[0xCE000,0xCF000)` and `[0xCF000,0xD0000)`.
+Static allocation review against the pinned platform establishes:
+
+- Existing Tangram objects occupy `[0xD0000,0xE0000)`, including panel calibration.
+  No application raw-data allocation or other mapped object uses the new pair.
+- `base/bsp/chip/fm1_flash.h` permits storage in `[0x97000,0xE0000)`; OTA staging,
+  autosave and Felucca globals begin at 0xE0000, 0xE5000 and 0xFC000 respectively.
+- `base/bsp/loader/ldr_core.c` writes firmware below 0x93000 and explicitly skips
+  user-data sectors during update-record cleanup. `loader.c` excludes the whole
+  user-data range from its write window. The package's flash image is 0x93000
+  bytes; its VM descriptor is not a settings payload written over this pair.
+
+The seven-byte payload is little-endian magic `TGDS`, format byte 1, sync byte
+and port-mask byte. There are no reserved fields or serialized padding.
+Missing, malformed, oversized or unsupported records select defaults without
+writing flash at boot. `device_settings_init()` returns 1 for that fallback,
+otherwise 0, and is called during `app_init()` after `rt_init()`.
+
+`device_settings_get()` returns the current value; `device_settings_set()`
+validates both fields atomically. Unchanged edits do nothing; edits returning
+to the last saved value cancel pending persistence. `device_settings_poll()`
+is called from the app's main-loop UI frame/input hooks, coalesces edits for
+250 ms, and writes only when `rt_idle()` reports stopped playback and drained
+MIDI releases. No ISR writes or project SAVE dependency are introduced.
+
+Persistence uses the platform's CRC-checked, readback-verified, torn-write-safe
+A/B object API. On save failure, the edited RAM value remains pending; a
+negative status is latched and logged once, preventing repeated flash attempts.
+`device_settings_retry()` explicitly rearms persistence; a different accepted
+edit also rearms it. `device_settings_status()` exposes clean (0), pending (1)
+or a negative save error. Flash failures cannot guarantee the last edit survives
+a restart. Edits made shortly before power loss may not yet have been saved.
+
+Host storage survives simulated `reboot` within a process, not separate simulator
+processes, and does not emulate physical torn writes. The pinned update path
+preserves this region; full-chip erase or another firmware's data allocation may
+not. No general flash wear levelling is added, and no hardware verification has
+been performed.

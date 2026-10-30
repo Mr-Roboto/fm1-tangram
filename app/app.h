@@ -6,6 +6,7 @@
 #include "plat.h"
 #include "live.h"                        /* the engine's (engine/): a project, a state */
 #include "runtime.h"
+#include "device_settings.h"
 
 #define APP_NAME "BERLINAN"
 #define APP_SPLASH                       /* startup-only Tangram branding; APP_NAME/firmware identity stay intact */
@@ -19,10 +20,12 @@ void app_splash(void);
 #define BL_VERSION "DEV"
 #endif
 
-/* the store: the project, the panel calibration (the platform's, at 0xDC000 as AMB-1) and the six slots, two
+/* the store: the project, the panel calibration (the platform's, at 0xDC000 as AMB-1), six slots and device settings, two
  * 4 KiB sectors each, in the data area 0x97000..0xDFFFF */
-enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT4, OBJ_SLOT5, OBJ_NOBJ };
-#define APP_STORE_MAP {0xDE000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u, 0xD2000u, 0xD0000u}
+enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT4, OBJ_SLOT5, OBJ_DEVICE_SETTINGS, OBJ_NOBJ };
+/* Device settings: 0xCE000/0xCF000, below the unchanged existing pairs.
+ * The pinned loader preserves [0x97000,0xE0000), including both sectors. */
+#define APP_STORE_MAP {0xDE000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u, 0xD2000u, 0xD0000u, 0xCE000u}
 
 /* ---- the project (project.c): what SAVE keeps, as a Berlinan document (AppServices.saveDocument): the project in
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport

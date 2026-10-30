@@ -1,0 +1,93 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Included in app.c's unity build. Independent of projects, slots and undo. */
+#include "app.h"
+#include "device_settings.h"
+
+/* Exactly seven serialized bytes: little-endian magic "TGDS", u8 format,
+ * u8 sync, u8 port mask. No serialized C padding or future-use fields. */
+#define DEVICE_SETTINGS_MAGIC UINT32_C(0x53444754)
+#define DEVICE_SETTINGS_FORMAT 1u
+#define DEVICE_SETTINGS_BYTES 7u
+#define DEVICE_SETTINGS_SETTLE_MS 250u
+
+static device_settings_t device_current, device_saved;
+static uint32_t device_edited_at;
+static int device_dirty, device_save_error;
+
+static int device_settings_valid(device_settings_t settings)
+{
+    return settings.sync <= DEVICE_SYNC_EXTERNAL &&
+        (settings.ext_ports == DEVICE_CLOCK_USB || settings.ext_ports == DEVICE_CLOCK_TRS ||
+         settings.ext_ports == DEVICE_CLOCK_BOTH);
+}
+
+static int device_settings_equal(device_settings_t a, device_settings_t b)
+{
+    return a.sync == b.sync && a.ext_ports == b.ext_ports;
+}
+
+int device_settings_init(void)
+{
+    /* One extra scratch byte detects oversized records despite load's truncation. */
+    uint8_t record[DEVICE_SETTINGS_BYTES + 1u];
+    int n = plat_store_load(OBJ_DEVICE_SETTINGS, record, sizeof record);
+    int defaults = 1;
+    device_current = (device_settings_t){DEVICE_SYNC_INTERNAL, DEVICE_CLOCK_BOTH};
+    if (n == (int)DEVICE_SETTINGS_BYTES) {
+        uint32_t magic = (uint32_t)record[0] | (uint32_t)record[1] << 8 |
+            (uint32_t)record[2] << 16 | (uint32_t)record[3] << 24;
+        device_settings_t loaded = {record[5], record[6]};
+        if (magic == DEVICE_SETTINGS_MAGIC && record[4] == DEVICE_SETTINGS_FORMAT && device_settings_valid(loaded)) {
+            device_current = loaded;
+            defaults = 0;
+        }
+    }
+    device_saved = device_current;
+    device_dirty = device_save_error = 0;
+    device_edited_at = plat_ms();
+    return defaults;                    /* defaults need no boot-time flash write */
+}
+
+device_settings_t device_settings_get(void) { return device_current; }
+
+int device_settings_set(device_settings_t settings)
+{
+    if (!device_settings_valid(settings)) return -1;
+    if (device_settings_equal(settings, device_current)) return 0;
+    device_current = settings;
+    device_dirty = !device_settings_equal(device_current, device_saved);
+    device_save_error = 0;
+    device_edited_at = plat_ms();
+    return 0;
+}
+
+int device_settings_status(void)
+{
+    return device_save_error ? device_save_error : device_dirty ? 1 : 0;
+}
+
+void device_settings_retry(void)
+{
+    device_save_error = 0;
+    device_edited_at = plat_ms();
+}
+
+int device_settings_poll(void)
+{
+    if (!device_dirty || device_save_error) return device_settings_status();
+    if (plat_ms() - device_edited_at < DEVICE_SETTINGS_SETTLE_MS || !rt_idle()) return 1;
+    const uint8_t record[DEVICE_SETTINGS_BYTES] = {
+        (uint8_t)DEVICE_SETTINGS_MAGIC, (uint8_t)(DEVICE_SETTINGS_MAGIC >> 8),
+        (uint8_t)(DEVICE_SETTINGS_MAGIC >> 16), (uint8_t)(DEVICE_SETTINGS_MAGIC >> 24),
+        DEVICE_SETTINGS_FORMAT, device_current.sync, device_current.ext_ports
+    };
+    int error = plat_store_save(OBJ_DEVICE_SETTINGS, record, sizeof record);
+    if (error) {
+        device_save_error = error < 0 ? error : -1;
+        plat_log("Tangram device settings: save failed");
+        return device_save_error;
+    }
+    device_saved = device_current;
+    device_dirty = 0;
+    return 0;
+}
