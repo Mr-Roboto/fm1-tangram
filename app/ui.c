@@ -662,19 +662,27 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
         else
             show("ROOT", NOTE_NAME[proj.key_root]);
         break;
-    case KN_SYNC:
-        if (proj_set_sync(d > 0))
+    case KN_SYNC: {
+        device_settings_t settings = device_settings_get();
+        settings.sync = d > 0 ? DEVICE_SYNC_EXTERNAL : DEVICE_SYNC_INTERNAL;
+        if (rt_playing() || device_settings_set(settings))
             warn("SYNC", "WHEN STOPPED");
         else
             show("SYNC", device_settings_get().sync ? "EXT" : "INT");
         break;
-    case KN_PORT:
-        for (i = 0; i < 2 && PORTS[i] != device_settings_get().ext_ports; i++)
+    }
+    case KN_PORT: {
+        device_settings_t settings = device_settings_get();
+        for (i = 0; i < 2 && PORTS[i] != settings.ext_ports; i++)
             ;
         i = clamp(i + d, 0, 2);
-        proj_set_ext_ports(PORTS[i]);
-        show("EXT INPUT", PORT_NAME[i]);
+        settings.ext_ports = PORTS[i];
+        if (device_settings_set(settings))
+            warn("EXT INPUT", "REFUSED");
+        else
+            show("EXT INPUT", PORT_NAME[i]);
         break;
+    }
     case KN_LIGHTS:
         proj.lights = (uint8_t)clamp(proj.lights + d, 0, 2);
         show("LIGHTS", LIGHTS[proj.lights]);

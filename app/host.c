@@ -76,13 +76,16 @@
  *   dumpis K ST D1 D2        the dump's K-th line from its end (1 the last) has these bytes; else a FAIL line and
  *                            dumpbad one more
  *   rt play | stop | tempo BPM | load TEMPLATE [SEED] | mute VOICE 0|1 | channel VOICE CH | sync int|ext |
- *      port USB|TRS|both     the transport's controls (VOICE a voice id, CH 0-15), until the panel has them all
+ *      port USB|TRS|both     the transport's controls (VOICE a voice id, CH 0-15).
+ *                            sync/port edit persistent GLOBAL device settings, not the project;
+ *                            sync is stopped-only, port edits are live. Persistence remains deferred.
  *   rt burst N               (playing) N note-ons on channel 16 (notes 0..N-1, velocity 1) due now and their offs a
  *                            tick later, into the queue: more than a ms may send
  *   proj template TEMPLATE [SEED] | key ROOT MODE | tempo BPM | density K | arranger on|off |
  *      form classic|slow|ambient | ambient on|off | channel VOICE CH | sync int|ext | dice
  *                            the project's changes as the Mac's AppServices makes them (project.c: MODE a ModeID raw
- *                            value, K 0-100; SEED a test's in place of the fresh one), until the panel has them all
+ *                            value, K 0-100; SEED a test's in place of the fresh one), until the panel has them all.
+ *                            `proj sync` is a compatibility alias for global sync, never a project field.
  *   proj format1             the project written to the store as a format-1 record (an older firmware's: the
  *                            ratchet's byte its padding, here 35, which the load must not read)
  *   slot store K | slot recall K | undo push | undo pop | save
@@ -408,10 +411,15 @@ static int rt_cmd(const char *a, const char *b, const char *c)
         rt_set_mute(bl_vid(b), atoi(c));
     else if (!strcmp(a, "channel") && bl_vid(b) != BL_VID_NONE)
         rt_set_channel(bl_vid(b), (uint8_t)atoi(c));
-    else if (!strcmp(a, "sync") && (!strcmp(b, "int") || !strcmp(b, "ext")))
-        rt_set_sync(b[0] == 'e');
-    else if (!strcmp(a, "port") && (!strcmp(b, "USB") || !strcmp(b, "TRS") || !strcmp(b, "both")))
-        rt_set_ext_port(b[0] == 'U' ? 1 << PORT_USB : b[0] == 'T' ? 1 << PORT_TRS : 1 << PORT_USB | 1 << PORT_TRS);
+    else if (!strcmp(a, "sync") && (!strcmp(b, "int") || !strcmp(b, "ext"))) {
+        device_settings_t settings = device_settings_get();
+        settings.sync = b[0] == 'e' ? DEVICE_SYNC_EXTERNAL : DEVICE_SYNC_INTERNAL;
+        return rt_playing() ? -1 : device_settings_set(settings);
+    } else if (!strcmp(a, "port") && (!strcmp(b, "USB") || !strcmp(b, "TRS") || !strcmp(b, "both"))) {
+        device_settings_t settings = device_settings_get();
+        settings.ext_ports = b[0] == 'U' ? DEVICE_CLOCK_USB : b[0] == 'T' ? DEVICE_CLOCK_TRS : DEVICE_CLOCK_BOTH;
+        return device_settings_set(settings);
+    }
     else if (!strcmp(a, "burst") && rt_playing() && atoi(b) > 0 && atoi(b) <= 128) {
         uint32_t f = plat_lock(), n;
         bl_tick_t t = rt.started ? rt.tick : 0;
@@ -421,7 +429,7 @@ static int rt_cmd(const char *a, const char *b, const char *c)
             rt_insert(t + 1, rt_pkt(0x8Fu, n, 0), BL_VID_NONE);
         plat_unlock(f);
     } else
-        return -1;
+        return -2;
     return 0;
 }
 
@@ -834,8 +842,11 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         }
     }
     else if (!strcmp(cmd, "rt")) {
-        if (rt_cmd(a, b, c))
+        int r = rt_cmd(a, b, c);
+        if (r == -2)
             printf("FAIL rt %s %s %s: no such control\n", a, b, c);
+        else if (r)
+            printf("  rt %s %s %s: refused (global clock edit unavailable; sync requires stopped transport)\n", a, b, c);
     } else if (!strcmp(cmd, "proj")) {
         int r = proj_cmd(a, b, c);
         if (r == -2)
@@ -868,7 +879,7 @@ static void host_saving(void) { save_unsent = rt.nn; }
 
 void app_speak_dump(void) { speak_dump(); }
 
-void app_host_reboot(void)               /* what RAM holds is gone: the project, the slots, the undo stack */
+void app_host_reboot(void)               /* app_init() subsequently reloads device settings from simulated flash */
 {
     rt_stop();
     memset(&proj, 0, sizeof proj);

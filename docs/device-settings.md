@@ -1,4 +1,4 @@
-# Global device settings (GLOBAL1 / GLOBAL2)
+# Global device settings (GLOBAL1 / GLOBAL2 / GLOBAL3)
 
 Status: **NOT TESTED**. This stage stores INTERNAL/EXTERNAL synchronization and
 USB/TRS/BOTH clock input, defaulting to INTERNAL/BOTH. These settings are now
@@ -60,7 +60,44 @@ is persisted. Existing FA/FB/FC interpretation and freewheel/interpolation remai
 The old `proj_set_sync`/`proj_set_ext_ports` and runtime setter names remain as
 compatibility control entry points into this global API. No commands or pages
 were added. Screen-reader vocabulary enumeration uses a local display preview,
-never persistent setters. Full UI/host refinement is deferred to GLOBAL3.
+never persistent setters.
+
+## Existing GLO controls and host integration
+
+GLO keeps its ROOT / SYNC / EXT INPUT / LIGHTS page, navigation and HELP. SYNC
+reads the authoritative global source (INT/EXT); an edit while playing is
+refused with the existing WHEN STOPPED message. A pending MIDI Start also
+prevents a mode change. EXT INPUT reads/edits USB, TRS or BOTH (displayed as
+USB + TRS); port-only edits retain their existing live behavior. Handlers call
+`device_settings_set()` and never write flash themselves. ROOT and LIGHTS keep
+their existing project behavior. No pages, knobs or shortcuts were added.
+
+Existing host syntax remains:
+
+- `rt sync int|ext`: global, stopped-only; refused edits are reported rather
+  than silently appearing successful.
+- `rt port USB|TRS|both`: global routing through the same device-settings API.
+- `proj sync int|ext`: compatibility alias for global sync, despite its prefix.
+- `expect sync` and `expect ext_ports`: read actual global values. Port values
+  remain the existing `1 << PORT_USB` / `1 << PORT_TRS` bit masks.
+- `proj tempo BPM`: the stored musical project's internal tempo. In EXTERNAL
+  mode this does not overwrite the measured runtime BPM/rate. `rt tempo` remains
+  a runtime control and cannot retime the followed external clock.
+
+Project loading and SAVE do not change the clock record. A simulated `reboot`
+calls the normal `app_init()`: RAM settings are reset, the record is loaded and
+applied, and the musical project is then loaded independently. It does not flush
+unsaved edits merely because a reboot was requested. To observe persistence,
+allow at least 250 ms after the final edit while stopped and with MIDI releases
+drained (for example, a host `wait 300` after the transport is idle). Edits made
+while playing remain pending until those conditions are met; power loss or
+reboot before persistence loses them. Runtime external tempo is not retained
+across reboot and returns to the documented startup fallback until measured.
+
+The screen-reader audit retains its local clock preview and restores the prior
+display source afterward. It never calls the settings API to enumerate values.
+Existing simulator scenarios/goldens were not updated or executed. Direct
+clock integration and persistence behavior remain **NOT TESTED**.
 
 See [project-format.md](project-format.md) for the explicit musical record and
 the historical format-5 read layout. Unchanged implicit voice defaults can be

@@ -52,7 +52,13 @@ Compact knob labels use K1–K4, with full generator/scale names in screen-reade
 announcements. Preview refresh includes the new project settings. Display and
 screen-reader behavior have not been verified.
 
-LFO and GLO retain their existing pages and bindings. GLO ROOT and ALGORITHM
+LFO and GLO retain their existing pages and bindings. GLO SYNC and EXT INPUT
+read/edit persistent global device settings through the dedicated settings API;
+they are independent of projects. SYNC edits require stopped transport, while
+port selection retains live routing behavior. Persistence is deferred until
+settled and safely idle; no UI handler writes flash. See
+[device-settings.md](device-settings.md) for host aliases and reboot limitations.
+GLO ROOT and ALGORITHM
 retain their existing global key-control behavior; HOME/ARP ROOT and SCALE edit
 the selected voice. Transport, voice-key combinations, SEL lock on ENV, SAVE and
 snapshot keys, OCT+ Dice, update-mode combination, MASTER density,
