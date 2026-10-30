@@ -302,7 +302,13 @@ static const char *const FORM_SHORT[] = {"CUSTOM", "CLASSIC", "SLOW", "PLATEAU"}
 static const char *const PORT_SHORT[3] = {"USB", "TRS", "USB + TRS"};
 static const char *const LIGHT_NAME[3] = {"OFF", "ON", "KEYS"};
 
-static int port_index(void) { return proj.ext_ports == 1u << PORT_TRS ? 1 : proj.ext_ports == 1u << PORT_USB ? 0 : 2; }
+/* Host vocabulary enumeration supplies a local display-only preview. */
+static const device_settings_t *screen_clock_preview;
+static device_settings_t screen_clock(void)
+{
+    return screen_clock_preview ? *screen_clock_preview : device_settings_get();
+}
+static int port_index(void) { return screen_clock().ext_ports == 1u << PORT_TRS ? 1 : screen_clock().ext_ports == 1u << PORT_USB ? 0 : 2; }
 
 static void cycle_text(f64 bars, char *t)   /* a lane's cycle in bars (0.5-64): whole, or to a tenth */
 {
@@ -432,8 +438,8 @@ static void cell(int view, int i, cell_t *c)
         cat(c->val, NOTE_NAME[proj.key_root]);
         break;
     case KN_SYNC:
-        c->v = proj.sync;
-        cat(c->val, proj.sync ? "EXT" : "INT");
+        c->v = screen_clock().sync;
+        cat(c->val, screen_clock().sync ? "EXT" : "INT");
         break;
     case KN_PORT:
         c->hi = 2, c->v = (int16_t)port_index();
@@ -883,7 +889,7 @@ static void draw_header(void)
     char t[16];
     int msg = plat_ms() < ui.msg_until, play = rt_playing();
     int beat = play && rt_play_tick() % BL_PPQN < BL_PPQN / 2;
-    uint32_t h = hash(hash(2166136261u, proj.tpl | (uint32_t)play << 4 | (uint32_t)msg << 5 | (uint32_t)proj.sync << 6 |
+    uint32_t h = hash(hash(2166136261u, proj.tpl | (uint32_t)play << 4 | (uint32_t)msg << 5 | (uint32_t)screen_clock().sync << 6 |
                                             (uint32_t)beat << 7 | (uint32_t)proj_save_pending() << 8 |
                                             (uint32_t)proj.key_root << 12 | (uint32_t)proj.key_mode << 16),
                       (uint32_t)bpm_now());
@@ -903,7 +909,7 @@ static void draw_header(void)
             cv_round(x - 5, 12, 5, 5, 2, K_ACC);
             x -= 11;
         }
-        if (proj.sync)
+        if (screen_clock().sync)
             caps(t, "EXT", sizeof t);
         else
             itoa_u((uint32_t)bpm_now(), t);
@@ -1381,7 +1387,7 @@ static void draw_setup(void)
     cat(cat(cat(t, NOTE_NAME[proj.key_root]), " "), MODE_NAME[proj.key_mode]);
     row(4, 20, 76, "KEY", t, K_TEXT);
     t[0] = 0;
-    if (proj.sync)
+    if (screen_clock().sync)
         cat(cat(t, "EXT from "), PORT_SHORT[port_index()]);
     else
         cat(t, "INT, sent on USB");
@@ -1431,7 +1437,7 @@ static uint32_t main_sig(void)
     }
     h = hash(hash(h, ui.pre_sig), (uint32_t)proj.arr_has | proj.arr_on << 1 | proj.arr_ambient << 2 |
                                       proj.arr_reprise << 3 | (uint32_t)proj.arr_min << 8 | (uint32_t)proj.arr_max << 20);
-    h = hash(hash(h, proj.sync | proj.ext_ports << 1 | (uint32_t)proj.density_pct << 8 | (uint32_t)proj_seeded() << 16 |
+    h = hash(hash(h, screen_clock().sync | screen_clock().ext_ports << 1 | (uint32_t)proj.density_pct << 8 | (uint32_t)proj_seeded() << 16 |
                          (uint32_t)rt_loading() << 17),
              (uint32_t)proj.seed ^ (uint32_t)(proj.seed >> 32));
     for (k = 0; k < BL_NVIDS; k++)
@@ -1723,7 +1729,7 @@ static void sp_page(int all)
     sp_cat(" ");
     sp_cat(MODE_NAME[proj.key_mode]);
     sp_cat(", tempo ");
-    if (proj.sync)
+    if (screen_clock().sync)
         sp_cat("EXT");
     else
         sp_int((uint32_t)bpm_now());
@@ -1889,7 +1895,7 @@ static void sp_main(void)
         if (!proj_seeded())
             sp_cat(", a new one at the first Play");
         sp_cat(". Clock ");
-        sp_cat(proj.sync ? "EXT" : "INT");
+        sp_cat(screen_clock().sync ? "EXT" : "INT");
         sp_cat(". Version ");
         sp_cat(BL_VERSION);
         break;
@@ -2035,6 +2041,9 @@ static void speak_dump(void)
         {"SYNC", "WHEN STOPPED"}, {"AUTO", "QUEUE FULL"}, {"ROOT", "QUEUE FULL"}, {"MODE", "QUEUE FULL"},
         {"DENSITY", "QUEUE FULL"}};
     proj_t keep = proj;
+    const device_settings_t *keep_clock_preview = screen_clock_preview;
+    device_settings_t preview_clock = screen_clock();
+    screen_clock_preview = &preview_clock;
     uint8_t keep_view = ui.view, keep_help = ui.help, keep_sel = ui.sel;
     int v, i, x;
     char t[48];
@@ -2075,13 +2084,14 @@ static void speak_dump(void)
     ui.view = V_SETUP;
     for (x = 0; x < 12; x++) {
         proj.key_root = (uint8_t)x;
-        proj.sync = (uint8_t)(x & 1);
-        proj.ext_ports = (uint8_t)(x % 3 == 0 ? 1u << PORT_USB : x % 3 == 1 ? 1u << PORT_TRS : 3u);
+        preview_clock.sync = (uint8_t)(x & 1);
+        preview_clock.ext_ports = (uint8_t)(x % 3 == 0 ? 1u << PORT_USB : x % 3 == 1 ? 1u << PORT_TRS : 3u);
         proj.lights = (uint8_t)(x % 3);
         sp_page(0);
         sp_print("KNOB", sp_buf);
     }
     proj = keep;
+    preview_clock = keep_clock_preview ? *keep_clock_preview : device_settings_get();
     ui.view = V_VOICE;
     for (x = 0; x < 16; x++) {
         int k = key_voice(ui.sel);
@@ -2148,6 +2158,7 @@ static void speak_dump(void)
         sp_print("MSG", FORM_NAME[x][0] ? FORM_NAME[x] : "CUSTOM");
     sp_print("MSG", "PLAYING");
     sp_print("MSG", "STOPPED");
+    screen_clock_preview = keep_clock_preview;
 }
 #endif
 

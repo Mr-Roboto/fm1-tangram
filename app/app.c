@@ -22,7 +22,8 @@
 void app_init(void)                      /* the transport, then the saved project (or the defaults) on it */
 {
     rt_init();
-    device_settings_init();             /* storage foundation only; global runtime binding follows in GLOBAL2 */
+    device_settings_init();
+    device_settings_apply();            /* global clock ownership, before any project is applied */
     proj_load();
     proj_apply();
 }

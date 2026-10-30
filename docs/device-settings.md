@@ -1,9 +1,10 @@
-# Global device-settings foundation (GLOBAL1)
+# Global device settings (GLOBAL1 / GLOBAL2)
 
 Status: **NOT TESTED**. This stage stores INTERNAL/EXTERNAL synchronization and
-USB/TRS/BOTH clock input, defaulting to INTERNAL/BOTH. It does not apply them to
-runtime or replace existing project/UI bindings. Project format 5 and snapshot
-slot format 8 are unchanged; removing project clock fields belongs to GLOBAL2.
+USB/TRS/BOTH clock input, defaulting to INTERNAL/BOTH. These settings are now
+authoritative for runtime, existing GLO controls and host clock-setting commands.
+The project record is format 6, with read-only compatibility for format 5; old
+project clock values are ignored. Snapshot slot format 8 is unchanged.
 
 `OBJ_DEVICE_SETTINGS` is appended as ID 8; IDs 0..7 and their locations remain
 unchanged. Its A/B sectors are `[0xCE000,0xCF000)` and `[0xCF000,0xD0000)`.
@@ -22,10 +23,13 @@ The seven-byte payload is little-endian magic `TGDS`, format byte 1, sync byte
 and port-mask byte. There are no reserved fields or serialized padding.
 Missing, malformed, oversized or unsupported records select defaults without
 writing flash at boot. `device_settings_init()` returns 1 for that fallback,
-otherwise 0, and is called during `app_init()` after `rt_init()`.
+otherwise 0, and is called during `app_init()` after `rt_init()`. The loaded
+settings are applied immediately afterward, before project load/application.
 
 `device_settings_get()` returns the current value; `device_settings_set()`
-validates both fields atomically. Unchanged edits do nothing; edits returning
+validates both fields atomically and applies accepted changes to runtime.
+Mode changes are rejected during playback or a pending external Start; routing
+edits retain the existing live behavior. Unchanged edits do nothing; edits returning
 to the last saved value cancel pending persistence. `device_settings_poll()`
 is called from the app's main-loop UI frame/input hooks, coalesces edits for
 250 ms, and writes only when `rt_idle()` reports stopped playback and drained
@@ -44,3 +48,21 @@ processes, and does not emulate physical torn writes. The pinned update path
 preserves this region; full-chip erase or another firmware's data allocation may
 not. No general flash wear levelling is added, and no hardware verification has
 been performed.
+
+Project load, SAVE, STOP, UNDO and reprise never apply global clock settings.
+INTERNAL uses the musical project's BPM. EXTERNAL retains its measured BPM and
+rate through project loads and stopped configuration reconciliation. On boot,
+before an external estimate exists, the existing runtime initialization tempo
+(96 BPM) is the fallback; switching from INTERNAL to EXTERNAL initially retains
+the current rate until external pulses establish an estimate. No measured tempo
+is persisted. Existing FA/FB/FC interpretation and freewheel/interpolation remain.
+
+The old `proj_set_sync`/`proj_set_ext_ports` and runtime setter names remain as
+compatibility control entry points into this global API. No commands or pages
+were added. Screen-reader vocabulary enumeration uses a local display preview,
+never persistent setters. Full UI/host refinement is deferred to GLOBAL3.
+
+See [project-format.md](project-format.md) for the explicit musical record and
+the historical format-5 read layout. Unchanged implicit voice defaults can be
+promoted for persistence without marking the transport stale. Actual changes
+still retain existing reapplication and per-voice local-boundary behavior.

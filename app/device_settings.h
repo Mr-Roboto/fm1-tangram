@@ -13,14 +13,17 @@ typedef struct {
     uint8_t sync, ext_ports;
 } device_settings_t;
 
-/* Main-loop API. GLOBAL1 stores settings only; it never changes the transport.
+/* Main-loop API. Accepted edits apply to the global runtime clock settings.
  * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH.
- * set rejects invalid values (-1); an accepted edit (0) is saved after settling.
+ * set rejects invalid values or a mode change during playback/pending Start
+ * (-1); an accepted edit (0) is saved after settling. Port-only edits retain
+ * the existing live input-routing behavior.
  * status/poll: 0 clean, 1 pending, negative platform save error (latched).
  * poll writes only after 250 ms without edits and rt_idle(). A failed save
  * stays pending without automatic retries; retry explicitly rearms it.
  * Returning to the last saved values cancels an unnecessary write. */
 int device_settings_init(void);
+int device_settings_apply(void);         /* apply loaded settings after rt_init(), before project playback */
 device_settings_t device_settings_get(void);
 int device_settings_set(device_settings_t settings);
 int device_settings_status(void);

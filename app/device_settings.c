@@ -50,9 +50,15 @@ int device_settings_init(void)
 
 device_settings_t device_settings_get(void) { return device_current; }
 
+int device_settings_apply(void)
+{
+    return rt_apply_clock_settings(device_current.sync, device_current.ext_ports);
+}
+
 int device_settings_set(device_settings_t settings)
 {
     if (!device_settings_valid(settings)) return -1;
+    if (rt_apply_clock_settings(settings.sync, settings.ext_ports)) return -1;
     if (device_settings_equal(settings, device_current)) return 0;
     device_current = settings;
     device_dirty = !device_settings_equal(device_current, device_saved);

@@ -666,10 +666,10 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
         if (proj_set_sync(d > 0))
             warn("SYNC", "WHEN STOPPED");
         else
-            show("SYNC", proj.sync ? "EXT" : "INT");
+            show("SYNC", device_settings_get().sync ? "EXT" : "INT");
         break;
     case KN_PORT:
-        for (i = 0; i < 2 && PORTS[i] != proj.ext_ports; i++)
+        for (i = 0; i < 2 && PORTS[i] != device_settings_get().ext_ports; i++)
             ;
         i = clamp(i + d, 0, 2);
         proj_set_ext_ports(PORTS[i]);

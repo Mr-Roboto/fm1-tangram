@@ -675,7 +675,7 @@ void rt_stop(void)                       /* Transport.stop */
     rt.start_req = rt.ext_run = 0;
     plat_unlock(f);
     if (rt.pend_bpm >= 0) {              /* (the Mac binds it on the next Play's first bar line: tick 0) */
-        rt.bpm = rt.pend_bpm;
+        if (!rt.ext) rt.bpm = rt.pend_bpm;
         rt.pend_bpm = -1;
     }
 }
@@ -772,26 +772,29 @@ int rt_set_voice_config_field(int vid, int field, int32_t value)
     return rt_set_voice_config(vid, &target);
 }
 
-static void rt_stored(int32_t bpm)      /* stopped: the next Play's tempo (EXT: until the pulses lead) */
+static void rt_stored(int32_t bpm)      /* stored musical tempo only controls the INTERNAL clock */
 {
     uint32_t f = plat_lock();
-    rt.bpm = bpm;
-    if (rt.ext && !rt.ext_run)
+    if (!rt.ext) {
+        rt.bpm = bpm;
         rt.rate = bpm * 16;
+    }
     plat_unlock(f);
 }
 
 void rt_set_tempo(int32_t bpm)           /* Transport.setTempo: playing, from the head's next bar line (INT) */
 {
     bpm = clamp(bpm, 40, 220);
+    if (rt.ext) return;                 /* caller's project BPM is stored independently of the followed clock */
     if (rt.playing)
         rt.pend_bpm = bpm;
     else
         rt_stored(bpm);
 }
 
-/* playing: Transport.loadProject (from the head's next bar line); stopped: the project the next Play makes (the Mac
- * builds its transport anew: its channels, no mutes, its tempo, EXT's too until the pulses lead) */
+/* Playing: musical project takeover at the head's next bar. Stopped: the next
+ * Play's project/channels. Neither path changes global clock settings or an
+ * externally followed tempo estimate. */
 void rt_load(const bl_project_t *p)
 {
     if (rt.playing) {
@@ -898,23 +901,39 @@ void rt_set_channel(int vid, uint8_t ch)
     plat_unlock(f);
 }
 
-void rt_set_sync(int ext)                /* INT 0, EXT 1: stopped only */
+int rt_apply_clock_settings(int ext, int ports)
 {
-    uint32_t f;
-    if (rt.playing || rt.start_req)
-        return;
-    f = plat_lock();
-    rt.ext = ext ? 1 : 0;
-    rt.npm = rt.pre = 0;
-    rt.rate = rt.bpm * 16;
+    if ((ext != 0 && ext != 1) || !ports || (ports & ~(1 << PORT_USB | 1 << PORT_TRS))) return -1;
+    uint32_t f = plat_lock();
+    if (rt.ext != ext) {
+        if (rt.playing || rt.start_req) {
+            plat_unlock(f);
+            return -1;
+        }
+        rt.ext = (uint8_t)ext;
+        rt.npm = rt.pre = 0;
+        if (!ext) {
+            rt.bpm = rt_proj.bpm;
+            rt.rate = rt.bpm * 16;
+        }
+    }
+    rt.ext_ports = (uint8_t)ports;
     plat_unlock(f);
+    return 0;
+}
+
+void rt_set_sync(int ext)                /* existing callers now edit the authoritative global record */
+{
+    device_settings_t settings = device_settings_get();
+    settings.sync = ext ? DEVICE_SYNC_EXTERNAL : DEVICE_SYNC_INTERNAL;
+    device_settings_set(settings);
 }
 
 void rt_set_ext_port(int mask)           /* EXT's input: bits 1 << PORT_USB, 1 << PORT_TRS */
 {
-    uint32_t f = plat_lock();
-    rt.ext_ports = (uint8_t)(mask & (1 << PORT_USB | 1 << PORT_TRS));
-    plat_unlock(f);
+    device_settings_t settings = device_settings_get();
+    settings.ext_ports = (uint8_t)(mask & (1 << PORT_USB | 1 << PORT_TRS));
+    device_settings_set(settings);
 }
 
 void app_loop(void)

@@ -579,9 +579,9 @@ static int proj_expect(const char *what, int *got)
     else if (!strcmp(what, "seeded"))
         *got = !proj_unseeded;
     else if (!strcmp(what, "sync"))
-        *got = proj.sync;
+        *got = device_settings_get().sync;
     else if (!strcmp(what, "ext_ports"))
-        *got = proj.ext_ports;
+        *got = device_settings_get().ext_ports;
     else if (!strcmp(what, "lights"))
         *got = proj.lights;
     else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])

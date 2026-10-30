@@ -93,7 +93,9 @@ carried back into the project when its template still matches. Project files
 store the requested next-Play configuration, while runtime snapshots preserve
 the active/pending distinction and remaining local position.
 
-Project format is **5** and snapshot slot format is **7**, with no migration.
+Project format is **6**, explicitly serialized without clock source or input
+routing; format **5** is read while ignoring its obsolete clock fields.
+Snapshot slot format remains **8**. See [project-format.md](project-format.md).
 Packed active/pending frames cost 29 bytes each plus a two-byte pending mask per
 voice; legacy-generator records also gain five bytes of phase/flags. RAM uses
 two fixed configuration frames per voice, with no duplicated 64-note patterns,

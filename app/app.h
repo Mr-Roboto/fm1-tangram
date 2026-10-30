@@ -31,16 +31,14 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 5u                   /* independent pitch PHASE; no legacy migration */
+#define PROJ_FORMAT 6u                   /* explicit musical record; reads format 5 without its clock settings */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
 
 typedef struct {
     uint32_t magic, format;
-    uint8_t tpl, key_root, key_mode, sync, ext_ports, lights;   /* a BL_TPL_; 0-11; a BL_MODE_; INT 0, EXT 1; EXT's
-                                                                 * input (1 << PORT_USB, 1 << PORT_TRS); lights 0
-                                                                 * off, 1 keys and the buttons' glow, 2 keys only */
+    uint8_t tpl, key_root, key_mode, lights; /* template, root, scale; lights: off / glow / keys only */
     uint64_t seed;                       /* masterSeed */
     int32_t bpm;                         /* 40-220 */
     uint8_t arr_has, arr_on, arr_ambient, arr_reprise;   /* Project.arrangement: nil (arr_has 0, the rest 0) or its
@@ -94,8 +92,8 @@ int proj_set_voice_config_field(int voice, int field, int32_t value);
 int proj_get_delay(int voice, bl_delay_t *out);
 int proj_set_delay(int voice, const bl_delay_t *settings);
 int proj_set_delay_field(int voice, int field, int value);
-int proj_set_sync(int ext);              /* stopped only */
-void proj_set_ext_ports(int mask);
+int proj_set_sync(int ext);              /* compatibility control API: global device setting, stopped only */
+void proj_set_ext_ports(int mask);       /* global device setting; never part of project SAVE */
 int proj_dice(void);                     /* UIState.newSeed: an undo point, then AppServices.reseed */
 int slot_store(int k);                   /* saveSnapshot: the state at the render head; 0, -1 */
 int slot_recall(int k);                  /* recallSnapshot: an undo point, the state at the next bar; 0, -1 (the

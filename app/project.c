@@ -13,8 +13,8 @@
  *   the transport on the project (proj_apply: the next Play's engine, no mutes, the tempo); playing, the part the Mac
  *   does live goes to the running engine (tempo, key, density, the arranger's on / off at the next bar, a channel at
  *   once, a template at the next bar line, Dice's fresh state recalled at the next bar) and the project waits for
- *   the stop (transportStale, rebuildTransportIfStale). The arranger's form and ambient mode and the sync are
- *   stopped only.
+ *   the stop (transportStale, rebuildTransportIfStale). The arranger's form and ambient mode are stopped only.
+ *   Clock source and external input routing belong to device_settings, never the project record.
  * - The ratchet (the legitimization's ratchetProbability) is a project value with no live action on the Mac (which
  *   has no control for it): playing, a change waits for the next Play, as the stale project's others.
  * - The arrangement is the Mac's: nil or a config, with AUTO (enabled), the form (a preset's periods and reprise) and
@@ -38,7 +38,6 @@
 #define SLOT_FORMAT 8u                  /* snapshot-owned MIDI channel alongside delay settings */
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
-#define PORTS_ALL (1u << PORT_USB | 1u << PORT_TRS)
 #define HUNDRED F64(0x4059000000000000)  /* 100.0 */
 #define UNDO_BYTES 32768                 /* 20 undo points of 1,636 bytes (the templates' states: 800 or less); larger
                                           * ones leave room for fewer */
@@ -137,14 +136,13 @@ void proj_defaults(void)
     memset(&proj, 0, sizeof proj);
     proj.magic = PROJ_MAGIC;
     proj.format = PROJ_FORMAT;
-    proj.ext_ports = PORTS_ALL;
     proj.lights = 1;
     from_template(BL_TPL_DEMO, 0);
     proj.seed = proj_eng.seed;           /* (the template's own until the first Play draws one) */
     proj_unseeded = 1;
 }
 
-/* Greenfield project records: only the current format is accepted. */
+/* In-memory musical configuration, after record decoding. */
 static int proj_valid(const proj_t *p)
 {
     int i;
@@ -152,7 +150,7 @@ static int proj_valid(const proj_t *p)
         return 0;
     if (p->ratchet_pct > 50 || p->ratchet_pct % 5)
         return 0;
-    if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES || p->sync > 1 || (p->ext_ports & ~PORTS_ALL)
+    if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES
         || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
         return 0;
     if (p->arr_has > 1 || p->arr_on > 1 || p->arr_ambient > 1 || p->arr_reprise > 1)
@@ -166,6 +164,8 @@ static int proj_valid(const proj_t *p)
             return 0;
     return 1;
 }
+
+#include "project_record.c"              /* explicit format 6; historical native-layout format 5 reader */
 
 static void slot_load(int k)             /* the slot's record, if it is one (its state unpacks) */
 {
@@ -193,8 +193,8 @@ int proj_load(void)
     for (k = 0; k < PROJ_SLOTS; k++)
         slot_load(k);
     memset(&rec, 0, sizeof rec);
-    n = plat_store_load(OBJ_PROJ, &rec, sizeof rec);
-    if (n == (int)sizeof rec && proj_valid(&rec)) {
+    n = plat_store_load(OBJ_PROJ, proj_buf, sizeof proj_buf);
+    if (!project_record_read(proj_buf, n, &rec)) {
         proj = rec;
         proj_unseeded = 0;
         return 0;
@@ -236,7 +236,9 @@ int proj_save(void)                      /* the project; the slots stored since 
     host_saving();
 #endif
     draw_seed();                         /* (a project saved has its seed) */
-    r = save_obj(OBJ_PROJ, &proj, sizeof proj);
+    uint8_t record[PROJECT_RECORD_BYTES];
+    int bytes = project_record_write(&proj, record, sizeof record);
+    r = bytes < 0 ? -1 : save_obj(OBJ_PROJ, record, (uint32_t)bytes);
     for (k = 0; k < PROJ_SLOTS; k++)
         if (slots[k].dirty) {
             if (save_obj(OBJ_SLOT0 + (uint32_t)k, slots[k].rec, slots[k].n))
@@ -280,8 +282,6 @@ void proj_apply(void)                    /* rebuildTransport: a stopped transpor
         return;
     }
     proj_to_engine(&proj_eng);
-    rt_set_sync(proj.sync);
-    rt_set_ext_port(proj.ext_ports);
     rt_load(&proj_eng);
     proj_template_pending = 0;
     proj_rt_ratchet = proj.ratchet_pct;
@@ -306,22 +306,35 @@ static void sync_voice_configs(void)
         proj_template_pending = 0;
     }
     rt_capture(&proj_st);
-    bl_template(proj.tpl, &proj_eng);
+    proj_to_engine(&proj_eng);
     if (proj_st.n != proj_eng.nvoices) return;
     for (int i = 0; i < proj_st.n; i++)
         if (strcmp(proj_st.v[i].id, proj_eng.voice[i].id)) return;
-    for (int i = 0; i < proj_st.n; i++) {
-        const bl_vconfig_t *target = &proj_st.v[i].pending;
+    /* Reuse the existing scratch state to materialize implicit defaults once.
+     * Keep only captured persistence targets on the stack, not full patterns. */
+    struct { bl_vconfig_t config; bl_delay_t delay; uint8_t channel; } captured[BL_MAX_VOICES];
+    int n = proj_st.n, need_defaults = 0;
+    for (int i = 0; i < n; i++) {
+        captured[i].config = proj_st.v[i].pending;
+        captured[i].delay = proj_st.v[i].delay;
+        captured[i].channel = proj_st.v[i].midi_channel;
+        need_defaults |= !proj.voice_configured[i];
+    }
+    if (need_defaults && bl_initial_state(&proj_eng, &proj_st)) return;
+    for (int i = 0; i < n; i++) {
+        const bl_vconfig_t *target = &captured[i].config;
         if (!bl_config_valid(target)) continue;
+        const bl_vconfig_t *effective = proj.voice_configured[i] ? &proj.voice_config[i] : &proj_st.v[i].config;
+        int changed = bl_config_diff(effective, target) != 0;
         if (!proj.voice_configured[i] || bl_config_diff(&proj.voice_config[i], target)) {
             proj.voice_configured[i] = 1;
             proj.voice_config[i] = *target;
-            proj_stale = 1;
+            if (changed) proj_stale = 1; /* explicit promotion alone does not reload transport */
         }
-        if (memcmp(&proj.delay[i], &proj_st.v[i].delay, sizeof proj.delay[i]) ||
-            proj.channel[i] != proj_st.v[i].midi_channel) {
-            proj.delay[i] = proj_st.v[i].delay;
-            proj.channel[i] = proj_st.v[i].midi_channel;
+        if (memcmp(&proj.delay[i], &captured[i].delay, sizeof proj.delay[i]) ||
+            proj.channel[i] != captured[i].channel) {
+            proj.delay[i] = captured[i].delay;
+            proj.channel[i] = captured[i].channel;
             proj_stale = 1;
         }
     }
@@ -557,19 +570,18 @@ int proj_set_delay_field(int voice, int field, int value)
     return proj_set_delay(voice, &settings);
 }
 
-int proj_set_sync(int ext)
+int proj_set_sync(int ext)               /* existing control API; settings are global, despite the historic name */
 {
     if (rt_playing())
         return -1;
-    proj.sync = ext ? 1 : 0;
-    rt_set_sync(proj.sync);
-    return 0;
+    device_settings_t settings = device_settings_get();
+    settings.sync = ext ? DEVICE_SYNC_EXTERNAL : DEVICE_SYNC_INTERNAL;
+    return device_settings_set(settings);
 }
 
 void proj_set_ext_ports(int mask)
 {
-    proj.ext_ports = (uint8_t)(mask & PORTS_ALL);
-    rt_set_ext_port(proj.ext_ports);
+    rt_set_ext_port(mask);               /* compatibility entry point; no project storage */
 }
 
 int proj_dice(void)                      /* playing: LiveEngine(project).captureState() recalled */
