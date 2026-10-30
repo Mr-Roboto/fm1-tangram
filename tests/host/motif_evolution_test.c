@@ -223,6 +223,18 @@ static void test_lock_and_regeneration(void)
 
 static void test_snapshots(void)
 {
+    /* Zero-based raw state_pack() offsets for the first MOTIF voice, without
+     * the saved-slot wrapper: 30-byte prefix (voice count through seed),
+     * two 29-byte configs, 2-byte dirty mask, 4-byte delay, 1-byte channel,
+     * 3-byte direction/cursor/groove, then two 8-byte evolution RNG states. */
+    enum {
+        SNAP_COUNTDOWN = 114,
+        SNAP_SCALE_COUNT = 115,
+        SNAP_ROOT_CHORD_DEGREE = 116,
+        SNAP_SECOND_CHORD_DEGREE = 117,
+        SNAP_LOCAL_PHASE = 120, /* four little-endian bytes, 120..123 */
+        SNAP_ACTIVE_BLANK_FLAGS = 124
+    };
     static bl_live_t source,restored;
     static bl_state_t snap,back;
     static bl_note_t a[8192],b[8192];
@@ -257,11 +269,16 @@ static void test_snapshots(void)
             CHECK(n==m,"restored LOCK resume count");
             for(int i=0;i<n&&i<m;i++) CHECK(note_equal(&a[i],&b[i],origin),"restored LOCK countdown resume");
         }
-        const int corrupt[]={46,47,48,49,52,56};
+        const int corrupt[]={SNAP_COUNTDOWN,SNAP_SCALE_COUNT,SNAP_ROOT_CHORD_DEGREE,
+            SNAP_SECOND_CHORD_DEGREE,SNAP_LOCAL_PHASE,SNAP_ACTIVE_BLANK_FLAGS};
+        /* Invalid countdown, scale size, chord root/order, local phase, flags. */
         const uint8_t values[]={0,13,1,0,255,4};
         for(unsigned i=0;i<sizeof corrupt/sizeof corrupt[0];i++) {
             memcpy(bad,buf,(size_t)bytes);bad[corrupt[i]]=values[i];
-            if(corrupt[i]==52) memset(bad+52,255,4);
+            int width=corrupt[i]==SNAP_LOCAL_PHASE?4:1;
+            if(width==4) memset(bad+SNAP_LOCAL_PHASE,255,4);
+            CHECK(memcmp(bad+corrupt[i],buf+corrupt[i],(size_t)width)!=0,
+                  "corruption changes intended payload field %d",corrupt[i]);
             CHECK(state_unpack(bad,bytes,&back)==-1,"reject corrupt evolution metadata %d",corrupt[i]);
         }
     }
