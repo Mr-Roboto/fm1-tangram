@@ -7,7 +7,7 @@
 #include "app.h"
 #include "test.h"
 
-static uint8_t saved[OBJ_NOBJ][PLAT_STORE_MAX];
+static uint8_t scale_fixture_store[OBJ_NOBJ][PLAT_STORE_MAX];
 static int saved_len[OBJ_NOBJ], playing, algo_delta, actions;
 static bl_project_t loaded, next_project;
 static bl_live_t engine;
@@ -29,13 +29,13 @@ int plat_store_load(uint32_t obj, void *dst, uint32_t max)
 {
     if (obj >= OBJ_NOBJ || !saved_len[obj]) return -1;
     uint32_t n = (uint32_t)saved_len[obj] < max ? (uint32_t)saved_len[obj] : max;
-    memcpy(dst, saved[obj], n);
+    memcpy(dst, scale_fixture_store[obj], n);
     return (int)n;
 }
 int plat_store_save(uint32_t obj, const void *src, uint32_t n)
 {
     if (obj >= OBJ_NOBJ || n > PLAT_STORE_MAX) return -1;
-    memcpy(saved[obj], src, n);
+    memcpy(scale_fixture_store[obj], src, n);
     saved_len[obj] = (int)n;
     return 0;
 }
@@ -209,7 +209,7 @@ static void test_settings(void)
     playing = 0;
     proj.key_mode = 23;
     CHECK(!proj_valid(&proj), "mode 23 rejected");
-    memcpy(saved[OBJ_PROJ], &proj, sizeof proj);
+    memcpy(scale_fixture_store[OBJ_PROJ], &proj, sizeof proj);
     saved_len[OBJ_PROJ] = sizeof proj;
     CHECK(proj_load() != 0 && proj.key_mode == BL_MODE_NATURAL_MINOR && proj.key_root == 9,
           "invalid current setting resets to defaults");
