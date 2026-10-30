@@ -184,7 +184,18 @@ writes each one's `.midiref` with `RefTool midi FILE` (their own suffix, so the 
 `tests/scenarios/play_midi.bln` plays `midi_full.midiscript` on the app (`selfscript`), logs what the transport sends
 (`dumpmidi`) and compares the log with `midi_full.midiref` line by line (`cmpmidi`).
 
-The midi mode plays the script as the script mode does (the same windows, actions and lines, which it does not
+`midi_full.midiref` now includes the surgical Tangram ownership corrections reviewed in TGM-005-FIX11E;
+it is no longer an unchanged RefTool MIDI output. The original musical material remains: 8,559 events,
+all note-on ticks/velocities and all 6,144 clocks. At the 46 ticks `7680*k + {7080,7560}` (`k=0..22`),
+lead offs follow already queued clock/CC messages because original-note offs are queued at dispatch.
+PAD retriggers send an off between identical channel/pitch ons at ticks 0, 26880 and 53760; redundant
+scheduled offs at 26880, 53760 and 80640 are suppressed after the held strike is released. The latest
+strike keeps its scheduled end; identical off messages in an LCS alignment do not identify individual strikes.
+These edits were mapped to the recorded full-stream diagnostic and runtime ownership contract, without
+regenerating the reference. Raw RefTool output from the command above will omit these Tangram corrections.
+Other references are unchanged.
+
+The original RefTool midi mode plays the script as the script mode does (the same windows, actions and lines, which it does not
 print) and writes what Berlinan's `Transport` hands to CoreMIDI for it, through the runtime's own files compiled
 unchanged (`EventConversion.swift`, `MIDI1Event.swift`):
 
@@ -198,7 +209,8 @@ unchanged (`EventConversion.swift`, `MIDI1Event.swift`):
    over (the window starts on its bar line), `muted` is emptied first (`mutedVoices.removeAll()`) and the channel
    map is the new project's; what the old engine's windows gave (their notes' offs) stays in the list.
 3. All of them in a stable sort by tick: the windows' lists one after the other, an event of an earlier window
-   first among those of a tick, as the queue of `app/runtime.c` keeps them and CoreMIDI sends the Mac's.
+   first among those of a tick, as CoreMIDI sends the Mac's. Tangram's dispatch-time off insertion and
+   ownership exceptions are documented above.
 
 A script whose arranger reaches its ending is refused: the transport's own step there (Stop and the flush, on the
 stop tick) is `tests/scenarios/stop_flush.bln`'s.
