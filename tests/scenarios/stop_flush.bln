@@ -1,9 +1,10 @@
-# Nothing is left sounding (NoteRegistry.flushEvents): a stop sends MIDI Stop, then a note-off for each note sounding,
-# by (channel, note), then All Notes Off (CC 123) on each channel that had one (sent from the next ms: the tick sends
-# everything); a mute silences the voice's channel, a channel change the old one; the arranger's ending stops on
-# its tick. A template switch does not flush (as Transport.swift): what the old piece queued still goes out at its
-# own ticks. Tick 0 sounds 100 ms after PLAY is seen (the press's first ms); bar N is tick N x 3840. The dumps go
-# to app/build/scenarios/stop_flush/.
+# Nothing is left sounding: STOP sends MIDI Stop, then explicit offs for Tangram-held notes, without CC123.
+# MUTE purges and releases its voice's owned notes across all channels, including tails from an older template.
+# Channel changes preserve sounding notes and their captured offs; only new originals use the new channel.
+# A template switch preserves tails, but a same-channel/pitch retrigger releases the previous strike first.
+# Stale scheduled offs must not end newer strikes. Tick 0 sounds 100 ms after PLAY is seen; bar N is tick N x 3840.
+# Release order below is the recorded registry traversal for this sequence, not a universal cursor reset rule.
+# The dumps go to app/build/scenarios/stop_flush/.
 #
 # the flush's order: the Full ensemble (96 BPM) on its own seed (the boot's project has a fresh one) stopped at tick
 # 1505, the bass (channel 3, 2 on the wire) and the pad's chord (channel 4, 3) sounding
@@ -12,16 +13,26 @@ dumpmidi app/build/scenarios/stop_flush/stop.txt
 tap PLAY
 wait 1000
 tap PLAY
-dumpis 1 B3 7B 00
-dumpis 2 B2 7B 00
-dumpis 3 83 48 00
-dumpis 4 83 45 00
-dumpis 5 83 40 00
-dumpis 6 82 2D 00
-dumpis 7 FC 00 00
+expect playing 0
+dumpis 1 83 48 00
+dumpis 2 83 45 00
+dumpis 3 83 40 00
+dumpis 4 82 2D 00
+dumpis 5 FC 00 00
+dumpcount FC 00 00 1505
+expect dumpcount 1
+dumpcount 82 2D 00 1505
+expect dumpcount 1
+dumpcount 83 40 00 1505
+expect dumpcount 1
+dumpcount 83 45 00 1505
+expect dumpcount 1
+dumpcount 83 48 00 1505
+expect dumpcount 1
 dumpcount B0 7B 00
 expect dumpcount 0
 expect sounding 0
+expect queued 0
 #
 # Ambient drift (72 BPM, a bar 3333 ms): its drone holds E3 (52, 0x34) and A3 (57, 0x39) on channel 1 (0 on the
 # wire), struck every 8 bars for 8 bars
@@ -38,10 +49,16 @@ expect playing 0
 expect_out USB FC 00 00
 expect_out USB 80 34 00
 expect_out USB 80 39 00
-expect_out USB B0 7B 00
+dumpis 1 80 39 00
+dumpis 2 80 34 00
+dumpis 3 FC 00 00
+dumpcount 80 34 00 76930
+expect dumpcount 1
+dumpcount 80 39 00 76930
+expect dumpcount 1
 expect sounding 0
 expect queued 0
-# mute in bar 4 (the drone struck on bar 0): its channel silenced at once; nothing of it on bars 8 to 15; unmuted
+# mute in bar 4 (the drone struck on bar 0): its owned notes released; nothing of it on bars 8 to 15; unmuted
 # in bar 13, it is struck again on bar 16
 tap PLAY
 wait 13400
@@ -52,7 +69,12 @@ rt mute drone 1
 wait 1
 expect_out USB 80 34 00
 expect_out USB 80 39 00
-expect_out USB B0 7B 00
+dumpis 1 80 39 00
+dumpis 2 80 34 00
+dumpcount 80 34 00 15413
+expect dumpcount 1
+dumpcount 80 39 00 15413
+expect dumpcount 1
 expect sounding0 0
 wait 30000
 expect tick 49973
@@ -62,8 +84,8 @@ wait 20000
 expect tick 73013
 expect sounding0 2
 # a template switch in bar 20 (tick 78773): on the next bar line (bar 21, tick 80640) the Full ensemble takes over
-# with its tempo (96 BPM); the drone (struck on bar 16, not in the new piece) is not silenced there, and muting it
-# then (no channel of its own any more) leaves its queued offs alone: they go out on bar 24's line (92160)
+# with its tempo (96 BPM). The drone's tails survive takeover. MUTE still releases them by voice ownership,
+# despite the drone being absent from Full ensemble, at recorded tick 81225; its old offs at 92160 are purged.
 wait 5000
 expect tick 78773
 dumpmidi app/build/scenarios/stop_flush/switch.txt
@@ -77,13 +99,37 @@ expect tick_rate 1536
 expect bpm 96
 expect sounding0.52 1
 expect sounding0.57 1
+expect sounding3.64 1
+expect sounding3.69 1
+expect sounding3.72 1
 rt mute drone 1
+# Release requests drain on the following tick, not synchronously in the setter.
 expect sounding0.52 1
-wait 7600
+wait 1
+expect sounding0.52 0
+expect sounding0.57 0
+dumpis 1 80 39 00
+dumpis 2 80 34 00
+dumpcount 80 34 00 81225
+expect dumpcount 1
+dumpcount 80 39 00 81225
+expect dumpcount 1
+# The unrelated Full ensemble pad keeps all three held pitches.
+expect sounding3.64 1
+expect sounding3.69 1
+expect sounding3.72 1
+dumpcount 83 * 00 81225
+expect dumpcount 0
+wait 7599
 expect tick 92897
 dumpcount 80 34 00 92160
-expect dumpcount 1
+expect dumpcount 0
 dumpcount 80 39 00 92160
+expect dumpcount 0
+# No second release after the old scheduled end.
+dumpcount 80 34 00
+expect dumpcount 1
+dumpcount 80 39 00
 expect dumpcount 1
 dumpcount B0 7B 00
 expect dumpcount 0
@@ -91,33 +137,108 @@ expect sounding0.52 0
 expect sounding0.57 0
 expect playing 1
 tap PLAY
-# a channel change in bar 4: the drone's old channel silenced at once, its next notes (bar 8) on the new one
+# A channel change in bar 4 preserves the old channel's tails. At bar 8 they end on channel 0,
+# and new strikes use channel 5. Isolate this run's dump so premature/duplicate offs cannot hide in older runs.
 rt load ambient
+dumpmidi app/build/scenarios/stop_flush/channel.txt
 tap PLAY
 wait 13400
 expect sounding0 2
 out
 rt channel drone 5
 wait 1
-expect_out USB 80 34 00
-expect_out USB 80 39 00
-expect_out USB B0 7B 00
-expect sounding0 0
+expect sounding0 2
+expect sounding0.52 1
+expect sounding0.57 1
+expect sounding5 0
+dumpcount 80 34 00
+expect dumpcount 0
+dumpcount 80 39 00
+expect dumpcount 0
 wait 13400
 expect tick 30850
 expect sounding0 0
 expect sounding5 2
+expect sounding5.52 1
+expect sounding5.57 1
+dumpcount 80 34 00 30720
+expect dumpcount 1
+dumpcount 80 39 00 30720
+expect dumpcount 1
+dumpcount 80 34 00
+expect dumpcount 1
+dumpcount 80 39 00
+expect dumpcount 1
+dumpcount 95 34 3A 30720
+expect dumpcount 1
+dumpcount 95 39 3E 30720
+expect dumpcount 1
+dumpcount 85 34 00
+expect dumpcount 0
+dumpcount 85 39 00
+expect dumpcount 0
 tap PLAY
+expect playing 0
+expect sounding 0
+expect queued 0
+dumpcount 85 34 00 30851
+expect dumpcount 1
+dumpcount 85 39 00 30851
+expect dumpcount 1
+dumpcount 80 34 00
+expect dumpcount 1
+dumpcount 80 39 00
+expect dumpcount 1
+dumpcount 85 34 00
+expect dumpcount 1
+dumpcount 85 39 00
+expect dumpcount 1
+dumpcount 90 34 *
+expect dumpcount 1
+dumpcount 90 39 *
+expect dumpcount 1
+dumpcount 95 34 *
+expect dumpcount 1
+dumpcount 95 39 *
+expect dumpcount 1
 # a switch to the same piece in bar 20: on bar 21's line (80640) the new drone strikes E3 and A3 on channel 1 while
-# the old one (struck on bars 0, 8 and 16) still holds them; the old drone's offs on bar 24's line (92160) end its
-# strike, the new one's still sound: the stop in bar 26 silences them. Every note-on gets its note-off
+# the old one still holds them. Explicit offs precede the new ons; old scheduled offs at 92160 are stale.
+# The new strikes survive until STOP in bar 26. Every note-on gets its note-off.
 rt load ambient
 dumpmidi app/build/scenarios/stop_flush/same.txt
 tap PLAY
 wait 68400
 expect tick 78772
 rt load ambient
-wait 18400
+# Same total wait as before (1700 + 10000 + 6700), with read-only checkpoints.
+# At 72 BPM, 1700 ms advances 1958 or 1959 ticks from 78772, between clock ticks 80720 and 80760.
+wait 1700
+expect tick >80719
+expect tick <80760
+# The retained dump shows these four events followed by clocks at 80640, 80680, 80720.
+dumpis 7 80 34 00
+dumpis 6 90 34 3A
+dumpis 5 80 39 00
+dumpis 4 90 39 3E
+dumpcount 80 34 00 80640
+expect dumpcount 1
+dumpcount 90 34 3A 80640
+expect dumpcount 1
+dumpcount 80 39 00 80640
+expect dumpcount 1
+dumpcount 90 39 3E 80640
+expect dumpcount 1
+expect sounding0.52 1
+expect sounding0.57 1
+wait 10000
+expect tick >92160
+dumpcount 80 34 00 92160
+expect dumpcount 0
+dumpcount 80 39 00 92160
+expect dumpcount 0
+expect sounding0.52 1
+expect sounding0.57 1
+wait 6700
 expect tick 99969
 expect sounding0.52 1
 expect sounding0.57 1
@@ -131,11 +252,15 @@ dumpcount 90 39 *
 expect dumpcount 4
 dumpcount 80 39 *
 expect dumpcount 4
-dumpis 1 B0 7B 00
-dumpis 2 80 39 00
-dumpis 3 80 34 00
-dumpis 4 FC 00 00
+dumpis 1 80 39 00
+dumpis 2 80 34 00
+dumpis 3 FC 00 00
+dumpcount 80 34 00 99970
+expect dumpcount 1
+dumpcount 80 39 00 99970
+expect dumpcount 1
 expect sounding 0
+expect queued 0
 # the arranger's ending: Ambient drift's ambient plateau ends on bar 288 (tick 1105920, 960 s from tick 0); the
 # transport stops there by itself once that tick is out (the drone's last off is on it: nothing left to flush). A
 # SAVE made while it plays is written then, once the Stop has gone out
