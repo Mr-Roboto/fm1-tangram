@@ -382,8 +382,9 @@ static int run_one(const char *path)
     int full_on = full_env && !strcmp(full_env, "1");
     const char *base = strrchr(path, '/');
     base = base ? base + 1 : path;
-    if (full_on && strcmp(base, "live_arranger_classic_240.script") && strcmp(base, "live_arranger_slow_240.script")) {
-        fprintf(stderr, "REPRISE-FULL INCOMPLETE: unsupported case %s; only Classic/Slow 240 are enabled\n", path);
+    if (full_on && strcmp(base, "live_arranger_classic_240.script") && strcmp(base, "live_arranger_slow_240.script") &&
+        strcmp(base, "live_arranger_classic_37.script") && strcmp(base, "live_arranger_slow_37.script")) {
+        fprintf(stderr, "REPRISE-FULL INCOMPLETE: unsupported case %s; only Classic/Slow 37/240 are enabled\n", path);
         return 1;
     }
     bl_script_t s;
