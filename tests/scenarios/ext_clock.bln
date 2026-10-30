@@ -397,14 +397,21 @@ expect playing 0
 wait 1
 expect sounding 0
 expect clocks_out 0
-# stopped, the tempo shown is the transport's, as on the Mac (UIState's liveBPM, Transport.currentBPM): the 125
-# followed, not the project's 96, and still after Sync INT, which keeps it (Transport.setSyncMode), as PLAY runs it
+# Stopped in EXT, retain the measured 125 BPM. Switching to global INTERNAL explicitly selects
+# the project's 96 BPM; switching back to EXTERNAL retains that rate until new clock pulses arrive.
 expect bpm_shown 125
+expect bpm_proj 96
 proj sync int
-expect bpm 125
-expect bpm_shown 125
-expect tick_rate 2000
+expect sync 0
+expect bpm 96
+expect bpm_shown 96
+expect tick_rate 1536
+expect ext_ports 4
 proj sync ext
+expect sync 1
+expect ext_ports 4
+expect bpm 96
+expect tick_rate 1536
 # a SAVE made while playing in EXT is written after MIDI Stop, once what the stop sends has gone out (a flash write
 # stops everything for a moment: the offs would wait behind it): 128 notes sounding, their offs 8 ms on the wire
 tap PLAY
@@ -418,32 +425,50 @@ midi TRS FC
 wait 40
 expect playing 0
 expect save_pending 0
-expect store_writes 1
+# Clock edits coalesce into one device-settings record, deferred until stopped/idle and settled
+# for 250 ms. SAVE writes a separate musical project record: two writes, not one per clock edit.
+# Both writes have completed here; no new clock edits follow before reboot.
+expect store_writes 2
 expect save_unsent 0
 expect sounding 0
-# the tempo in store is the project's after a change that rebuilds the transport (the Mac's rebuildTransport keeps
-# the sync, its new transport has the project's tempo): Sync EXT from the project, then Ambient drift (72 BPM) chosen
-# while stopped; PLAY with no clock runs at 72 (1.152 ticks a ms), not at the 125 followed before
+expect sync 1
+expect ext_ports 4
+# The compatibility command edits global sync. Loading Ambient drift stores project BPM 72,
+# but EXT keeps the current runtime estimate (96 after the explicit INTERNAL switch above).
+# No new F8 pulses arrive in this section; project loading must not retime the external clock.
 proj sync ext
 proj template ambient 1
-expect bpm 72
-expect tick_rate 1152
+expect bpm_proj 72
+expect sync 1
+expect ext_ports 4
+expect bpm 96
+expect tick_rate 1536
 tap PLAY
 wait 500
 expect playing 1
-expect bpm 72
-expect tick_rate 1152
+expect bpm_proj 72
+expect bpm 96
+expect tick_rate 1536
 tap PLAY
-# saved with EXT, after a restart: the saved tempo, not that of the Full ensemble the transport starts on
+expect sync 1
+expect ext_ports 4
+# SAVE persists the musical BPM independently. Global EXT/TRS was already persisted at the earlier STOP;
+# reboot reloads it, but never restores a measured tempo: runtime starts at its documented 96 BPM fallback.
 save
 reboot
 expect sync 1
-expect bpm 72
-expect tick_rate 1152
+expect ext_ports 4
+expect bpm_proj 72
+expect bpm 96
+expect tick_rate 1536
 tap PLAY
 wait 500
 expect playing 1
-expect tick_rate 1152
+expect sync 1
+expect ext_ports 4
+expect bpm_proj 72
+expect bpm 96
+expect tick_rate 1536
 tap PLAY
 # an FC that the tick takes between an FA and the main loop's start (its interrupt between app_loop's look and the
 # start's lock) takes the FA back: nothing starts, nothing free-runs while the master is stopped
