@@ -424,7 +424,8 @@ static int rt_cmd(const char *a, const char *b, const char *c)
         uint32_t f = plat_lock(), n;
         bl_tick_t t = rt.started ? rt.tick : 0;
         for (n = 0; n < (uint32_t)atoi(b); n++)
-            rt_insert(t, rt_pkt(0x9Fu, n, 1), BL_VID_NONE);
+            /* Match the already queued off's absolute tick for stale-off protection. */
+            rt_insert(t, rt_pkt(0x9Fu, n, 1), BL_VID_NONE)->end = t + 1;
         for (n = 0; n < (uint32_t)atoi(b); n++)
             rt_insert(t + 1, rt_pkt(0x8Fu, n, 0), BL_VID_NONE);
         plat_unlock(f);
