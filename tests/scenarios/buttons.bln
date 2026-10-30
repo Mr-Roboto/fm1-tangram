@@ -98,6 +98,8 @@ expect seed_lo 0xe815d91a
 expect pat_hash_hi 0xabd25f74
 wait 2700
 expect pat_hash_hi 0x0f277af5
+# DICE recalls a fresh initial state from the project/new seed, not the running LOCK flags.
+expect locked1 0
 # ---- OCT- with OCT+: neither undoes nor dices
 press OCT-
 press OCT+
@@ -106,11 +108,11 @@ release OCT+
 release OCT-
 expect undo_depth 1
 expect seed_lo 0xe815d91a
-# ---- OCT- alone: MUTATE adds an undo point and keeps Pluck 2 locked
+# ---- OCT- alone: MUTATE adds an undo point; Pluck 2 is now unlocked by DICE and included
 tap OCT-
 expect undo_depth 2
-expect req1 0
-expect locked1 1
+expect req1 2
+expect locked1 0
 # ---- PLAY again: stopped
 tap PLAY
 expect playing 0
