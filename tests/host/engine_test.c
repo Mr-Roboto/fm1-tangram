@@ -1885,16 +1885,56 @@ static void test_live_bind(void)
     bl_template(BL_TPL_DEMO, &p);
     bl_live_init(&e, &p);
     bl_live_render(&e, 0, 2 * BL_TICKS_PER_BAR + 100, out, 2048);
-    bl_action_t key = {BL_A_KEY, 0, 0, {0}, p.key, NULL, 0}, up = {BL_A_TRANSPOSE, 0, 3, {0}, {0, {0}}, NULL, 0},
+    bl_action_t density = {BL_A_DENSITY, 0, 0, ONE, {0, {0}}, NULL, 0},
+                key = {BL_A_KEY, 0, 0, {0}, p.key, NULL, 0}, up = {BL_A_TRANSPOSE, 0, 3, {0}, {0, {0}}, NULL, 0},
                 adv = {BL_A_ADVANCE, 0, 0, {0}, {0, {0}}, NULL, 0};
-    CHECK(!bl_live_enqueue(&e, &key, 0) && !bl_live_enqueue(&e, &adv, 50) && !bl_live_enqueue(&e, &up, 0) &&
-          !bl_live_enqueue(&e, &key, 5 * BL_TICKS_PER_BAR), "enqueue");
+    CHECK(!bl_live_enqueue(&e, &density, 0) && !bl_live_enqueue(&e, &adv, 50) && !bl_live_enqueue(&e, &up, 0) &&
+          !bl_live_enqueue(&e, &density, 5 * BL_TICKS_PER_BAR), "enqueue");
+    bl_vconfig_t original[BL_MAX_VOICES];
+    for (int i = 0; i < p.nvoices; i++) original[i] = e.st[i].voice.config;
+    CHECK(!bl_live_enqueue(&e, &key, 0), "request already-active key");
+    for (int i = 0; i < p.nvoices; i++) {
+        bl_vconfig_t active, pending;
+        int got = bl_live_get_config(&e, e.st[i].vid, &active, &pending);
+        CHECK(!got && !bl_config_diff(&active, &original[i]) && !bl_config_diff(&pending, &original[i]) &&
+              e.st[i].voice.config_dirty == 0, "same key leaves voice %d without pending edits", i);
+    }
     bl_live_status(&e, &st);
     CHECK(st.nup == 3 && st.up[0].tick == 3 * BL_TICKS_PER_BAR && st.up[1].tick == 3 * BL_TICKS_PER_BAR &&
-          st.up[1].kind == BL_UP_ADVANCE && st.up[2].tick == 5 * BL_TICKS_PER_BAR, "bind ticks: %d upcoming", st.nup);
+          st.up[0].kind == BL_UP_DENSITY && st.up[1].kind == BL_UP_ADVANCE &&
+          st.up[2].kind == BL_UP_DENSITY && st.up[2].tick == 5 * BL_TICKS_PER_BAR,
+          "bind ticks: %d upcoming", st.nup);
     CHECK(bl_live_offset(&e, 2) == 0 && bl_live_offset(&e, 3) == 3, "the transposition binds at bar 3: %d %d",
           bl_live_offset(&e, 2), bl_live_offset(&e, 3));
     CHECK(st.bar == 2, "the status's bar: %d", (int)st.bar);
+
+    key.key.root = 2;
+    bl_scale_preset(BL_MODE_DORIAN, &key.key.scale);
+    CHECK(!bl_live_enqueue(&e, &key, e.rendered), "request D Dorian per voice");
+    for (int i = 0; i < p.nvoices; i++) {
+        bl_vconfig_t expected = original[i];
+        expected.key = key.key;
+        CHECK(!bl_config_diff(&e.st[i].voice.config, &original[i]) &&
+              !bl_config_diff(&e.st[i].voice.pending, &expected) &&
+              e.st[i].voice.config_dirty == ((1u << BL_CFG_ROOT) | (1u << BL_CFG_SCALE)),
+              "voice %d stages ROOT/SCALE together without changing its active key", i);
+    }
+    /* Demo loops are 3840/3600/3840 ticks. From head 7780 their next local
+     * boundaries are 11520/10800/11520, independent of global KEY events. */
+    const bl_tick_t ends[] = {10799, 10800, 11519, 11520};
+    for (unsigned k = 0; k < sizeof ends / sizeof ends[0]; k++) {
+        bl_live_render(&e, e.rendered, ends[k], out, 2048);
+        for (int i = 0; i < p.nvoices; i++) {
+            bl_vconfig_t expected = original[i], target = original[i];
+            target.key = key.key;
+            int applied = ends[k] >= (i == 1 ? 10800 : 11520);
+            if (applied) expected = target;
+            CHECK(!bl_config_diff(&e.st[i].voice.config, &expected) &&
+                  !bl_config_diff(&e.st[i].voice.pending, &target) &&
+                  e.st[i].voice.config_dirty == (applied ? 0 : ((1u << BL_CFG_ROOT) | (1u << BL_CFG_SCALE))),
+                  "voice %d applies ROOT/SCALE only at its local boundary, head %lld", i, (long long)ends[k]);
+        }
+    }
 }
 
 /* the status's scene (the panel's): none until a morph heads for every target of one; Ambient drift's closed from
@@ -2054,17 +2094,25 @@ static void test_initial_state(void)
  * a velocity, a ratchet out of range */
 static void test_state_caps(void)
 {
+    /* Raw payload, no project/slot wrapper. One legacy voice: 30 bytes through
+     * seed + 2*29 config + 2 dirty + 4 delay + 1 channel + 5 phase/flags
+     * + 9 note + 2 empty schedule = 111 bytes. The note begins at byte 100. */
+    enum {
+        RAW_BASS_SIZE = 111, RAW_GENERATOR = 7, RAW_PATTERN_LENGTH = 10,
+        RAW_ACCIDENTAL = 106, RAW_VELOCITY = 107, RAW_RATCHET_FLAGS = 108
+    };
     static bl_state_t s, back;
     static const struct {
         int at;
         uint8_t value;
         const char *what;
     } BAD[] = {
-        {7, BL_NGENS, "a generator past the last"}, {10, 239, "a loop of 239 ticks"},
-        {36, 3, "accidental 3"}, {36, 0xFD, "accidental -3"}, {37, 0, "velocity 0"}, {37, 128, "velocity 128"},
-        {38, 0, "ratchet 0"}, {38, 8, "ratchet 4"},
+        {RAW_GENERATOR, BL_NGENS, "a generator past the last"}, {RAW_PATTERN_LENGTH, 239, "a loop of 239 ticks"},
+        {RAW_ACCIDENTAL, 3, "accidental 3"}, {RAW_ACCIDENTAL, 0xFD, "accidental -3"},
+        {RAW_VELOCITY, 0, "velocity 0"}, {RAW_VELOCITY, 128, "velocity 128"},
+        {RAW_RATCHET_FLAGS, 0, "ratchet 0"}, {RAW_RATCHET_FLAGS, 8, "ratchet 4"},
     };
-    uint8_t buf[64], bad[64];
+    uint8_t buf[128], bad[128];
     memset(&s, 0, sizeof s);
     s.n = 1;
     s.generation[0] = 1;
@@ -2081,12 +2129,29 @@ static void test_state_caps(void)
     v->pat.remaining = 4;
     v->pat.seed = 7;
     v->pat.note[0] = (bl_pnote_t){0, 240, {0, 0, 0}, 100, 0, 1};
+    v->config.key.root = 9;
+    bl_scale_preset(BL_MODE_NATURAL_MINOR, &v->config.key.scale);
+    v->config.gen = (bl_gencfg_t){BL_GEN_PULSING_BASS, 3, 0, BL_DIR_UP, BL_GROOVE_STRAIGHT};
+    v->config.length = BL_TICKS_PER_BAR;
+    v->config.reg_low = v->reg_low;
+    v->config.reg_high = v->reg_high;
+    v->pending = v->config;
+    v->delay = bl_delay_config((bl_delay_t){0});
     int n = state_pack(&s, buf, (int)sizeof buf);
-    CHECK(n == 41 && !state_unpack(buf, n, &back) && state_same(&s, &back), "the bass there and back: %d bytes", n);
+    CHECK(n == RAW_BASS_SIZE, "one-note bass raw payload: %d bytes, expected %d", n, RAW_BASS_SIZE);
+    int valid = n > 0 && !state_unpack(buf, n, &back) && state_same(&s, &back) &&
+        !bl_config_diff(&v->config, &back.v[0].config) && !bl_config_diff(&v->pending, &back.v[0].pending) &&
+        back.v[0].config_dirty == 0 && !back.v[0].delay.enabled && back.v[0].delay.time == 3 &&
+        back.v[0].delay.feedback == 75 && back.v[0].delay.decay == 70;
+    CHECK(n == RAW_BASS_SIZE && valid, "the bass there and back: %d bytes", n);
+    if (n != RAW_BASS_SIZE || !valid) return; /* corruption needs a valid complete baseline */
     for (unsigned i = 0; i < sizeof BAD / sizeof BAD[0]; i++) {
-        memcpy(bad, buf, sizeof bad);
+        memcpy(bad, buf, (size_t)n);
         bad[BAD[i].at] = BAD[i].value;
-        if (BAD[i].at == 10) bad[11] = 0;               /* (the length's second byte: 3840 is 0x0F00) */
+        int width = BAD[i].at == RAW_PATTERN_LENGTH ? 2 : 1;
+        if (width == 2) bad[RAW_PATTERN_LENGTH + 1] = 0; /* 3840 (0x0F00) becomes 239 */
+        CHECK(memcmp(bad + BAD[i].at, buf + BAD[i].at, (size_t)width) != 0,
+              "corruption changes intended raw field: %s", BAD[i].what);
         CHECK(state_unpack(bad, n, &back) == -1, "unpacked: %s", BAD[i].what);
     }
     back = s;
