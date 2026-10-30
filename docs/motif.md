@@ -98,15 +98,23 @@ states, the compact original foundation, active/blank status and the captured lo
 that local phase rather than restarting its loop. Subsequent onsets and evolution
 match uninterrupted continuation of the captured motif. Existing queued note-offs
 are handled by the transport. Undo uses the same capture/pack/recall path.
-ARP also resumes its saved local phase and direction cursor; other generators
-retain their original recall behavior.
+ARP also resumes its saved local phase and direction cursor. All generators now
+restore source-loop phase separately from local completion phase, as documented
+in [voice configuration](voice-configuration.md). Arranger reprise adopts this
+contract explicitly (Variant A): BED captures the theme and both phases; PAYOFF
+restores them. Generator state and musical development continue from the restored
+positions, without a forced pattern restart or global-bar realignment. MOTIF's
+protected anchors remain local to its source material.
 
-The snapshot slot wrapper is now format 4; no historical snapshot migration is
-provided in this greenfield project. Relative to pre-evolution records, MOTIF
+The current snapshot slot wrapper is format 8; no historical snapshot migration is
+provided in this greenfield project. The following byte counts describe historical
+evolution/direction additions, not the complete current configuration records.
+Relative to pre-evolution records, MOTIF
 adds 30 bytes per voice: two u64 RNG states, six u8 countdown/foundation fields,
 one u32 phase, one u8 active/blank flag and three u8 direction/cursor/groove fields.
 ARP adds eight bytes for direction/cursor/groove, local phase and active/blank flags.
-Other generator records are unchanged. Invalid metadata and slot overflows are
+Other generator records were unchanged at that stage; current all-generator phase
+and configuration storage is described in the voice-configuration note. Invalid metadata and slot overflows are
 rejected. See the direction note for TGM-003A's untested state extension.
 
 Before TGM-003A, evolution state occupied 24 bytes per voice; snapshot structures also had four

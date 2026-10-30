@@ -87,6 +87,12 @@ and unpacking. The existing recall queue and undo storage are reused.
 Source-loop phase is saved separately from the local completion-clock phase,
 preserving legacy cases where activation had left those two clocks offset.
 
+Arranger theme reprise explicitly uses the same phase-preserving contract (Variant A): BED captures the theme,
+including source phase and local completion phase, and PAYOFF restores both. Captured generator material/state,
+lifecycle countdowns and pending frames resume from those positions. Source phase determines note selection;
+completion phase determines subsequent local boundaries and development. Reprise does not force a pattern restart
+or realign a local loop to the global bar grid, even though the arranger's PAYOFF transition is bar-aligned.
+
 The app project stores optional explicit per-voice targets; absent overrides
 retain template defaults. On stopping/saving, recalled or undone targets are
 carried back into the project when its template still matches. Project files

@@ -4,7 +4,8 @@ The port must render what Berlinan's engine renders: the same template, seed and
 same windows, give the same `RenderedNote`s and `RenderedCC`s, field for field, in the same order. This directory holds
 the scripts (`*.script`) and what the unchanged Swift engine renders for them (`*.ref`), committed so that the tests
 never need Swift. `tests/host/equiv_test.c` plays each script on the C engine, prints the same lines and compares them
-with the `.ref` line by line.
+with the `.ref` line by line. The reviewed Tangram exceptions below supersede upstream behavior only in the
+explicitly named reference files.
 
 The `.ref` files come from `tools/reference/` (RefTool):
 
@@ -16,7 +17,22 @@ The `.ref` files come from `tools/reference/` (RefTool):
   clang-2100.1.1.101)`, target `arm64-apple-macosx26.0`), release build. The standard library's random algorithms are
   part of the reference, so `make_refs.sh` refuses any other Swift version.
 
-Regenerate everything with `tools/reference/make_refs.sh` (it fetches, builds, runs `RefTool selftest`, then rewrites
+**Arranger reprise exceptions (TGM-005-FIX08, Variant A).**
+`live_arranger_classic_240.ref` and `live_arranger_slow_240.ref` incorporate the approved phase-preserving
+contract: BED captures source and local completion phases; PAYOFF restores both, with generator development
+continuing from the restored positions and no forced restart/global-bar realignment. They are no longer unchanged
+Swift outputs. Corrections were reconstructed from the complete position-indexed diagnostics recorded at Tangram
+commit `496388935a59f6971a91620cd37374e2f4e81387` (`classic.log` and `slow.log` under
+`/tmp/tgm005-fix08-full.kwfWry/`), retaining unchanged records from the existing references.
+
+Classic preserves its first 4,143 records before PAYOFF at 622080: 123 changed records (119 notes, four hashes),
+206 extra notes and 203 missing notes yield 5,375 records. Slow preserves its first 6,084 records before PAYOFF
+at 917760: 330 changed records (323 notes, seven hashes), 368 extra notes and 366 missing notes yield 7,968 records.
+All CC records and the STOP records at 879360/1305600 are retained; scripts, actions and seeds are unchanged.
+Other `.ref` files are untouched. These edits have not been tested after application. Upstream regeneration
+will not reproduce the Tangram exceptions; preserve their reviewed corrections.
+
+Regenerate upstream references with `tools/reference/make_refs.sh` (it fetches, builds, runs `RefTool selftest`, then rewrites
 every `.ref`). One script by hand:
 
     swift run -c release --package-path tools/reference RefTool script tests/equiv/smoke.script

@@ -178,6 +178,12 @@ Cycle, Depth, Scene.
 AUTO and the form, the seven phases (the one now lit), the bar in the phase and the bars to the next change, the voices
 the arranger has in, the density and the form's settings. Shown only: Phase, Length, Bed drop, Reprise.
 
+Arranger reprise uses **Variant A: phase-preserving continuation**. BED captures the theme's source material,
+generator state, source-loop phase and separate local completion phase. When reprise is enabled, PAYOFF restores
+both captured phases; note selection and subsequent generator development continue from those restored positions.
+There is no forced pattern restart or realignment of local loops to a global bar boundary. PAYOFF itself still
+occurs on the arranger's scheduled boundary.
+
 ### FX: Delay
 
 ![The Delay page](img/screen-delay.png "Delay cheat sheet")
