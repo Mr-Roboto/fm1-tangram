@@ -1885,7 +1885,7 @@ static void test_live_bind(void)
     bl_template(BL_TPL_DEMO, &p);
     bl_live_init(&e, &p);
     bl_live_render(&e, 0, 2 * BL_TICKS_PER_BAR + 100, out, 2048);
-    bl_action_t density = {BL_A_DENSITY, 0, 0, ONE, {0, {0}}, NULL, 0},
+    bl_action_t density = {BL_A_DENSITY, 0, 0, F64(0x3FF0000000000000), {0, {0}}, NULL, 0},
                 key = {BL_A_KEY, 0, 0, {0}, p.key, NULL, 0}, up = {BL_A_TRANSPOSE, 0, 3, {0}, {0, {0}}, NULL, 0},
                 adv = {BL_A_ADVANCE, 0, 0, {0}, {0, {0}}, NULL, 0};
     CHECK(!bl_live_enqueue(&e, &density, 0) && !bl_live_enqueue(&e, &adv, 50) && !bl_live_enqueue(&e, &up, 0) &&

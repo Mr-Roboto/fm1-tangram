@@ -36,8 +36,10 @@ int plat_store_save(uint32_t object,const void *in,uint32_t n)
     if(object>=OBJ_NOBJ || n>PLAT_STORE_MAX)return -1;
     memcpy(store[object],in,n);store_n[object]=(int)n;return 0;
 }
+void plat_log(const char *line) { fprintf(stderr, "%s\n", line); }
 #include "../../app/runtime.c"
 static void host_sent(bl_tick_t at,uint32_t packet) { (void)at;(void)packet; }
+#include "../../app/device_settings.c"
 #include "../../app/project.c"
 static void host_saving(void) {}
 
@@ -51,7 +53,9 @@ int main(void)
     static bl_state_t saved;
     static bl_live_t reference;
     for(int rate=240;rate<=480;rate+=240) {
-        rt_init();proj_defaults();
+        rt_init();device_settings_init();
+        CHECK(!device_settings_apply(),"apply saved global clock settings before project playback");
+        proj_defaults();
         bl_project_t p;
         bl_template(BL_TPL_DEMO,&p);
         p.nvoices=2;p.transposition.n=0;p.has_arr=0;p.nscenes=0;
