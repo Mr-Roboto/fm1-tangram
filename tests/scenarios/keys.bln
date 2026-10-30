@@ -144,11 +144,22 @@ expect undo_depth 5
 tapkey 20
 expect warns 2
 expect undo_depth 5
-tap OCT-
+# HOME + OCT- is UNDO; keep the old tap's 80-ms duration/action time.
+press HOME
+wait 38
+press OCT-
+release OCT-
+release HOME
+wait 34
 expect warns 3
 expect undo_depth 5
 wait 2700
-tap OCT-
+press HOME
+wait 38
+press OCT-
+release OCT-
+release HOME
+wait 34
 expect undo_depth 4
 expect warns 3
 # ---- G5: tension, on Pluck 1 here (the Demo trio has no pad), lit while some is left

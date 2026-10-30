@@ -6,7 +6,7 @@ proj template full 0x5EED1234
 wait 200
 listen
 wait 100
-said Perform page: Tempo 96, Auto OFF, Form NONE, Ambient OFF. Full ensemble, A NATURAL MINOR, tempo 96, stopped
+said HOME QUICK page: K1 Track PLUCK 1, K2 Generator SEED PROCEDURE, K3 Root A, K4 Scale NATURAL MINOR. Full ensemble, A NATURAL MINOR, tempo 96, stopped
 # (what the page shows follows: the lanes, the horizon, the convergence)
 listen
 where
@@ -18,23 +18,31 @@ said Convergence 1680 bars, about 4200 seconds. Tension 2. Degree 1
 # a page settles before it is said
 tap ENV
 wait 300
-said Voice page, Pluck 1: Channel 1, Loop 16 STEPS, Register G2 to G4, Generator SEED PROCEDURE
+said ENV TIMING page, Pluck 1: K1 Rate N/A, K2 Gate N/A, K3 Loop length 16 STEPS, K4 Phase 0
+# MIDI channel access moved to ENV ROUTING; repeated short press cycles the section.
+tap ENV
+wait 300
+said ENV ROUTING page, Pluck 1: K1 MIDI channel 1, K2 Register G2 to G4, K3 Unused -, K4 Unused -
 # a knob: its name and value, once it settles
 spin K1 2
 wait 300
-said Channel 3
+said K1 MIDI channel 3
 spin K1 -2
 wait 300
-said Channel 1
-# a knob whose value the Mac does not change: shown, nothing said
-spin K2 1
+said K1 MIDI channel 1
+# ROUTING's unused K3 has no effect and produces no parameter announcement
+spin K3 1
 wait 300
 unsaid Loop
 tap FX
 wait 300
-said Delay page: Feedback 50%, Wet 50%, Ping-pong ON, Filtered ON
+said FX MIDI DELAY page: K1 Delay OFF, K2 Time 1/8D, K3 Feedback 75%, K4 Decay 70%
 where
-said Pluck 1 dotted 8th 469 ms, Pluck 2 dotted 8th 469 ms, Bass 8th 313 ms, Pad quarter 625 ms, Lead quarter 625 ms, Heartbeat dotted 8th 469 ms, at 96 BPM
+said Pluck 1 off, 1/8D, feedback 75%, decay 70%, Pluck 2 off, 1/8D, feedback 75%, decay 70%
+where
+said Bass off, 1/8D, feedback 75%, decay 70%, Pad off, 1/8D, feedback 75%, decay 70%, Lead off, 1/8D, feedback 75%, decay 70%
+where
+said Heartbeat off, 1/8D, feedback 75%, decay 70%, at 96 BPM
 tap GLO
 wait 300
 said Setup page: Root A, Sync INT, EXT input USB + TRS, Lights ON
@@ -47,22 +55,23 @@ spin K4 -1
 wait 300
 tap SEQ
 wait 300
-said Arranger page: Phase NONE, Length NONE, Bed drop OFF, Reprise OFF
+said SEQ MOTION page: K1 Groove N/A, K2 Loop length 16 STEPS, K3 Phase 0, K4 Direction N/A
 tap ARP
 wait 300
-said Pattern page, Pluck 1: Ratchet OFF, Steps 16, Generation 1, Plays left 4
-spin K1 2
+said ARP HARMONY page, Pluck 1: K1 Generator SEED PROCEDURE, K2 Root A, K3 Scale NATURAL MINOR, K4 Direction N/A
+# ARP K1 selects the generator; restore it after checking the announcement.
+spin K1 1
 wait 300
-said Ratchet 10%
-spin K1 -2
+said K1 Generator PULSING BASS
+spin K1 -1
 wait 300
-said Ratchet OFF
+said K1 Generator SEED PROCEDURE
 tap LFO
 wait 300
 said CC page, Pluck 1: Target FILTER CC 74, Cycle 16 BARS, Depth 30%, Scene NONE
 tap HOME
 wait 300
-said Perform page
+said HOME QUICK page
 # the panel's messages, said once: PLAY, a mute, a degree
 tap PLAY
 said PLAYING FULL ENSEMBLE
@@ -74,12 +83,12 @@ tapkey 2
 said BASS ON
 tapkey w4
 said DEGREE 1 NEXT BAR
-# HOME + SELECT: the tempo (the Perform page's first value: said as it settles; elsewhere at once, as a message)
+# HOME + SELECT: tempo is announced as a TEMPO message on every page
 press HOME
 spin SELECT 2
 release HOME
 wait 300
-said Tempo 98
+said TEMPO 98
 tap ENV
 wait 300
 press HOME
@@ -91,15 +100,19 @@ wait 300
 # a help card: its button, then its lines
 press FX
 wait 1100
-said FX button. DELAY TIMES. FOR YOUR EFFECTS AT THE TEMPO
+said FX button. MIDI NOTE DELAY. K1 ON/OFF, K2 TIME. K3 FEEDBACK, K4 DECAY
 release FX
 wait 100
 # WHERE while playing: the header says so (the tempo sounding: the new one from the next bar)
 wait 2600
 where
-said Perform page: Tempo 97, Auto OFF, Form NONE, Ambient OFF. Full ensemble, A NATURAL MINOR, tempo 97, playing
+said HOME QUICK page: K1 Track BASS, K2 Generator BASS MELODY, K3 Root A, K4 Scale NATURAL MINOR. Full ensemble, A NATURAL MINOR, tempo 97, playing
 tap PLAY
 said STOPPED
 wait 300
+# Real UI actions above must not have produced warnings. speakdump below deliberately
+# prints the complete vocabulary, including WARN SAVE FAILED; that is not a failed save.
+expect warns 0
 # everything the reader can be told, for the audit (fm1-reader tools/audit.mjs)
 speakdump
+expect warns 0

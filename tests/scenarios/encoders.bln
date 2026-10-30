@@ -8,9 +8,9 @@
 #   SELECT     the selected voice (the template's, in key order); HOME held: the tempo (HOME then no page)
 #   ALGORITHM  the scale mode (the key's root kept), round
 #   PRESETS    the template (a fresh seed), round; while playing it takes over at the next bar
-#   KNOB 1-4   the page's four values the Mac can change: Perform tempo, AUTO, form, ambient (form and ambient
-#              stopped only); Voice the selected voice's channel; Setup root, sync (stopped only), EXT input,
-#              lights; Pattern the ratchet (ratchet.bln). The rest are shown, their knobs do nothing.
+#   K1-K4     the approved per-page controls; ENV ROUTING edits channel/register, GLO edits root, global sync,
+#              clock input and lights. AUTO/form/ambient remain available through existing proj commands;
+#              their physical knob access, and RATCHET's, are deferred.
 proj template demo 0x5EED1234
 # ---- MASTER: the pot settled where it is at boot (2048, 50 %) sends nothing
 wait 300
@@ -131,26 +131,33 @@ turn ALGO 1
 expect mode 1
 expect root 9
 turn ALGO -2
-expect mode 9
-# ---- KNOB 1 on the Voice page: Pluck 2's channel (the selected voice)
+expect mode 22
+# ---- ENV's second page, ROUTING: K1 edits Pluck 2's channel (the selected voice)
+tap ENV
 expect chan1 1
 turn K1 2
 expect chan1 3
-# its loop length (KNOB 2): shown, not editable
-turn K2 3
+# ROUTING K3/K4 are unused; neither changes the channel
+turn K3 3
+turn K4 3
 expect chan1 3
-# ---- Perform: AUTO on, the form, ambient mode (stopped)
+# ---- HOME QUICK: K1 TRACK uses the same selection as SELECT
 tap HOME
+turn K1 1
+expect voice_sel 2
+turn SELECT -1
+expect voice_sel 1
+# ---- arranger settings retain programmatic access; these are no longer HOME knobs
 expect arr_on 0
-turn K2 1
+proj arranger on
 expect arr_on 1
 expect form 0
-turn K3 1
+proj form classic
 expect form 1
-turn K3 1
+proj form slow
 expect form 2
 expect arr_on 1
-turn K4 1
+proj ambient on
 expect arr_ambient 1
 # ---- Setup: root, sync, the EXT input, lights
 tap GLO
@@ -188,11 +195,17 @@ expect tpl 1
 expect active3 -1
 wait 2700
 expect active3 1
-# the form while playing: stopped only, said
+# The form remains stopped-only through the host command. Refusal does not emit
+# a UI warning; verify unchanged form and ambient settings instead of expecting an old knob warning.
 tap HOME
 expect warns 0
-turn K3 1
-expect warns 1
+# PRESET has restored Full ensemble's own defaults (no arranger).
+expect form 0
+expect arr_ambient 0
+proj form classic
+expect form 0
+expect arr_ambient 0
+expect warns 0
 # the density while playing: the project's at once
 master 3072
 wait 200

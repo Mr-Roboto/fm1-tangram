@@ -5,7 +5,8 @@
 #           unlocked, in voice order)
 #   SEL     on the Voice page: the selected voice locked / unlocked (elsewhere, alone: nothing)
 #   SAVE    the project to flash (stopped: at once)
-#   OCT-    undo (the last undo point recalled at the next bar); none: said
+#   OCT-    MUTATE (re-roll unlocked voices)
+#   HOME + OCT- undo (the last undo point recalled at the next bar); none: said
 #   OCT+    Dice (newSeed: an undo point, a fresh seed; playing, its state at the next bar)
 #   OCT- with OCT+: neither (fm1-base's update mode, after 5 s)
 #   HOME ENV ARP LFO SEQ FX GLO   the pages 0-6, the page's button lit
@@ -63,15 +64,29 @@ wait 6000
 expect gen0 2
 expect gen1 1
 expect gen2 2
-# ---- OCT-: the re-roll undone at the next bar (the patterns as they were at EDIT)
+# ---- HOME + OCT-: undo the re-roll at the next bar (the patterns as they were at EDIT)
+# Each chord occupies the old tap's 80 ms, with UNDO at its old 40-ms release time:
+# press/release commands take 2 ms; HOME 2 + wait 38 precedes the OCT- press.
 expect pat_hash_hi 0x2e692ff0
-tap OCT-
+press HOME
+wait 38
+press OCT-
+release OCT-
+release HOME
+wait 34
 expect undo_depth 0
+expect view 0
+expect help 0
 wait 2700
 expect pat_hash_hi 0xabd25f74
 # nothing left: said
 expect warns 0
-tap OCT-
+press HOME
+wait 38
+press OCT-
+release OCT-
+release HOME
+wait 34
 expect warns 1
 # ---- OCT+: Dice, an undo point, a fresh seed (from the clock and the pot: the simulator's are the test's)
 expect seed_lo 0x5EED1234
@@ -91,6 +106,11 @@ release OCT+
 release OCT-
 expect undo_depth 1
 expect seed_lo 0xe815d91a
+# ---- OCT- alone: MUTATE adds an undo point and keeps Pluck 2 locked
+tap OCT-
+expect undo_depth 2
+expect req1 0
+expect locked1 1
 # ---- PLAY again: stopped
 tap PLAY
 expect playing 0
