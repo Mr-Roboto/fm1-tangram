@@ -72,6 +72,8 @@
  *   dumpmidi [FILE]          start (FILE) or stop logging "tick status d1 d2" (hex bytes) for every message the
  *                            transport sends, in send order; a flush's messages carry the sounding tick
  *   cmpmidi FILE             the dump so far against FILE (a .midiref), line by line: midicmp, midilines
+ *                            TANGRAM_MIDI_DIAG=1 adds full-stream alignment on stderr only; normal comparison,
+ *                            assertions and status are unchanged. No MIDI events are filtered or normalized.
  *   dumpcount ST D1 D2 [TICK]   the dump's lines with these bytes (hex, * any; at TICK, if given): expect dumpcount
  *   dumpis K ST D1 D2        the dump's K-th line from its end (1 the last) has these bytes; else a FAIL line and
  *                            dumpbad one more
@@ -95,6 +97,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "../tests/host/script.c"        /* the script parser, equiv_test's */
 
 static int self_notes = -1;              /* the last selfrender's notes, -1 none (or it failed) */
@@ -315,6 +318,204 @@ static void host_sent(bl_tick_t tick, uint32_t pkt)
                 (unsigned)(pkt >> 16) & 0xFFu, (unsigned)(pkt >> 24));
 }
 
+/* Host-only diagnostics: exact line LCS using Hirschberg's linear-space split.
+ * Timestamps and wire bytes remain part of equality, and order is never sorted.
+ * Repeated identical events can have ambiguous alignments; ties choose the first
+ * split/match. Unmatched runs are reported completely, with order-paired changes
+ * distinguished from remaining extra/missing events, not asserted note identity.
+ * O(actual * reference) time, O(actual + reference) storage; explicit errors
+ * mark incomplete analysis instead of silently imposing a search/output cap. */
+typedef struct { const char *text; size_t len; } midi_diag_line_t;
+typedef struct {
+    char *data;
+    midi_diag_line_t *line;
+    size_t n;
+} midi_diag_stream_t;
+typedef struct {
+    midi_diag_stream_t actual, reference;
+    size_t ai, bi, matched, changed, extra, missing, hunks;
+    size_t tick_changes, status_changes, data1_changes, data2_changes, formatting, unparsed;
+} midi_diag_t;
+
+static int midi_diag_read(const char *path, midi_diag_stream_t *s)
+{
+    FILE *f = path && *path ? fopen(path, "rb") : NULL;
+    if (!f) return -1;
+    if (fseek(f, 0, SEEK_END)) { fclose(f); return -1; }
+    long bytes = ftell(f);
+    if (bytes < 0 || (uintmax_t)bytes >= (uintmax_t)SIZE_MAX || fseek(f, 0, SEEK_SET)) {
+        fclose(f); return -1;
+    }
+    size_t n = (size_t)bytes;
+    s->data = malloc(n + 1);
+    if (!s->data) { fclose(f); return -1; }
+    size_t got = fread(s->data, 1, n, f);
+    int bad = ferror(f);
+    fclose(f);
+    if (got != n || bad) return -1;
+    s->data[n] = 0;
+    for (size_t i = 0; i < n; i++) s->n += s->data[i] == '\n';
+    if (n && s->data[n - 1] != '\n') s->n++;
+    if (s->n > SIZE_MAX / sizeof *s->line) return -1;
+    s->line = s->n ? malloc(s->n * sizeof *s->line) : NULL;
+    if (s->n && !s->line) return -1;
+    size_t start = 0, k = 0;
+    for (size_t i = 0; i < n; i++) if (s->data[i] == '\n') {
+        s->line[k++] = (midi_diag_line_t){s->data + start, i + 1 - start};
+        start = i + 1;
+    }
+    if (start < n) s->line[k] = (midi_diag_line_t){s->data + start, n - start};
+    return 0;
+}
+
+static int midi_diag_equal(const midi_diag_t *d, size_t a, size_t b)
+{
+    const midi_diag_line_t *x = &d->actual.line[a], *y = &d->reference.line[b];
+    return x->len == y->len && !memcmp(x->text, y->text, x->len);
+}
+
+static void midi_diag_event(const char *label, const midi_diag_stream_t *s, size_t i)
+{
+    fprintf(stderr, "  %s[%zu] ", label, i + 1);
+    const midi_diag_line_t *l = &s->line[i];
+    for (size_t j = 0; j < l->len; j++) {
+        unsigned char c = (unsigned char)l->text[j];
+        if (c >= 32 && c < 127 && c != '\\') fputc(c, stderr);
+        else fprintf(stderr, "\\x%02X", (unsigned)c);
+    }
+    fputc('\n', stderr); /* escaped terminators make missing final newlines visible */
+}
+
+static int midi_diag_fields(const midi_diag_line_t *l, long long *tick, unsigned bytes[3])
+{
+    char text[96], time[24], wire[3][16], extra, *end;
+    if (l->len >= sizeof text || memchr(l->text, 0, l->len)) return 0;
+    memcpy(text, l->text, l->len);
+    text[l->len] = 0;
+    if (sscanf(text, "%23s %15s %15s %15s %c", time, wire[0], wire[1], wire[2], &extra) != 4) return 0;
+    errno = 0;
+    *tick = strtoll(time, &end, 10);
+    if (errno || *end) return 0;
+    for (int i = 0; i < 3; i++) {
+        errno = 0;
+        unsigned long value = strtoul(wire[i], &end, 16);
+        if (errno || *end || value > 255) return 0;
+        bytes[i] = (unsigned)value;
+    }
+    return 1;
+}
+
+static void midi_diag_gap(midi_diag_t *d, size_t a, size_t b)
+{
+    size_t na = a - d->ai, nb = b - d->bi, pairs = na < nb ? na : nb;
+    if (!na && !nb) return;
+    d->hunks++;
+    fprintf(stderr, "MIDI-DIAG hunk=%zu actual_start=%zu count=%zu reference_start=%zu count=%zu\n",
+            d->hunks, d->ai + 1, na, d->bi + 1, nb);
+    if (d->ai && d->bi) {
+        midi_diag_event("previous actual anchor", &d->actual, d->ai - 1);
+        midi_diag_event("previous reference anchor", &d->reference, d->bi - 1);
+    }
+    for (size_t j = 0; j < pairs; j++) {
+        long long ta, tb;
+        unsigned va[3], vb[3];
+        fprintf(stderr, "  changed (paired in stream order)\n");
+        midi_diag_event("actual", &d->actual, d->ai + j);
+        midi_diag_event("reference", &d->reference, d->bi + j);
+        if (midi_diag_fields(&d->actual.line[d->ai + j], &ta, va) &&
+            midi_diag_fields(&d->reference.line[d->bi + j], &tb, vb)) {
+            d->tick_changes += ta != tb;
+            d->status_changes += va[0] != vb[0];
+            d->data1_changes += va[1] != vb[1];
+            d->data2_changes += va[2] != vb[2];
+            d->formatting += ta == tb && !memcmp(va, vb, sizeof va);
+        } else d->unparsed++;
+    }
+    for (size_t j = pairs; j < na; j++) midi_diag_event("extra actual", &d->actual, d->ai + j);
+    for (size_t j = pairs; j < nb; j++) midi_diag_event("missing reference", &d->reference, d->bi + j);
+    if (a < d->actual.n && b < d->reference.n) {
+        midi_diag_event("next actual anchor", &d->actual, a);
+        midi_diag_event("next reference anchor", &d->reference, b);
+    }
+    d->changed += pairs;
+    d->extra += na - pairs;
+    d->missing += nb - pairs;
+}
+
+/* Prefix LCS lengths; reverse computes suffix lengths without reversing events. */
+static size_t *midi_diag_row(const midi_diag_t *d, size_t a0, size_t a1, size_t b0, size_t b1, int reverse)
+{
+    size_t n = b1 - b0;
+    if (n >= SIZE_MAX / sizeof(size_t)) return NULL;
+    size_t *row = calloc(n + 1, sizeof *row);
+    if (!row) return NULL;
+    for (size_t i = 0; i < a1 - a0; i++) {
+        size_t diagonal = 0;
+        for (size_t j = 1; j <= n; j++) {
+            size_t old = row[j];
+            if (midi_diag_equal(d, reverse ? a1 - i - 1 : a0 + i, reverse ? b1 - j : b0 + j - 1))
+                row[j] = diagonal + 1;
+            else if (row[j - 1] > row[j]) row[j] = row[j - 1];
+            diagonal = old;
+        }
+    }
+    return row;
+}
+
+static int midi_diag_align(midi_diag_t *d, size_t a0, size_t a1, size_t b0, size_t b1)
+{
+    if (a0 == a1 || b0 == b1) return 0;
+    if (a1 - a0 == 1) {
+        for (size_t b = b0; b < b1; b++) if (midi_diag_equal(d, a0, b)) {
+            midi_diag_gap(d, a0, b);
+            d->ai = a0 + 1;
+            d->bi = b + 1;
+            d->matched++;
+            break;
+        }
+        return 0;
+    }
+    size_t mid = a0 + (a1 - a0) / 2, split = 0, best = 0, n = b1 - b0;
+    size_t *left = midi_diag_row(d, a0, mid, b0, b1, 0);
+    size_t *right = midi_diag_row(d, mid, a1, b0, b1, 1);
+    if (!left || !right) { free(left); free(right); return -1; }
+    for (size_t j = 0; j <= n; j++) if (left[j] + right[n - j] > best) {
+        best = left[j] + right[n - j];
+        split = j;
+    }
+    free(left);
+    free(right);
+    if (midi_diag_align(d, a0, mid, b0, b0 + split)) return -1;
+    return midi_diag_align(d, mid, a1, b0 + split, b1);
+}
+
+static void midi_diag_compare(const char *reference)
+{
+    int saved_errno = errno;
+    midi_diag_t d = {0};
+    fprintf(stderr, "MIDI-DIAG actual=%s reference=%s; exact ordered alignment, all differences reported;"
+            " changed pairs are alignment descriptions, not inferred note identities\n", dump_path, reference);
+    if ((dump && ferror(dump)) || midi_diag_read(dump_path, &d.actual) ||
+        midi_diag_read(reference, &d.reference)) {
+        fprintf(stderr, "MIDI-DIAG INCOMPLETE: cannot read/allocate complete streams; no completeness claim\n");
+    } else if (midi_diag_align(&d, 0, d.actual.n, 0, d.reference.n)) {
+        fprintf(stderr, "MIDI-DIAG INCOMPLETE: alignment allocation failed; preceding hunks are partial only\n");
+    } else {
+        midi_diag_gap(&d, d.actual.n, d.reference.n);
+        fprintf(stderr, "MIDI-DIAG COMPLETE actual=%zu reference=%zu exact_matches=%zu changed_pairs=%zu"
+                " extra_actual=%zu missing_reference=%zu hunks=%zu\n", d.actual.n, d.reference.n,
+                d.matched, d.changed, d.extra, d.missing, d.hunks);
+        fprintf(stderr, "MIDI-DIAG changed-pair fields (overlapping counts): tick=%zu status/channel=%zu"
+                " data1=%zu data2=%zu formatting_only=%zu unparsed=%zu;"
+                " accounted_actual=%zu accounted_reference=%zu\n", d.tick_changes, d.status_changes,
+                d.data1_changes, d.data2_changes, d.formatting, d.unparsed,
+                d.matched + d.changed + d.extra, d.matched + d.changed + d.missing);
+    }
+    free(d.actual.line); free(d.actual.data);
+    free(d.reference.line); free(d.reference.data);
+    errno = saved_errno;
+}
+
 static void cmpmidi(const char *path)
 {
     FILE *a, *b;
@@ -351,6 +552,8 @@ static void cmpmidi(const char *path)
         fclose(a);
     if (b)
         fclose(b);
+    const char *diag = getenv("TANGRAM_MIDI_DIAG");
+    if (diag && !strcmp(diag, "1")) midi_diag_compare(path);
 }
 
 /* the dump's lines with st d1 d2 (each -1: any; at tick, unless it is -1): how many; the k-th from the end (k > 0) in
