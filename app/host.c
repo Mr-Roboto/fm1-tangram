@@ -82,12 +82,13 @@
  *   rt burst N               (playing) N note-ons on channel 16 (notes 0..N-1, velocity 1) due now and their offs a
  *                            tick later, into the queue: more than a ms may send
  *   proj template TEMPLATE [SEED] | key ROOT MODE | tempo BPM | density K | arranger on|off |
- *      form classic|slow|ambient | ambient on|off | channel VOICE CH | sync int|ext | dice
+ *      form classic|slow|ambient | ambient on|off | channel VOICE CH | sync int|ext | ratchet PERCENT | dice
  *                            the project's changes as the Mac's AppServices makes them (project.c: MODE a ModeID raw
  *                            value, K 0-100; SEED a test's in place of the fresh one), until the panel has them all.
  *                            `proj sync` is a compatibility alias for global sync, never a project field.
- *   proj format1             the project written to the store as a format-1 record (an older firmware's: the
- *                            ratchet's byte its padding, here 35, which the load must not read)
+ *                            `proj ratchet` accepts decimal 0..50 in steps of 5, no extra arguments;
+ *                            stopped: applied now; playing: a difference waits for the next Play/template takeover.
+ *   proj format1             write an unsupported-format record for rejection/default checks, not migration
  *   slot store K | slot recall K | undo push | undo pop | save
  *                            the slots (K 0-5), the undo stack, SAVE */
 
@@ -486,6 +487,18 @@ static int proj_cmd(const char *a, const char *b, const char *c)
         proj_set_channel(voice_of(b), atoi(c));
     else if (!strcmp(a, "sync") && (!strcmp(b, "int") || !strcmp(b, "ext")))
         r = proj_set_sync(b[0] == 'e');
+    else if (!strcmp(a, "ratchet")) {
+        /* Strict decimal input, bounded before any possible integer overflow.
+         * Reject before calling the setter so malformed commands cannot edit state. */
+        int pct = 0;
+        if (!b[0] || c[0]) return -1;
+        for (const char *p = b; *p; p++) {
+            if (*p < '0' || *p > '9') return -1;
+            pct = pct * 10 + (*p - '0');
+            if (pct > 50) return -1;
+        }
+        r = proj_set_ratchet(pct); /* -1 invalid, 0 accepted, 1 accepted with deferred ratchet difference */
+    }
     else if (!strcmp(a, "dice"))
         r = proj_dice();
     else if (!strcmp(a, "format1")) {
@@ -850,7 +863,14 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
             printf("  rt %s %s %s: refused (global clock edit unavailable; sync requires stopped transport)\n", a, b, c);
     } else if (!strcmp(cmd, "proj")) {
         int r = proj_cmd(a, b, c);
-        if (r == -2)
+        if (!strcmp(a, "ratchet")) {
+            if (r < 0)
+                printf("  proj ratchet: refused (expected one decimal percent, 0..50 in steps of 5)\n");
+            else if (r == 1)
+                printf("  proj ratchet %u: accepted, deferred until next Play or template takeover\n", proj.ratchet_pct);
+            else
+                printf("  proj ratchet %u: accepted%s\n", proj.ratchet_pct, rt_playing() ? "" : ", applied while stopped");
+        } else if (r == -2)
             printf("FAIL proj %s %s %s: no such change\n", a, b, c);
         else if (r)
             printf("  proj %s %s %s: refused (the Mac's stopped only, or the engine's queue full)\n", a, b, c);
