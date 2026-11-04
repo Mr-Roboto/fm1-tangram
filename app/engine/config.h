@@ -12,11 +12,12 @@ typedef struct {
     uint32_t length;
     uint8_t reg_low, reg_high;
     uint8_t phase;               /* pitch traversal positions, independent of duration */
+    uint8_t density_cut;         /* 0 = full, 100 = silent; zero-initialized frames stay compatible */
 } bl_vconfig_t;
 
 enum {
     BL_CFG_GENERATOR, BL_CFG_ROOT, BL_CFG_SCALE, BL_CFG_REG_LOW, BL_CFG_REG_HIGH,
-    BL_CFG_RATE, BL_CFG_GATE, BL_CFG_LOOP, BL_CFG_DIRECTION, BL_CFG_GROOVE, BL_CFG_PHASE, BL_NCFG
+    BL_CFG_RATE, BL_CFG_GATE, BL_CFG_LOOP, BL_CFG_DIRECTION, BL_CFG_GROOVE, BL_CFG_PHASE, BL_CFG_DENSITY, BL_NCFG
 };
 #define BL_CFG_ALL ((1u << BL_NCFG) - 1u)
 
@@ -48,6 +49,7 @@ static inline uint16_t bl_config_diff(const bl_vconfig_t *a, const bl_vconfig_t 
     if (a->gen.direction != b->gen.direction) mask |= 1u << BL_CFG_DIRECTION;
     if (a->gen.groove != b->gen.groove) mask |= 1u << BL_CFG_GROOVE;
     if (a->phase != b->phase) mask |= 1u << BL_CFG_PHASE;
+    if (a->density_cut != b->density_cut) mask |= 1u << BL_CFG_DENSITY;
     return mask;
 }
 
@@ -57,7 +59,7 @@ static inline int bl_config_valid(const bl_vconfig_t *c)
         c->key.scale.count < 4 || c->key.scale.count > 12 || c->key.scale.off[0] ||
         c->gen.kind >= BL_NGENS || c->gen.direction >= BL_NDIRS || c->gen.groove >= BL_NGROOVES ||
         c->reg_low > c->reg_high || c->reg_high > 127 || c->length < BL_PPQN / 4 || c->length > INT32_MAX ||
-        c->phase >= bl_config_phase_count(c))
+        c->phase >= bl_config_phase_count(c) || c->density_cut > 100)
         return 0;
     for (int i = 1; i < c->key.scale.count; i++)
         if (c->key.scale.off[i] <= c->key.scale.off[i - 1] || c->key.scale.off[i] > 11) return 0;
@@ -74,6 +76,10 @@ static inline int bl_config_edit(bl_vconfig_t *c, int field, int32_t value)
     bl_vconfig_t next = *c;
     int arp = next.gen.kind == BL_GEN_ARP || next.gen.kind == BL_GEN_MOTIF;
     switch (field) {
+    case BL_CFG_DENSITY:
+        if (value < 0 || value > 100) return -1;
+        next.density_cut = (uint8_t)(100 - value);
+        break;
     case BL_CFG_GENERATOR:
         if (value < 0 || value >= BL_NGENS) return -1;
         if (next.gen.kind != value) {

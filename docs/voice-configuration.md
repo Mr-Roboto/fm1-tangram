@@ -27,7 +27,7 @@ themselves; the caller can use the existing `undo_push` before a batch.
 Runtime/app edits are refused while a project replacement is pending.
 
 Field selectors are `BL_CFG_GENERATOR`, `ROOT`, `SCALE`, `REG_LOW`, `REG_HIGH`,
-`RATE`, `GATE`, `LOOP`, `DIRECTION`, `GROOVE`, and `PHASE` (all with the `BL_CFG_` prefix).
+`RATE`, `GATE`, `LOOP`, `DIRECTION`, `GROOVE`, `PHASE`, and `DENSITY` (all with the `BL_CFG_` prefix).
 Generator IDs remain unchanged; roots are 0..11 and scale IDs 0..22. Register
 limits are MIDI 0..127 with low <= high. RATE is 240 or 480 ticks and GATE is
 positive and shorter than RATE. RATE/GATE/DIRECTION/GROOVE field setters require
@@ -42,6 +42,12 @@ unedited multi-bar defaults remain valid; the full-frame interface retains tick
 duration for those generators. CORE2 adds independent pitch PHASE, described
 below. Existing `phase_steps` is used only when deriving template defaults.
 Direction and groove use the existing enums and algorithms.
+
+DENSITY accepts 0..100 percent, stored as `density_cut = 100 - percent` so
+zero-initialized and older configurations retain full density. It applies at
+the same local boundary without rebuilding material. ENV ROUTING K3 exposes
+this value; MASTER and Composer activity multiply it as described in
+[composer.md](composer.md).
 
 ## Boundary behavior
 
@@ -99,10 +105,11 @@ carried back into the project when its template still matches. Project files
 store the requested next-Play configuration, while runtime snapshots preserve
 the active/pending distinction and remaining local position.
 
-Project format is **6**, explicitly serialized without clock source or input
-routing; format **5** is read while ignoring its obsolete clock fields.
-Snapshot slot format remains **8**. See [project-format.md](project-format.md).
-Packed active/pending frames cost 29 bytes each plus a two-byte pending mask per
+Project format is **7**, explicitly serialized without clock source or input
+routing; formats **5/6** are read, ignoring format 5's obsolete clock fields.
+Snapshot slot format is **9**, with a reader for format **8**. See
+[project-format.md](project-format.md).
+Packed active/pending frames cost 30 bytes each plus a two-byte pending mask per
 voice; legacy-generator records also gain five bytes of phase/flags. RAM uses
 two fixed configuration frames per voice, with no duplicated 64-note patterns,
 heap allocations, extra schedulers or unbounded queues. Existing slot/undo

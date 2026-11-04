@@ -14,6 +14,13 @@ int rt_idle(void);                       /* stopped, and what the stop sends gon
 bl_tick_t rt_tick(void);                 /* the tick sounding now (0 before tick 0) */
 bl_tick_t rt_head(void);                 /* the render head */
 bl_tick_t rt_play_tick(void);            /* the tick sounding now, in the running engine's ticks (the panel's playheads) */
+/* Latest dispatched original source/event tick + 1; zero during silence.
+ * Release/retrigger clears it; echoes never select a source. */
+uint32_t rt_source_onset(int vid);
+/* Dispatch-only event latch for visual persistence; echoes and offs do not
+ * advance the serial. The last position persists until a new original or Stop;
+ * position is zero when stopped or the latest original has no source metadata. */
+uint32_t rt_source_event(int vid, uint32_t *onset);
 int rt_loading(void);                    /* playing: a loaded project waits for the head's next bar line */
 int rt_channel(int vid);                 /* the transport's channel of voice vid (a BL_VID_), 0-15; -1 none */
 const bl_live_t *rt_engine(void);
@@ -26,6 +33,8 @@ int rt_get_voice_config(int vid, bl_vconfig_t *active, bl_vconfig_t *target);
 int rt_has_voice_state(void);            /* materialized engine, rather than a freshly loaded project preview */
 int rt_set_voice_config(int vid, const bl_vconfig_t *target);
 int rt_set_voice_config_field(int vid, int field, int32_t value);
+int rt_set_composer(const bl_compcfg_t *cfg);
+int rt_select_composer_stage(int section);
 void rt_set_tempo(int32_t bpm);          /* playing: from the head's next bar line */
 void rt_load(const bl_project_t *p);     /* playing: Transport.loadProject; stopped: the next Play's project */
 void rt_set_mute(int vid, int on);

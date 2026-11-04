@@ -35,10 +35,11 @@
 #include "state.h"
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
-#define SLOT_FORMAT 8u                  /* snapshot-owned MIDI channel alongside delay settings */
+#define SLOT_FORMAT 9u                  /* per-voice active/pending density, reads format 8 */
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
 #define HUNDRED F64(0x4059000000000000)  /* 100.0 */
+static uint8_t composer_start;          /* next-Play choice; no project-format change */
 #define UNDO_BYTES 32768                 /* 20 undo points of 1,636 bytes (the templates' states: 800 or less); larger
                                           * ones leave room for fewer */
 
@@ -122,6 +123,8 @@ static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: 
     arr_set(proj_eng.has_arr, &proj_eng.arr);   /* its config, whatever it is */
     proj.density_pct = 100;
     proj.has_density = 0;
+    proj.composer = (bl_compcfg_t){0, 0, 1, 1};
+    composer_start = 0;
     memset(proj.channel, 0, sizeof proj.channel);
     memset(proj.voice_configured, 0, sizeof proj.voice_configured);
     memset(proj.voice_config, 0, sizeof proj.voice_config);
@@ -153,7 +156,7 @@ static int proj_valid(const proj_t *p)
     if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES
         || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
         return 0;
-    if (p->arr_has > 1 || p->arr_on > 1 || p->arr_ambient > 1 || p->arr_reprise > 1)
+    if (!bl_comp_valid(&p->composer) || p->arr_has > 1 || p->arr_on > 1 || p->arr_ambient > 1 || p->arr_reprise > 1)
         return 0;
     if (p->arr_has ? p->arr_min < 1 || p->arr_min > p->arr_max || p->arr_max > 1024
                    : p->arr_on || p->arr_ambient || p->arr_reprise || p->arr_min || p->arr_max)
@@ -165,7 +168,7 @@ static int proj_valid(const proj_t *p)
     return 1;
 }
 
-#include "project_record.c"              /* explicit format 6; historical native-layout format 5 reader */
+#include "project_record.c"              /* explicit format 7, readers for formats 5 and 6 */
 
 static void slot_load(int k)             /* the slot's record, if it is one (its state unpacks) */
 {
@@ -176,8 +179,8 @@ static void slot_load(int k)             /* the slot's record, if it is one (its
     if (n <= SLOT_HEAD)
         return;
     memcpy(head, slots[k].rec, sizeof head);
-    if (head[0] != SLOT_MAGIC || head[1] != SLOT_FORMAT
-        || state_unpack(slots[k].rec + SLOT_HEAD, n - SLOT_HEAD, &proj_st))
+    if (head[0] != SLOT_MAGIC || (head[1] != SLOT_FORMAT && head[1] != 8)
+        || state_unpack_format(slots[k].rec + SLOT_HEAD, n - SLOT_HEAD, &proj_st, (int)head[1]))
         return;
     slots[k].used = 1;
     slots[k].n = (uint16_t)n;
@@ -185,6 +188,7 @@ static void slot_load(int k)             /* the slot's record, if it is one (its
 
 int proj_load(void)
 {
+    composer_start = 0;
     static proj_t rec;
     int n, k;
     undo_used = undo_n = 0;
@@ -263,6 +267,8 @@ void proj_to_engine(bl_project_t *out)
     out->bpm = proj.bpm;
     out->has_arr = proj.arr_has;
     arr_get(&out->arr);
+    out->composer = proj.composer;
+    out->composer_start = composer_start;
     if (proj.has_density)
         out->density = pct_of(proj.density_pct);
     out->has_ratchet = 1;
@@ -412,6 +418,27 @@ int proj_set_voice_config_field(int voice, int field, int32_t value)
     bl_vconfig_t target;
     if (proj_get_voice_config(voice, &target) || bl_config_edit(&target, field, value)) return -1;
     return proj_set_voice_config(voice, &target);
+}
+
+int proj_composer_start(void) { return composer_start; }
+
+int proj_select_composer_stage(int section)
+{
+    if (section < 0 || section >= 7 || rt_loading()) return -1;
+    if (rt_select_composer_stage(section)) return -1;
+    if (rt_playing()) return 0;
+    composer_start = (uint8_t)section;
+    return 0;
+}
+
+int proj_set_composer(const bl_compcfg_t *cfg)
+{
+    if (!cfg || !bl_comp_valid(cfg) || rt_loading()) return -1;
+    if (rt_playing() && rt_set_composer(cfg)) return -1;
+    proj.composer = *cfg;
+    proj_stale = 1;
+    if (!rt_playing()) proj_apply();
+    return 0;
 }
 
 int proj_set_key(int root, int mode)
@@ -641,7 +668,9 @@ int slot_recall(int k)
     if (!slot_used(k))
         return -1;
     pushed = !undo_push();
-    if (state_unpack(slots[k].rec + SLOT_HEAD, slots[k].n - SLOT_HEAD, &proj_st) || proj_recall(&proj_st)) {
+    uint32_t head[2];
+    memcpy(head, slots[k].rec, sizeof head);
+    if (state_unpack_format(slots[k].rec + SLOT_HEAD, slots[k].n - SLOT_HEAD, &proj_st, (int)head[1]) || proj_recall(&proj_st)) {
         if (pushed) {
             undo_used = (uint16_t)undo_last();
             undo_n--;

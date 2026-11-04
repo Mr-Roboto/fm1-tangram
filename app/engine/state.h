@@ -9,8 +9,8 @@
  *   generator remaining n               u8, i8 (-1: established), u8
  *   length source-phase generation      u32 each (pat.start_offset holds source phase in a snapshot)
  *   seed                                u64
- *   active config, pending config       29 bytes each: root/mode/count/off[12], generator,
- *                                       a/b u16, direction/groove u8, length u32, register low/high/PHASE u8
+ *   active config, pending config       30 bytes each (slot 9): root/mode/count/off[12], generator,
+ *                                       a/b u16, direction/groove u8, length u32, register low/high/PHASE/density-cut u8
  *                                       pat.pitch_phase is reconstructed from active PHASE
  *   pending field mask                  u16
  *   delay enabled time feedback decay   u8 each (all generators)
@@ -35,3 +35,5 @@
 int state_pack(const bl_state_t *s, uint8_t *buf, int max);
 /* n bytes back into a state: 0, or -1 when they are not one (short, too long, a value no engine state has) */
 int state_unpack(const uint8_t *buf, int n, bl_state_t *out);
+/* Slot format 8 reads with full per-voice density; format 9 owns both density frames. */
+int state_unpack_format(const uint8_t *buf, int n, bl_state_t *out, int format);

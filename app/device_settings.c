@@ -3,27 +3,31 @@
 #include "app.h"
 #include "device_settings.h"
 
-/* Exactly seven serialized bytes: little-endian magic "TGDS", u8 format,
- * u8 sync, u8 port mask. No serialized C padding or future-use fields. */
+/* Format 2: eight bytes, little-endian magic "TGDS", u8 format, sync,
+ * port mask, theme. Format 1's seven bytes import with CLASSIC. Same object,
+ * same sector pair, no padding and no boot-time migration write. */
 #define DEVICE_SETTINGS_MAGIC UINT32_C(0x53444754)
-#define DEVICE_SETTINGS_FORMAT 1u
-#define DEVICE_SETTINGS_BYTES 7u
+#define DEVICE_SETTINGS_FORMAT 2u
+#define DEVICE_SETTINGS_BYTES 8u
 #define DEVICE_SETTINGS_SETTLE_MS 250u
 
 static device_settings_t device_current, device_saved;
 static uint32_t device_edited_at;
 static int device_dirty, device_save_error;
+const char *const DEVICE_THEME_NAME[DEVICE_NTHEMES] = {
+    "CLASSIC", "GRAPHITE", "AMBER", "NOCTURNE", "MONO", "FIRE"
+};
 
 static int device_settings_valid(device_settings_t settings)
 {
-    return settings.sync <= DEVICE_SYNC_EXTERNAL &&
+    return settings.theme < DEVICE_NTHEMES && settings.sync <= DEVICE_SYNC_EXTERNAL &&
         (settings.ext_ports == DEVICE_CLOCK_USB || settings.ext_ports == DEVICE_CLOCK_TRS ||
          settings.ext_ports == DEVICE_CLOCK_BOTH);
 }
 
 static int device_settings_equal(device_settings_t a, device_settings_t b)
 {
-    return a.sync == b.sync && a.ext_ports == b.ext_ports;
+    return a.sync == b.sync && a.ext_ports == b.ext_ports && a.theme == b.theme;
 }
 
 int device_settings_init(void)
@@ -32,12 +36,14 @@ int device_settings_init(void)
     uint8_t record[DEVICE_SETTINGS_BYTES + 1u];
     int n = plat_store_load(OBJ_DEVICE_SETTINGS, record, sizeof record);
     int defaults = 1;
-    device_current = (device_settings_t){DEVICE_SYNC_INTERNAL, DEVICE_CLOCK_BOTH};
-    if (n == (int)DEVICE_SETTINGS_BYTES) {
+    device_current = (device_settings_t){DEVICE_SYNC_INTERNAL, DEVICE_CLOCK_BOTH, DEVICE_THEME_CLASSIC};
+    if (n == 7 || n == (int)DEVICE_SETTINGS_BYTES) {
         uint32_t magic = (uint32_t)record[0] | (uint32_t)record[1] << 8 |
             (uint32_t)record[2] << 16 | (uint32_t)record[3] << 24;
-        device_settings_t loaded = {record[5], record[6]};
-        if (magic == DEVICE_SETTINGS_MAGIC && record[4] == DEVICE_SETTINGS_FORMAT && device_settings_valid(loaded)) {
+        int old = n == 7 && record[4] == 1;
+        device_settings_t loaded = {record[5], record[6], n == 8 ? record[7] : DEVICE_THEME_CLASSIC};
+        if (magic == DEVICE_SETTINGS_MAGIC && (old || (n == 8 && record[4] == DEVICE_SETTINGS_FORMAT)) &&
+            device_settings_valid(loaded)) {
             device_current = loaded;
             defaults = 0;
         }
@@ -58,7 +64,11 @@ int device_settings_apply(void)
 int device_settings_set(device_settings_t settings)
 {
     if (!device_settings_valid(settings)) return -1;
-    if (rt_apply_clock_settings(settings.sync, settings.ext_ports)) return -1;
+    /* Only a theme-only edit bypasses the clock path. Existing clock callers
+     * retain their apply/validation behavior, even for an unchanged request. */
+    if ((settings.theme == device_current.theme || settings.sync != device_current.sync ||
+         settings.ext_ports != device_current.ext_ports) &&
+        rt_apply_clock_settings(settings.sync, settings.ext_ports)) return -1;
     if (device_settings_equal(settings, device_current)) return 0;
     device_current = settings;
     device_dirty = !device_settings_equal(device_current, device_saved);
@@ -85,7 +95,7 @@ int device_settings_poll(void)
     const uint8_t record[DEVICE_SETTINGS_BYTES] = {
         (uint8_t)DEVICE_SETTINGS_MAGIC, (uint8_t)(DEVICE_SETTINGS_MAGIC >> 8),
         (uint8_t)(DEVICE_SETTINGS_MAGIC >> 16), (uint8_t)(DEVICE_SETTINGS_MAGIC >> 24),
-        DEVICE_SETTINGS_FORMAT, device_current.sync, device_current.ext_ports
+        DEVICE_SETTINGS_FORMAT, device_current.sync, device_current.ext_ports, device_current.theme
     };
     int error = plat_store_save(OBJ_DEVICE_SETTINGS, record, sizeof record);
     if (error) {

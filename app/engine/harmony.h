@@ -42,6 +42,10 @@ typedef struct {
     uint8_t voice, midi, velocity, accent, ratchet;
     bl_delay_t delay;             /* prospective output frame; live setters can still edit a queued original */
     uint8_t channel;
+    /* Played source tick + 1, or a one-shot's voice-local event tick + 1.
+     * Zero means no position. 32 bits retain long legacy patterns without
+     * truncation; this is display metadata, never part of MIDI conversion. */
+    uint32_t source_onset;
 } bl_note_t;
 
 /* HarmonyEngine.render(voices: [v], schedule:key:meter: 4/4, in: lo..<hi): the voice's onsets in the window in

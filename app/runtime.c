@@ -67,6 +67,7 @@ typedef struct {
     uint8_t vid;                         /* the voice's BL_VID_ (BL_VID_NONE: the clock, a flush) */
     uint8_t kind;
     bl_delay_t delay;                    /* editable prospective settings on an unsent original only */
+    uint32_t source_onset;               /* visual source tick + 1, carried only by originals */
 } rt_ev_t;
 
 static bl_live_t rt_eng PLAT_POOL;       /* the running engine */
@@ -105,7 +106,14 @@ static struct {
     uint8_t owner[16][128];              /* current strike's voice, including echoes */
     bl_tick_t until[16][128];            /* current strike's scheduled end; rejects stale offs */
     uint16_t nrelease, release_cursor;   /* bounded registry flush, drained within the MIDI packet budget */
+    struct {
+        uint32_t onset;                 /* latest dispatched original's source tick + 1; zero hides it */
+        uint8_t channel, pitch;
+        uint32_t event_onset;           /* last original's position survives its Note-Off for the UI */
+        uint32_t serial;
+    } source[BL_NVIDS];
 } rt;
+static uint32_t rt_source_serial;        /* does not restart at Play, unlike the note registry */
 
 #ifdef PLAT_HOST
 static void host_sent(bl_tick_t tick, uint32_t pkt);   /* host.c: dumpmidi */
@@ -140,6 +148,11 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
     else if ((st & 0xF0u) == 0x80u) {
         if (*k == 2) rt.nrelease--;
         *k = 0;
+        /* Includes real releases, flushes and retrigger offs. Discarded stale
+         * offs never reach this function; echo ons never create a marker. */
+        for (int vid = 0; vid < BL_NVIDS; vid++)
+            if (rt.source[vid].channel == (st & 15u) && rt.source[vid].pitch == n)
+                rt.source[vid].onset = 0;
     }
 #ifdef PLAT_HOST
     host_sent(tick, pkt);
@@ -184,6 +197,12 @@ static int rt_dispatch(uint32_t *room)
         rt.owner[ch][n] = e.vid;
         if (e.kind == RT_EV_ORIGINAL) {
             rt.chan[e.vid] = (uint8_t)ch;
+            rt.source[e.vid].onset = e.source_onset;
+            rt.source[e.vid].channel = (uint8_t)ch;
+            rt.source[e.vid].pitch = (uint8_t)n;
+            rt.source[e.vid].event_onset = e.source_onset;
+            if (!++rt_source_serial) ++rt_source_serial;
+            rt.source[e.vid].serial = rt_source_serial;
             rt_echoes(&e, ch);           /* capture only now; echoes never enter this branch */
         }
     } else {
@@ -208,6 +227,7 @@ static void rt_now(uint32_t pkt)
     e->vid = BL_VID_NONE;
     e->kind = RT_EV_MIDI;
     e->delay = (bl_delay_t){0};
+    e->source_onset = 0;
 }
 
 /* Request explicit offs, bounded by the registry rather than the immediate
@@ -244,6 +264,7 @@ static rt_ev_t *rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after 
     e->vid = vid;
     e->kind = RT_EV_MIDI;
     e->delay = (bl_delay_t){0};
+    e->source_onset = 0;
     rt.qn++;
     return e;
 }
@@ -494,6 +515,7 @@ static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q
         e->end = at + gate;
         e->kind = RT_EV_ORIGINAL;
         e->delay = bl_delay_config(q->delay);
+        e->source_onset = q->source_onset;
     } else if (rt.playing) rt.dropped++;
     plat_unlock(f);
 }
@@ -647,6 +669,7 @@ static void rt_start(int fa)
     }
     rt.qn = 0;
     rt.swap_tick = rt.stop_at = -1;
+    memset(rt.source, 0, sizeof rt.source);
     if (!rt.ext) {
         rt.rate = rt.bpm * 16;
         rt.tick = 0;
@@ -709,6 +732,26 @@ bl_tick_t rt_play_tick(void)             /* the tick sounding now in the running
     return t < 0 ? 0 : t;
 }
 
+uint32_t rt_source_onset(int vid)
+{
+    if (vid < 0 || vid >= BL_NVIDS) return 0;
+    uint32_t f = plat_lock();
+    uint32_t onset = rt.playing && !(rt.muted >> vid & 1u) ? rt.source[vid].onset : 0;
+    plat_unlock(f);
+    return onset;
+}
+
+uint32_t rt_source_event(int vid, uint32_t *onset)
+{
+    *onset = 0;
+    if (vid < 0 || vid >= BL_NVIDS) return 0;
+    uint32_t f = plat_lock();
+    uint32_t serial = rt.source[vid].serial;
+    if (rt.playing) *onset = rt.source[vid].event_onset;
+    plat_unlock(f);
+    return serial;
+}
+
 int rt_loading(void) { return rt.playing && rt.has_next; }   /* pendingProject: one waits for its bar line */
 
 int rt_channel(int vid)                  /* channelMap: voice vid's channel 0-15, -1 none */
@@ -717,6 +760,26 @@ int rt_channel(int vid)                  /* channelMap: voice vid's channel 0-15
 }
 
 const bl_live_t *rt_engine(void) { return &rt_eng; }
+
+int rt_select_composer_stage(int section)
+{
+    if (section < 0 || section >= 7 || rt_loading()) return -1;
+    if (rt.playing) {
+        rt_take_over();
+        return bl_live_select_composer_stage(&rt_eng, section, rt.head - rt.origin);
+    }
+    rt_proj.composer_start = (uint8_t)section;
+    return 0;                         /* retain stopped material/recall and preview */
+}
+
+int rt_set_composer(const bl_compcfg_t *cfg)
+{
+    if (!cfg || !bl_comp_valid(cfg) || rt_loading()) return -1;
+    if (rt.playing && bl_live_set_composer(&rt_eng, cfg, rt.head - rt.origin)) return -1;
+    rt_proj.composer = *cfg;
+    if (!rt.playing) rt.fresh = 1;
+    return 0;
+}
 
 /* Transport.captureState: the running engine's state at the render head (stopped, as its last Play left it); before
  * a Play of the project in place (one loaded stopped: the Mac's new transport), its preview, the initial state */

@@ -1,4 +1,4 @@
-# FM-1 pages and K1–K4 — TGM-005A
+# FM-1 pages and K1–K4
 
 **NOT TESTED.** No tests, scripts, sanitizers, builds, flashing or hardware
 verification were performed.
@@ -7,17 +7,22 @@ verification were performed.
 | --- | --- | --- | --- | --- |
 | HOME QUICK | Track | Generator | Root | Scale |
 | HOME PLAY | Direction | Groove | Delay ON/OFF | Delay time |
+| HOME COMPOSE | Composer ON/OFF | Form (stopped) | Phrase bars | Evolution |
 | ENV TIMING | Rate | Gate | Loop length | Pitch phase |
-| ENV ROUTING | MIDI channel | Register | Unused | Unused |
+| ENV ROUTING | MIDI channel | Register | Voice density | Composer tension |
 | ARP HARMONY | Generator | Root | Scale | Direction |
+| LFO CC | Target (read-only) | Cycle (read-only) | Depth (read-only) | Scene (read-only) |
 | SEQ MOTION | Groove | Loop length | Pitch phase | Direction |
 | FX MIDI DELAY | Delay ON/OFF | Time | Feedback | Decay |
+| GLO SETUP | Global root | Sync | External clock input | Lights |
+| GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
 
-Short-pressing the active section cycles its pages; HOME and ENV each have two.
+Short-pressing the active section cycles its pages; HOME has three, ENV/GLO two.
 Switching away and returning restores that section's last page. Page memory is
 runtime-only and starts at QUICK/TIMING after initialization. Other sections
-have one page. Holding a section for about 1000 ms retains the existing help
-card; releasing a long press does not change pages. HOME + SELECT still changes
+have one page. Holding a section for about 1000 ms opens context-sensitive help;
+keep holding for the next card every five seconds. Releasing a long press does
+not change pages. See [themes and help](ui-themes-and-help.md). HOME + SELECT still changes
 tempo and consumes HOME's release. TGM-005D adds momentary HOME + OCT− undo:
 the chord acts once when both buttons become held, consumes both releases and
 suppresses HOME help/navigation and OCT− mutation. Re-pressing a chord button
@@ -52,14 +57,16 @@ Compact knob labels use K1–K4, with full generator/scale names in screen-reade
 announcements. Preview refresh includes the new project settings. Display and
 screen-reader behavior have not been verified.
 
-LFO and GLO retain their existing pages and bindings. GLO SYNC and EXT INPUT
+LFO retains its read-only page. GLO SETUP retains its existing bindings;
+GLO APPEARANCE adds theme and failed-save retry. GLO SYNC and EXT INPUT
 read/edit persistent global device settings through the dedicated settings API;
 they are independent of projects. SYNC edits require stopped transport, while
 port selection retains live routing behavior. Persistence is deferred until
 settled and safely idle; no UI handler writes flash. See
 [device-settings.md](device-settings.md) for host aliases and reboot limitations.
-GLO ROOT and ALGORITHM
-retain their existing global key-control behavior; HOME/ARP ROOT and SCALE edit
+GLO ROOT and ALGORITHM outside HOME
+retain global key-control behavior; HOME QUICK/PLAY ignore ALGORITHM and HOME
+COMPOSE uses it for stage selection. HOME/ARP ROOT and SCALE edit
 the selected voice. Transport, voice-key combinations, SEL lock on ENV, SAVE and
 snapshot keys, OCT+ Dice, update-mode combination, MASTER density,
 and PRESETS are retained. Parameter edits use the existing undo-point mechanism;
@@ -67,10 +74,10 @@ existing stopped-transport undo semantics are unchanged.
 OCT− short alone now invokes MUTATE using the existing unlocked-voice re-roll
 mechanism (also retained on EDIT); HOME + OCT− invokes the existing undo path.
 
-AUTO, FORM, AMBIENT and RATCHET retain their implementations and stored settings;
-their old knob access is deferred. No replacement shortcuts or extra pages were
-added. There are no engine, MIDI scheduler, persistence-format, startup branding
-or general palette/layout changes in this task.
+AUTO, AMBIENT and RATCHET retain their implementations and stored settings;
+their old knob access is deferred. FORM is accessible on HOME COMPOSE.
+Composer details are in [composer.md](composer.md). Global theme changes do not
+change musical project/slot formats, engine behavior or MIDI scheduling.
 
 ## Readability pass — TGM-005C
 

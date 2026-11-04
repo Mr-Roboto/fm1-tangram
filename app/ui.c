@@ -14,7 +14,7 @@
  *   HOME + OCT-    undo, momentary: both button releases are consumed
  *   HOME ENV ARP LFO SEQ FX GLO   QUICK/PLAY, TIMING/ROUTING, HARMONY, CC, MOTION, MIDI DELAY, SETUP
  *   MASTER         density                 SELECT the voice (HOME held: tempo)
- *   ALGORITHM      the mode                PRESETS the template
+ *   ALGORITHM      COMPOSE stage; mode outside HOME   PRESETS the template
  *   K1-K4          the current page's values; LFO/GLO retain their existing bindings
  *
  * Every action takes the Mac's way (UIState, AppServices): the engine's action at the render head (rt_action), the
@@ -26,14 +26,16 @@
 /* the pages, a button each */
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
 static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "Setup"};
-static const uint8_t VIEW_PAGES[NVIEWS] = {2, 2, 1, 1, 1, 1, 1};
+static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 1, 2};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
 /* Page bindings: KN_ edits through the project interfaces; KNS_ remains shown
  * only. Legacy AUTO/FORM/AMBIENT/RATCHET handlers remain for later placement. */
 enum {
     KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS, KN_RATCHET,
     KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME,
-    KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_DECAY,
+    KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_VDENSITY, KN_DECAY,
+    KN_COMPOSER, KN_COMP_BARS, KN_COMP_EVOLUTION, KN_COMP_TENSION,
+    KN_THEME, KN_DEVICE_RETRY,
     KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
     KNS_REPRISE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
 };
@@ -57,10 +59,14 @@ static const char *const KNOB_LABEL[NVIEWS][4] = {
     {"Root", "Sync", "EXT input", "Lights"},
 };
 static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME};
-static const uint8_t ROUTING_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_NONE, KN_NONE};
+static const uint8_t ROUTING_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
+static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
+static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, KN_NONE};
 static const char *const PLAY_LABEL[4] = {"Direction", "Groove", "Delay", "Delay time"};
-static const char *const ROUTING_LABEL[4] = {"MIDI channel", "Register", "Unused", "Unused"};
-static const char *const DIR_LABEL[BL_NDIRS] = {"UP", "DOWN", "M-DOWN", "PEND", "M-PEND"};
+static const char *const ROUTING_LABEL[4] = {"MIDI channel", "Register", "Voice density", "Comp tension"};
+static const char *const COMPOSER_LABEL[4] = {"Composer", "Form", "Phrase bars", "Evolution"};
+static const char *const APPEARANCE_LABEL[4] = {"Theme", "Save status", "Unused", "Unused"};
+static const char *const DIR_LABEL[BL_NDIRS] = {"UP", "DOWN", "M-DWN", "PEND", "M-PEND"};
 static const char *const GROOVE_LABEL[BL_NGROOVES] = {"STRAIGHT", "PULSE 8", "DRIVE 16", "BROKEN 8"};
 static const char *const TIME_LABEL[7] = {"1/16", "1/8", "1/8D", "1/4", "5/16", "1/4D", "7/16"};
 
@@ -106,6 +112,7 @@ static struct {
     uint8_t combo[NB];                   /* the voice key held when the button went down, plus one */
     uint32_t turn_t;                     /* the last knob turn */
     uint8_t help;                        /* a button's card is up: the button + 1 */
+    uint8_t help_part;                   /* automatic continuation while the same button is held */
     uint8_t pot_state, pot_sent;         /* MASTER: a POT_; the step last sent (or of the place taken at boot) */
     uint16_t pot_ref, pot_cand;          /* the reading where the pot was last taken; where it is going (since pot_t) */
     uint32_t pot_t;
@@ -125,18 +132,24 @@ static struct {
 
 static const char *view_name(int v)
 {
-    return ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
-           ui.page[v] && v == V_VOICE ? "ENV ROUTING" : VIEW_NAME[v];
+    return ui.page[v] == 2 && v == V_PERFORM ? "HOME COMPOSE" :
+           ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
+           ui.page[v] && v == V_VOICE ? "ENV ROUTING" :
+           ui.page[v] && v == V_SETUP ? "GLO APPEARANCE" : VIEW_NAME[v];
 }
 static int view_knob(int v, int i)
 {
-    return ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
-           ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] : VIEW_KNOB[v][i];
+    return ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
+           ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
+           ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] :
+           ui.page[v] && v == V_SETUP ? APPEARANCE_KNOB[i] : VIEW_KNOB[v][i];
 }
 static const char *knob_label(int v, int i)
 {
-    return ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
-           ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] : KNOB_LABEL[v][i];
+    return ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
+           ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
+           ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] :
+           ui.page[v] && v == V_SETUP ? APPEARANCE_LABEL[i] : KNOB_LABEL[v][i];
 }
 static bl_project_t ui_p PLAT_POOL;      /* the app project's template: its voices' roles and ids, its scenes */
 static bl_status_t ui_st PLAT_POOL;      /* the mirror (UIState.refresh): the running engine's snapshot */
@@ -576,11 +589,12 @@ static int voice_knob(int role, int k, int32_t e)
     bl_vconfig_t next = target;
     int field = -1, value = 0;
     switch (k) {
-    case KN_GENERATOR: field = BL_CFG_GENERATOR; value = (target.gen.kind + d + BL_NGENS) % BL_NGENS; break;
+    case KN_VDENSITY: field = BL_CFG_DENSITY; value = clamp(100 - target.density_cut + accel(role, e, 100), 0, 100); break;
+    case KN_GENERATOR: field = BL_CFG_GENERATOR; value = clamp(target.gen.kind + d, 0, BL_NGENS - 1); break;
     case KN_VROOT: field = BL_CFG_ROOT; value = (target.key.root + d + 12) % 12; break;
     case KN_SCALE: field = BL_CFG_SCALE; value = (target.key.scale.mode + d + BL_NMODES) % BL_NMODES; break;
-    case KN_DIRECTION: field = BL_CFG_DIRECTION; value = (target.gen.direction + d + BL_NDIRS) % BL_NDIRS; break;
-    case KN_GROOVE: field = BL_CFG_GROOVE; value = (target.gen.groove + d + BL_NGROOVES) % BL_NGROOVES; break;
+    case KN_DIRECTION: field = BL_CFG_DIRECTION; value = clamp(target.gen.direction + d, 0, BL_NDIRS - 1); break;
+    case KN_GROOVE: field = BL_CFG_GROOVE; value = clamp(target.gen.groove + d, 0, BL_NGROOVES - 1); break;
     case KN_RATE: field = BL_CFG_RATE; value = d > 0 ? 240 : 480; break;
     case KN_GATE: field = BL_CFG_GATE; value = clamp(target.gen.b + accel(role, e, target.gen.a), 1, target.gen.a - 1); break;
     case KN_LOOP: field = BL_CFG_LOOP; value = clamp((int32_t)(target.length / 240) + e, 1, 16); break;
@@ -614,6 +628,40 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     char t[8];
     if (voice_knob(role, k, e)) return;
     switch (k) {
+    case KN_THEME: {
+        /* Display order is independent of persistent IDs (MONO=4, FIRE=5). */
+        static const uint8_t order[DEVICE_NTHEMES] = {
+            DEVICE_THEME_CLASSIC, DEVICE_THEME_GRAPHITE, DEVICE_THEME_AMBER,
+            DEVICE_THEME_NOCTURNE, DEVICE_THEME_FIRE, DEVICE_THEME_MONO
+        };
+        device_settings_t settings = device_settings_get();
+        int position = 0;
+        while (position < DEVICE_NTHEMES - 1 && order[position] != settings.theme) position++;
+        settings.theme = order[clamp(position + d, 0, DEVICE_NTHEMES - 1)];
+        if (device_settings_set(settings)) warn("THEME", "REFUSED");
+        else show("THEME", DEVICE_THEME_NAME[settings.theme]);
+        break;
+    }
+    case KN_DEVICE_RETRY:
+        if (device_settings_status() < 0) {
+            device_settings_retry();
+            show("GLOBAL SAVE", rt_playing() ? "AT STOP" : "RETRYING");
+        }
+        break;
+    case KN_COMPOSER:
+    case KN_COMP_BARS:
+    case KN_COMP_EVOLUTION:
+    case KN_COMP_TENSION: {
+        bl_compcfg_t cfg = proj.composer;
+        if (k == KN_COMPOSER) cfg.enabled = (uint8_t)(d > 0);
+        if (k == KN_COMP_BARS) cfg.bars = (uint8_t)(4 * clamp(cfg.bars / 4 + d, 0, 16));
+        if (k == KN_COMP_EVOLUTION) cfg.evolution = (uint8_t)clamp(cfg.evolution + d, 0, 3);
+        if (k == KN_COMP_TENSION) cfg.tension = (uint8_t)clamp(cfg.tension + d, 0, 3);
+        if (!memcmp(&cfg, &proj.composer, sizeof cfg)) break;
+        if (proj_set_composer(&cfg)) warn("COMPOSER", "NOT AVAILABLE");
+        else show("COMPOSER", rt_playing() ? "NEXT BAR" : "SET");
+        break;
+    }
     case KN_TEMPO: tempo_to(proj.bpm + accel(role, e, 180), 0); break;
     case KN_AUTO:
         if (proj_set_arranger(d > 0))
@@ -772,6 +820,7 @@ static void button(int b)                /* a button's job, on its release (PLAY
 /* HELP CARDS (AMB-1's): hold one button alone for HELP_HOLD and a card says what it does. A key, a turn or another
  * button puts it away; letting go after its card does nothing else. PLAY acts on its press: it has no card (Ruling
  * AC); nor has a button pressed with a voice key held (its job is that voice's, whenever it is let go) */
+static int help_count(int b);
 static void help_tick(uint32_t btn, uint32_t keys)
 {
     uint32_t now = plat_ms();
@@ -780,6 +829,8 @@ static void help_tick(uint32_t btn, uint32_t keys)
         uint32_t m = 1u << (ui.help - 1);
         if (btn != m || keys || (int32_t)(ui.turn_t - ui.down_t[ui.help - 1]) > 0)
             ui.help = 0;
+        else ui.help_part = (uint8_t)(((now - ui.down_t[ui.help - 1] - HELP_HOLD) / 5000u) %
+                                     (unsigned)help_count(ui.help - 1));
         return;
     }
     if (!btn || (btn & (btn - 1u)) || keys)
@@ -788,6 +839,7 @@ static void help_tick(uint32_t btn, uint32_t keys)
         if (btn == 1u << i && i != B_PLAY && !ui.combo[i] && !(ui.btn_used & btn) && now - ui.down_t[i] >= HELP_HOLD
             && (int32_t)(ui.turn_t - ui.down_t[i]) <= 0) {   /* (a button held for a voice is no card) */
             ui.help = (uint8_t)(i + 1);
+            ui.help_part = 0;
             ui.btn_used |= btn;          /* its release now does nothing */
         }
 }
@@ -797,29 +849,7 @@ static void help_tick(uint32_t btn, uint32_t keys)
 #define HELP_LINES 4
 static const char *const BTN_LABEL[NB] = {"FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ",
                                           "PLAY", "REC", "OCT-", "OCT+"};
-static int help_lines(int b, const char *l[HELP_LINES])
-{
-    int n = 0;
-#define L(t) (l[n++] = (t))
-    switch (b) {
-    case B_HOME: L("QUICK / PLAY"); L("TAP AGAIN: NEXT PAGE"); L("+ OCT-: UNDO"); L("+ SELECT: TEMPO"); break;
-    case B_ENV: L("TIMING / ROUTING"); L("TAP AGAIN: NEXT PAGE"); L("K1-K4: PAGE PARAMETERS"); L("SEL: LOCK SELECTED VOICE"); break;
-    case B_ARP: L("HARMONY"); L("K1 GENERATOR, K2 ROOT"); L("K3 SCALE, K4 DIRECTION"); break;
-    case B_LFO: L("CC AND MODULATION"); L("TARGET, CYCLE, DEPTH,"); L(" SCENE"); break;
-    case B_SEQ: L("MOTION"); L("K1 GROOVE, K2 LOOP"); L("K3 PHASE, K4 DIRECTION"); break;
-    case B_FX: L("MIDI NOTE DELAY"); L("K1 ON/OFF, K2 TIME"); L("K3 FEEDBACK, K4 DECAY"); break;
-    case B_GLO: L("SETUP"); L("ROOT, SYNC, EXT INPUT,"); L(" LIGHTS"); break;
-    case B_EDIT: L("RE-ROLL EVERY"); L(" UNLOCKED VOICE"); L("WITH A VOICE KEY:"); L(" REGENERATE IT"); break;
-    case B_REC: L("THE B PART"); L("WITH A VOICE KEY:"); L(" A BLANK CYCLE"); break;
-    case B_SEL: L("WITH A VOICE KEY,"); L(" OR ON THE VOICE PAGE:"); L("LOCK OR UNLOCK IT"); break;
-    case B_SAVE: L("SAVES THE PROJECT"); L(" AND THE SIX SLOTS"); L("+ A SLOT KEY: STORE"); break;
-    case B_OCTDN: L("MUTATE: RE-ROLL UNLOCKED"); L("WITH HOME: UNDO"); L("WITH OCT+, 5 S: UPDATE MODE"); break;
-    case B_OCTUP: L("DICE: A NEW SEED"); L(" AT THE NEXT BAR"); L("WITH OCT-, 5 S: UPDATE MODE"); break;
-    default: break;
-    }
-#undef L
-    return n;
-}
+#include "ui_help.h"
 
 /* MASTER's reading (0..4096) as a density step, 0-100 %, rounded: an end zone at each end (0-20: 0 %; from 4076:
  * 100 %), as the device's smoothed pot tops out at about 4092 (Ruling AB) */
@@ -933,13 +963,23 @@ static void input(void)
         }
         ui.turn_t = plat_ms();
     }
-    if ((e = plat_enc(EN_ALGO)) != 0) {  /* ALGORITHM: the mode, round (applyLiveMusicalChanges) */
-        int m = (proj.key_mode + (e > 0 ? 1 : -1) + BL_NMODES) % BL_NMODES;
-        if (proj_set_key(proj.key_root, m))
-            warn("MODE", "QUEUE FULL");
-        else
-            say("MODE", MODE_NAME[m]);
-        ui.turn_t = plat_ms();
+    if ((e = plat_enc(EN_ALGO)) != 0) {
+        if (ui.view == V_PERFORM && ui.page[V_PERFORM] == 2) {
+            const bl_composer_t *c = &rt_engine()->composer;
+            int previous = rt_playing() ? (c->pending_stage ? c->pending_stage - 1 : c->section) : proj_composer_start();
+            /* Raw detent count only: no acceleration and no cyclic wrap. */
+            int section = clamp(previous + e, 0, 6);
+            if (section != previous) {
+                if (proj_select_composer_stage(section)) warn("COMPOSER", "ENABLE FIRST / BUSY");
+                else show(BL_COMP_NAME[bl_comp_phase(section)], !rt_playing() ? "START SECTION" :
+                    c->pending_stage ? "NEXT BAR" : "CURRENT SECTION");
+            }
+        } else if (ui.view != V_PERFORM) {
+            int m = (proj.key_mode + (e > 0 ? 1 : -1) + BL_NMODES) % BL_NMODES;
+            if (proj_set_key(proj.key_root, m)) warn("MODE", "QUEUE FULL");
+            else say("MODE", MODE_NAME[m]);
+        }
+        if (ui.view != V_PERFORM || ui.page[V_PERFORM] == 2) ui.turn_t = plat_ms();
     }
     if ((e = plat_enc(EN_PRESET)) != 0) {   /* PRESETS: the template, round (applyTemplate) */
         proj_set_template((proj.tpl + (e > 0 ? 1 : -1) + BL_NTPL) % BL_NTPL);

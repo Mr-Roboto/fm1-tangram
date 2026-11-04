@@ -133,13 +133,29 @@ int bl_live_get_config(const bl_live_t *e, int vid, bl_vconfig_t *active, bl_vco
     return -1;
 }
 
+static void composer_cancel_voice(bl_live_t *e, int i)
+{
+    if (!(e->composer.requests >> i & 1u)) return;
+    e->st[i].accent_req = e->st[i].nudge_req = NONE;
+    e->composer.requests &= ~(1u << i);
+}
+
+static void composer_manual_voice(bl_live_t *e, int i)
+{
+    composer_cancel_voice(e, i);
+    e->composer.manual_voices |= 1u << i;
+}
+
 int bl_live_set_config(bl_live_t *e, int vid, const bl_vconfig_t *target)
 {
     if (!target || vid < 0 || vid >= BL_NVIDS || !bl_config_valid(target)) return -1;
     bl_vstate_t *s = state_of(e, (uint8_t)vid);
     if (!s) return -1;
+    if (bl_config_diff(&s->voice.pending, target) & ((1u << BL_CFG_ROOT) | (1u << BL_CFG_SCALE)))
+        e->composer.manual_harmony = 1;
     s->voice.pending = *target;
     s->voice.config_dirty = bl_config_diff(&s->voice.config, target);
+    composer_manual_voice(e, (int)(s - e->st));
     return 0;
 }
 
@@ -198,13 +214,23 @@ void bl_live_init(bl_live_t *e, const bl_project_t *p)
         for (int j = 0; j < p->nvoices; j++) r += strcmp(p->voice[j].id, p->voice[i].id) < 0;
         e->rank[i] = (uint8_t)r;
     }
-    if (p->has_arr && p->arr.enabled) {
+    if ((p->has_arr && p->arr.enabled) || p->composer.enabled) {
         uint8_t roles[BL_MAX_VOICES];
         arr_roles(p, roles);
-        bl_arr_init(&e->arr, &p->arr, roles, p->nvoices, bl_seed_derive(p->seed, "arrangement", (const char *)NULL),
+        const bl_arrcfg_t *form = p->has_arr ? &p->arr : &bl_arr_classic;
+        bl_arr_init(&e->arr, form, roles, p->nvoices, bl_seed_derive(p->seed, "arrangement", (const char *)NULL),
                     0, 0, ambient_period(p));
         e->has_arr = 1;
-        for (int i = 0; i < p->nvoices; i++) {
+        if (p->composer.enabled) {
+            bl_comp_init(&e->composer, &p->composer, form, p->seed);
+            bl_comp_select(&e->composer, p->composer_start);
+            e->composer.legacy_enabled = p->has_arr && p->arr.enabled;
+            e->composer.legacy_form = p->has_arr ? p->arr : ARR_DEFAULT;
+            e->arr.phase = e->composer.phase;
+            e->arr.bars_until_change = e->composer.bars_left;
+            memcpy(e->arr.active, e->arr.order, e->arr.norder);
+            e->arr.nactive = e->arr.norder;
+        } else for (int i = 0; i < p->nvoices; i++) {
             int on = 0;
             for (int k = 0; k < e->arr.nactive; k++) on |= e->arr.active[k] == i;
             if (!on) e->st[i].active = 0;
@@ -269,16 +295,27 @@ int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request)
     switch (a->kind) {
     case BL_A_TRANSPOSE: {
         bl_tev_t ev = {bl_quantized_bar(max_tick(request, e->rendered)), a->arg};
-        return bl_sched_merge(&e->sched, &ev, 1, head_bar(e));
+        int r = bl_sched_merge(&e->sched, &ev, 1, head_bar(e));
+        if (!r) e->composer.manual_harmony = 1;
+        return r;
     }
     case BL_A_REGENERATE:
-        if ((s = state_of(e, a->voice))) s->regen_req = request;
+        if ((s = state_of(e, a->voice))) {
+            composer_manual_voice(e, (int)(s - e->st));
+            s->regen_req = request;
+        }
         return 0;
     case BL_A_BLANK:
-        if ((s = state_of(e, a->voice))) s->blank_req = request;
+        if ((s = state_of(e, a->voice))) {
+            composer_manual_voice(e, (int)(s - e->st));
+            s->blank_req = request;
+        }
         return 0;
     case BL_A_LOCK:
-        if ((s = state_of(e, a->voice))) s->voice.pat.locked = a->arg != 0;
+        if ((s = state_of(e, a->voice))) {
+            composer_manual_voice(e, (int)(s - e->st));
+            s->voice.pat.locked = a->arg != 0;
+        }
         return 0;
     case BL_A_RECALL: {
         int k = 0;
@@ -287,7 +324,13 @@ int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request)
         e->recall[k] = *a->state;
         e->recall_used[k] = 1;
         c.slot = (uint8_t)k;
-        return enqueue_change(e, c, request);
+        int r = enqueue_change(e, c, request);
+        if (r) e->recall_used[k] = 0;     /* a full shared change queue must not leak a recall slot */
+        if (!r) {
+            for (int i = 0; i < e->project.nvoices; i++) composer_manual_voice(e, i);
+            e->composer.manual_harmony = 1;
+        }
+        return r;
     }
     case BL_A_KEY:
         /* The legacy global key control broadcasts into the same per-voice
@@ -298,6 +341,8 @@ int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request)
             if (!bl_config_valid(&target)) return -1;
         }
         e->project.key = a->key;
+        e->composer.manual_harmony = 1;
+        for (int i = 0; i < e->project.nvoices; i++) composer_manual_voice(e, i);
         for (int i = 0; i < e->project.nvoices; i++) {
             e->st[i].voice.pending.key = a->key;
             e->st[i].voice.config_dirty = bl_config_diff(&e->st[i].voice.config, &e->st[i].voice.pending);
@@ -306,8 +351,11 @@ int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request)
     case BL_A_DENSITY:
         c.value = a->value;
         return enqueue_change(e, c, request);
-    case BL_A_BPART:
-        return enqueue_change(e, c, request);
+    case BL_A_BPART: {
+        int r = enqueue_change(e, c, request);
+        if (!r) e->composer.manual_harmony = 1;
+        return r;
+    }
     case BL_A_VOICE_ACTIVE:
         c.voice = a->voice;
         c.on = a->arg != 0;
@@ -315,17 +363,47 @@ int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request)
     case BL_A_TENSION:
         c.voice = a->voice;
         return enqueue_change(e, c, request);
-    case BL_A_SCENE:
+    case BL_A_SCENE: {
         c.scene = a->scene;
         c.bars = a->arg;
-        return enqueue_change(e, c, request);
+        int r = enqueue_change(e, c, request);
+        if (!r) e->composer.manual_scene = 1;
+        return r;
+    }
     case BL_A_ARRANGER:
         return enqueue_enable(e, a->arg != 0, request);
     case BL_A_ADVANCE:
         return enqueue_advance(e, request);
+    case BL_A_COMPOSER: {
+        uint32_t bits = (uint32_t)a->arg;
+        bl_compcfg_t cfg = {(uint8_t)bits, (uint8_t)(bits >> 8), (uint8_t)(bits >> 16), (uint8_t)(bits >> 24)};
+        if (!bl_comp_valid(&cfg) || (cfg.enabled && e->stop >= 0)) return -1;
+        c.bars = a->arg;
+        c.on = cfg.enabled;
+        return enqueue_change(e, c, request);
+    }
     default:
         return -1;
     }
+}
+
+int bl_live_set_composer(bl_live_t *e, const bl_compcfg_t *cfg, bl_tick_t request)
+{
+    if (!cfg || !bl_comp_valid(cfg)) return -1;
+    bl_action_t a = {0};
+    a.kind = BL_A_COMPOSER;
+    a.arg = (int32_t)(cfg->enabled | (uint32_t)cfg->bars << 8 | (uint32_t)cfg->evolution << 16 | (uint32_t)cfg->tension << 24);
+    return bl_live_enqueue(e, &a, request);
+}
+
+int bl_live_select_composer_stage(bl_live_t *e, int section, bl_tick_t request)
+{
+    if (section < 0 || section >= 7 || !e->project.composer.enabled || e->stop >= 0) return -1;
+    /* Latest target wins; intermediate encoder positions are never entered.
+     * Returning to the current stage cancels without restarting it. */
+    e->composer.pending_stage = section == e->composer.section ? 0 : (uint8_t)(section + 1);
+    e->composer.pending_tick = bar_bind(e, request);
+    return 0;
 }
 
 /* captureState() */
@@ -359,7 +437,7 @@ int bl_initial_state(const bl_project_t *p, bl_state_t *out)
         out->motif_phase[i] = 0;
         out->motif_flags[i] = 1;
     }
-    if (p->has_arr && p->arr.enabled) {
+    if (p->has_arr && p->arr.enabled && !p->composer.enabled) {
         bl_arr_t arr;
         uint8_t roles[BL_MAX_VOICES];
         arr_roles(p, roles);
@@ -377,16 +455,24 @@ int bl_initial_state(const bl_project_t *p, bl_state_t *out)
 /* Recall restores musical frames, pending edits and the captured local phase
  * for every matched voice. Requests to blank/regenerate are cleared as before;
  * the arranger's nudge/accent requests stay. */
-static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
+static void apply_recall_mask(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick,
+                              uint32_t voices, int schedule, int output)
 {
-    e->sched = snap->sched;
+    if (schedule) e->sched = snap->sched;
     for (int i = 0; i < e->project.nvoices; i++) {
+        if (!(voices >> i & 1u)) continue;
         bl_vstate_t *s = &e->st[i];
+        bl_delay_t delay = s->voice.delay;
+        uint8_t channel = s->voice.midi_channel;
         uint32_t phase = 0;
         int motif_flags = -1;
         for (int j = 0; j < snap->n; j++)
             if (!strcmp(snap->v[j].id, s->voice.id)) {
                 s->voice = snap->v[j];
+                if (!output) {
+                    s->voice.delay = delay;
+                    s->voice.midi_channel = channel;
+                }
                 s->generation = snap->generation[j];
                 phase = snap->motif_phase[j];
                 motif_flags = snap->motif_flags[j];
@@ -406,6 +492,32 @@ static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
         }
         s->blank_req = s->regen_req = NONE;
     }
+}
+
+static void apply_recall(bl_live_t *e, const bl_state_t *snap, bl_tick_t tick)
+{
+    apply_recall_mask(e, snap, tick, (1u << e->project.nvoices) - 1u, 1, 1);
+}
+
+static int composer_owns(const bl_live_t *e, int i)
+{
+    const bl_vstate_t *s = &e->st[i];
+    return e->project.composer.enabled && !(e->composer.manual_voices >> i & 1u) &&
+        !s->voice.pat.locked && !s->voice.config_dirty && s->regen_req < 0 && s->blank_req < 0;
+}
+
+f64 bl_live_voice_density(const bl_live_t *e, int i)
+{
+    if (i < 0 || i >= e->project.nvoices) return ZERO;
+    f64 density = e->density;
+    if (f64_eq(density, ZERO)) return ZERO;
+    int cut = e->st[i].voice.config.density_cut;
+    if (cut) density = f64_mul(density, f64_div(f64_from_i64(100 - cut), F64(0x4059000000000000)));
+    if (composer_owns(e, i)) {
+        int level = bl_comp_level(&e->composer, e->st[i].voice.role);
+        if (level < 100) density = f64_mul(density, f64_div(f64_from_i64(level), F64(0x4059000000000000)));
+    }
+    return density;
 }
 
 /* ---------------------------------------------------------- scene morphs --- */
@@ -513,6 +625,7 @@ static int apply_voice_config(bl_live_t *e, int i, bl_tick_t tick)
 static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
 {
     bl_vstate_t *s = &e->st[i];
+    e->composer.requests &= ~(1u << i); /* this local completion consumes any Composer request */
     bl_pattern_t *p = &s->voice.pat;
     /* Timing-grid traversal continues through blank loops and LOCK. Neither is
      * a request to restart the pitch order. Explicit regeneration starts anew. */
@@ -595,9 +708,10 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                 uint64_t seed = s->voice.pat.seed;
                 bl_tick_t offset = s->voice.pat.start_offset;
                 const bl_voice_t *src = &s->voice;
+                f64 density = bl_live_voice_density(e, i);
                 int directed = (src->pat.generator == BL_GEN_ARP || src->pat.generator == BL_GEN_MOTIF)
                     && (src->pat.direction != BL_DIR_UP || src->pat.pitch_phase);
-                if (directed || f64_lt(e->density, ONE)) {
+                if (directed || f64_lt(density, ONE)) {
                     e->capped = s->voice;
                     /* Map pitches before density removes onset slots; gates,
                      * accents and velocities still belong to their grid slots. */
@@ -608,7 +722,7 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                         e->capped.pat.direction_cursor = 0;
                         e->capped.pat.pitch_phase = 0;
                     }
-                    bl_density_cap(&e->capped.pat, e->density, &e->capped.pat);
+                    bl_density_cap(&e->capped.pat, density, &e->capped.pat);
                     src = &e->capped;
                 }
                 int room = n < max ? max - n : 0;
@@ -616,6 +730,17 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                                         room ? out + n : out, room);
                 for (int j = 0; j < k && j < room; j++) {
                     bl_note_t *q = &out[n + j];
+                    /* The scratch voice has already mapped pitches and may
+                     * have compacted its onset grid for density. Recover the
+                     * original onset by tick, then retain its pitch source. */
+                    if (directed && q->source_onset) {
+                        for (int a = 0; a < s->voice.pat.n; a++) {
+                            if (s->voice.pat.note[a].position + 1 != q->source_onset) continue;
+                            int source = bl_direction_index(&s->voice.pat, a, 0);
+                            q->source_onset = (uint32_t)(s->voice.pat.note[source].position + 1);
+                            break;
+                        }
+                    }
                     q->velocity = bl_velocity(q->velocity, q->accent, seed, bl_floor_mod(q->at + offset, length));
                 }
                 n += k;
@@ -652,12 +777,14 @@ static int render_window(bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_note_t *ou
         uint8_t midi = e->tension_note[k].midi;
         uint8_t channel = e->tension_note[k].channel;
         bl_delay_t delay = e->tension_note[k].delay;
+        uint32_t source_onset = e->tension_note[k].source_onset;
         memmove(&e->tension_note[k], &e->tension_note[k + 1],
                 (size_t)(e->ntension - k - 1) * sizeof e->tension_note[0]);
         e->ntension--;
         for (int i = 0; i < e->project.nvoices; i++) {
             if (bl_vid(e->project.voice[i].id) != vid || vid == BL_VID_NONE) continue;
-            if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1, delay, channel};
+            if (!f64_lt(ZERO, bl_live_voice_density(e, i))) break;
+            if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1, delay, channel, source_onset};
             n++;
             break;
         }
@@ -671,6 +798,57 @@ static int render_window(bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_note_t *ou
         out[j] = x;
     }
     return n;
+}
+
+static const bl_arrcfg_t *composer_form(const bl_live_t *e)
+{
+    return e->project.has_arr ? &e->project.arr : &bl_arr_classic;
+}
+
+static void composer_config_apply(bl_live_t *e, const bl_compcfg_t *cfg, bl_tick_t tick)
+{
+    int was = e->project.composer.enabled;
+    e->project.composer = *cfg;
+    if (cfg->enabled && was) {
+        if (!cfg->evolution)
+            for (int i = 0; i < e->project.nvoices; i++) composer_cancel_voice(e, i);
+        e->composer.cfg = *cfg;           /* macros do not restart sections or phrase clocks */
+        return;
+    }
+    if (!was && !cfg->enabled) return;
+    for (int i = 0; i < e->project.nvoices; i++) composer_cancel_voice(e, i);
+    uint8_t roles[BL_MAX_VOICES];
+    uint32_t active = 0, manual = e->composer.manual_voices;
+    uint8_t harmony = e->composer.manual_harmony, scene = e->composer.manual_scene;
+    int legacy_on = was ? e->composer.legacy_enabled : e->has_arr;
+    bl_arrcfg_t legacy_form = was ? e->composer.legacy_form :
+        e->has_arr ? e->arr.cfg : e->project.has_arr ? e->project.arr : ARR_DEFAULT;
+    arr_roles(&e->project, roles);
+    for (int i = 0; i < e->project.nvoices; i++) if (e->st[i].active) active |= 1u << i;
+    bl_arr_init(&e->arr, cfg->enabled ? composer_form(e) : &legacy_form, roles, e->project.nvoices,
+        bl_seed_derive(e->project.seed, "arrangement", (const char *)NULL), 1, active, ambient_period(&e->project));
+    e->has_theme = 0;                   /* each controller captures its own established theme */
+    if (cfg->enabled) {
+        bl_comp_init(&e->composer, cfg, composer_form(e), e->project.seed);
+        bl_comp_select(&e->composer, e->project.composer_start);
+        e->composer.started_at = tick;
+        e->composer.manual_voices = manual;
+        e->composer.manual_harmony = harmony;
+        e->composer.manual_scene = scene;
+        e->composer.legacy_enabled = (uint8_t)legacy_on;
+        e->composer.legacy_form = legacy_form;
+        e->has_arr = 1;
+        e->arr.phase = e->composer.phase;
+        e->arr.bars_in_phase = 0;
+        e->arr.bars_until_change = e->composer.bars_left;
+    } else {
+        e->composer.cfg.enabled = 0;
+        e->has_arr = (uint8_t)legacy_on;
+        if (e->has_arr && e->arr.phase == BL_PH_BED) {
+            bl_live_capture(e, &e->theme);
+            e->has_theme = 1;
+        }
+    }
 }
 
 /* the change at its bind tick (renderResolvingChanges' switch) */
@@ -693,6 +871,7 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
     case BL_A_BPART: apply_bpart(e, c->tick); break;
     case BL_A_VOICE_ACTIVE:
         if ((s = state_of(e, c->voice))) {
+            composer_manual_voice(e, (int)(s - e->st));
             s->active = c->on;
             if (c->on) {
                 s->seg_start = c->tick;
@@ -713,10 +892,17 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
                 e->tension_note[e->ntension].midi = 0;
                 e->tension_note[e->ntension].channel = 0;
                 e->tension_note[e->ntension].delay = bl_delay_config((bl_delay_t){0});
+                e->tension_note[e->ntension].source_onset = 0;
                 s = state_of(e, c->voice);
                 if (s) {
                     e->tension_note[e->ntension].channel = s->voice.midi_channel;
                     e->tension_note[e->ntension].delay = s->voice.delay;
+                    /* A one-shot is not a stored pattern note. Preserve its
+                     * actual local event position before render-ahead moves
+                     * or replaces this voice's source material. */
+                    if (s->voice.pat.length > 0)
+                        e->tension_note[e->ntension].source_onset = (uint32_t)
+                            (bl_floor_mod(c->tick + s->voice.pat.start_offset, s->voice.pat.length) + 1);
                     bl_pitch_t pitch = {0, 0, 1};
                     e->tension_note[e->ntension].midi = bl_fold(s->voice.reg_low, s->voice.reg_high,
                         bl_resolve(&s->voice.config.key, pitch, s->voice.ref_c));
@@ -726,6 +912,12 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
         }
         break;
     case BL_A_SCENE: start_morph(e, scene_named(e, c->scene), c->bars, c->tick); break;
+    case BL_A_COMPOSER: {
+        uint32_t bits = (uint32_t)c->bars;
+        bl_compcfg_t cfg = {(uint8_t)bits, (uint8_t)(bits >> 8), (uint8_t)(bits >> 16), (uint8_t)(bits >> 24)};
+        composer_config_apply(e, &cfg, c->tick);
+        break;
+    }
     }
 }
 
@@ -776,6 +968,98 @@ static void apply_directives(bl_live_t *e, const bl_dir_t *d, int n, bl_tick_t t
  * activity), the due advances, the bar's clock (not on the bar the SM was made, nor at tick 0), all against the
  * locks as they stand; then a phase change fires its scene and captures (bed) or recalls (payoff, with reprise) the
  * theme */
+static void composer_section(bl_live_t *e, bl_tick_t tick)
+{
+    const bl_composer_t *c = &e->composer;
+    uint32_t owned = 0;
+    int protected = c->manual_harmony != 0, locked = 0;
+    for (int i = 0; i < e->project.nvoices; i++) {
+        if (composer_owns(e, i)) owned |= 1u << i;
+        if (e->st[i].voice.pat.locked) locked = protected = 1;
+    }
+    if (c->phase == BL_PH_BED && !e->has_theme) {
+        bl_live_capture(e, &e->theme);
+        e->has_theme = 1;
+    }
+    if (c->phase == BL_PH_PAYOFF && e->has_theme) {
+        for (int i = 0; i < e->project.nvoices; i++) composer_cancel_voice(e, i);
+        apply_recall_mask(e, &e->theme, tick, owned, !protected, 0);
+    }
+    if (c->phase == BL_PH_BPART && c->cfg.tension && !protected) {
+        /* One shared, scale-degree harmonic move; bass and upper voices use
+         * the same schedule. No private clock, rate change or random reseed. */
+        int32_t bar = head_bar(e);
+        int base = e->has_theme ? bl_sched_offset(&e->theme.sched, bar) : bl_sched_offset(&e->sched, bar);
+        int lift = c->cfg.tension == 1 ? 3 : c->cfg.tension == 2 ? 4 : 5;
+        if (base >= -128 && base <= 127 - lift) {
+            bl_tev_t ev = {bar, base + lift};
+            (void)bl_sched_merge(&e->sched, &ev, 1, bar); /* full schedule: retain the existing harmony */
+        }
+    }
+    if (!c->manual_scene && !locked) start_morph(e, e->project.scene_by_phase[c->phase], 8, tick);
+}
+
+static void composer_development(bl_live_t *e, bl_tick_t tick)
+{
+    const bl_composer_t *c = &e->composer;
+    if (!c->cfg.evolution || (c->phase != BL_PH_VARIATION && c->phase != BL_PH_BPART) || !e->project.nvoices) return;
+    /* At most one supporting melodic voice per phrase checkpoint. Bass,
+     * sustained support and root anchors retain their existing material. */
+    int n = e->project.nvoices;
+    int start = (int)((c->cycle % (uint32_t)n + (uint32_t)c->bars_in_section / 8u) % (uint32_t)n);
+    for (int k = 0; k < n; k++) {
+        int i = (start + k) % n;
+        bl_vstate_t *s = &e->st[i];
+        int role = s->voice.role;
+        if (!composer_owns(e, i) || !s->active || s->accent_req >= 0 || s->nudge_req >= 0 ||
+            (role != BL_ROLE_BED1 && role != BL_ROLE_BED2 && role != BL_ROLE_LEAD)) continue;
+        /* Existing local-boundary accent/mutation paths preserve groove,
+         * direction, gate, motif anchors and independent completion clocks. */
+        if (c->cfg.evolution == 3 && s->voice.pat.generator != BL_GEN_ARP && s->voice.pat.generator != BL_GEN_MOTIF)
+            s->nudge_req = tick;
+        else s->accent_req = tick;
+        e->composer.requests |= 1u << i;
+        break;
+    }
+}
+
+static void composer_boundary(bl_live_t *e, bl_tick_t tick, int created)
+{
+    int changed = 0, advanced = 0;
+    if (e->composer.pending_stage && e->composer.pending_tick <= tick) {
+        int section = e->composer.pending_stage - 1;
+        e->composer.pending_stage = 0;
+        bl_comp_select(&e->composer, section);
+    }
+    int selected = e->composer.enter_pending;
+    if (selected) {
+        e->composer.enter_pending = 0;
+        for (int i = 0; i < e->project.nvoices; i++) composer_cancel_voice(e, i);
+        composer_section(e, tick);
+        changed = 1;
+    }
+    /* Explicit selection wins this bar. Preserve queued Advance requests
+     * for the next running bar, rather than overriding the selected target. */
+    while (e->has_arr && !selected && e->nadv && e->adv[0] <= tick) {
+        e->nadv--;
+        memmove(&e->adv[0], &e->adv[1], (size_t)e->nadv * sizeof e->adv[0]);
+        (void)bl_comp_tick(&e->composer, composer_form(e), 1);
+        composer_section(e, tick);
+        changed = advanced = 1;
+    }
+    if (e->has_arr && !selected && !advanced && !created && tick > e->composer.started_at) {
+        changed = bl_comp_tick(&e->composer, composer_form(e), 0);
+        if (changed) composer_section(e, tick);
+    }
+    if (changed || (e->has_arr && e->composer.cfg.evolution >= 2 && e->composer.bars_in_section &&
+        !(e->composer.bars_in_section % 8))) composer_development(e, tick);
+    e->arr.phase = e->composer.phase;
+    e->arr.bars_in_phase = e->composer.bars_in_section;
+    e->arr.bars_until_change = e->composer.bars_left;
+    e->arr.nactive = 0;
+    for (int i = 0; i < e->project.nvoices; i++) if (e->st[i].active) e->arr.active[e->arr.nactive++] = (uint8_t)i;
+}
+
 static void arr_boundary(bl_live_t *e, bl_tick_t tick)
 {
     bl_dir_t d[BL_ARR_MAX_DIRS];
@@ -784,6 +1068,10 @@ static void arr_boundary(bl_live_t *e, bl_tick_t tick)
     int created = 0;
     while (e->nen && e->en[0].tick <= tick) {
         uint8_t on = e->en[0].on;
+        if (e->project.composer.enabled) {
+            e->composer.legacy_enabled = on;
+            e->composer.legacy_form.enabled = on;
+        }
         e->nen--;
         memmove(&e->en[0], &e->en[1], (size_t)e->nen * sizeof e->en[0]);
         if (on && !e->has_arr) {
@@ -802,6 +1090,25 @@ static void arr_boundary(bl_live_t *e, bl_tick_t tick)
         } else if (!on) {
             e->has_arr = 0;
         }
+    }
+    /* In Composer mode, already queued manual changes bind first. Legacy
+     * AUTO retains its original ordering when Composer is disabled. */
+    int composer_change = e->project.composer.enabled;
+    for (int i = 0; i < e->nchange && e->change[i].tick <= tick; i++)
+        if (e->change[i].kind == BL_A_COMPOSER) composer_change = 1;
+    if (composer_change) {
+        while (e->nchange && e->change[0].tick <= tick) {
+            bl_change_t c = e->change[0];
+            int was_composer = e->project.composer.enabled;
+            e->nchange--;
+            memmove(&e->change[0], &e->change[1], (size_t)e->nchange * sizeof c);
+            apply_change(e, &c);
+            if (c.kind == BL_A_COMPOSER && was_composer != e->project.composer.enabled) created = 1;
+        }
+    }
+    if (e->project.composer.enabled) {
+        composer_boundary(e, tick, created);
+        return;                         /* exactly one automation owner */
     }
     if (!e->has_arr) return;
     uint8_t before = e->arr.phase;
@@ -905,12 +1212,13 @@ const bl_voice_t *bl_live_voice(const bl_live_t *e, int i) { return &e->st[i].vo
 
 /* ------------------------------------------------------------ snapshot --- */
 const char *const BL_UP_RAW[BL_NUPS] = {"key", "recall", "density", "bPart", "voiceActive", "tension", "arranger",
-                                        "advance", "scene"};
+                                        "advance", "scene", "composer"};
 
 static const uint8_t UP_OF_CHANGE[] = {
     [BL_A_RECALL] = BL_UP_RECALL, [BL_A_KEY] = BL_UP_KEY, [BL_A_DENSITY] = BL_UP_DENSITY,
     [BL_A_BPART] = BL_UP_BPART, [BL_A_VOICE_ACTIVE] = BL_UP_VOICE_ACTIVE, [BL_A_TENSION] = BL_UP_TENSION,
     [BL_A_SCENE] = BL_UP_SCENE,
+    [BL_A_COMPOSER] = BL_UP_COMPOSER,
 };
 
 /* snapshot(): the voices (pendingRequest: blank before regenerate), upcomingEvents() (the changes, the on/offs, the
@@ -960,7 +1268,11 @@ void bl_live_status(const bl_live_t *e, bl_status_t *out)
     }
     out->nup = (uint8_t)n;
     out->has_arr = e->has_arr;
-    if (e->has_arr) {
+    out->composing = e->project.composer.enabled;
+    out->composition_cycle = e->composer.cycle;
+    out->pending_section = e->composer.pending_stage;
+    out->manual_voices = e->composer.manual_voices;
+    if (e->has_arr || out->composing) {
         out->phase = e->arr.phase;
         out->bars_in_phase = e->arr.bars_in_phase;
         out->bars_until_change = e->arr.bars_until_change;
@@ -1141,6 +1453,7 @@ void bl_live_text(const bl_live_t *e, void (*line)(void *ctx, const char *text),
         case BL_UP_KEY: put_i(&l, u->root); break;
         case BL_UP_DENSITY: put_density(&l, u->value); break;
         case BL_UP_VOICE_ACTIVE:
+        case BL_UP_COMPOSER:
         case BL_UP_ARRANGER: put_w(&l, u->on ? "on" : "off"); break;
         case BL_UP_TENSION: put_w(&l, u->voice < BL_NVIDS ? BL_VID_NAME[u->voice] : "-"); break;
         case BL_UP_SCENE: put_w(&l, u->scene < BL_NSCNS ? BL_SCN_NAME[u->scene] : "-"); break;

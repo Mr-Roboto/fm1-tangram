@@ -4,8 +4,8 @@
  * Flat representative colors replace the original subtle gradients. */
 
 enum { TGM_SPLASH_SOURCE = 240, TGM_SPLASH_LOGO = 72 };
-#define TGM_SPLASH_BG RGB(7, 19, 23)
-#define TGM_SPLASH_OUTLINE RGB(3, 16, 19)
+#define TGM_SPLASH_BG RGB(0, 0, 0)
+#define TGM_SPLASH_OUTLINE RGB(0, 0, 0)
 
 typedef struct {
     uint8_t n;

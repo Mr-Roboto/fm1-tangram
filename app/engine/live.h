@@ -45,7 +45,7 @@ typedef struct {
 /* LiveEngine.Action, the ported ones */
 enum {
     BL_A_TRANSPOSE, BL_A_REGENERATE, BL_A_BLANK, BL_A_LOCK, BL_A_RECALL, BL_A_KEY, BL_A_DENSITY, BL_A_BPART,
-    BL_A_VOICE_ACTIVE, BL_A_TENSION, BL_A_SCENE, BL_A_ARRANGER, BL_A_ADVANCE
+    BL_A_VOICE_ACTIVE, BL_A_TENSION, BL_A_SCENE, BL_A_ARRANGER, BL_A_ADVANCE, BL_A_COMPOSER
 };
 
 /* an action: voice a BL_VID_ (regenerate, blank, lock, voice active, tension), scene a BL_SCN_ (scene); arg the
@@ -109,6 +109,7 @@ typedef struct bl_live {
         uint8_t midi;               /* resolved in the voice's effective frame at the action tick */
         uint8_t channel;
         bl_delay_t delay;
+        uint32_t source_onset;      /* voice-local event position captured at the action tick */
     } tension_note[BL_MAX_TENSION];
     uint8_t nmorph;
     bl_smorph_t morph[BL_MAX_MORPHS];
@@ -116,6 +117,7 @@ typedef struct bl_live {
     bl_state_t theme;               /* themeSnapshot: the reprise */
     uint8_t has_arr;
     bl_arr_t arr;
+    bl_composer_t composer;
     bl_tick_t arr_cursor;           /* arrangementCursor */
     uint8_t nadv, nen;
     bl_tick_t adv[BL_MAX_ADVANCES];
@@ -128,6 +130,10 @@ typedef struct bl_live {
 
 /* LiveEngine(project:) */
 void bl_live_init(bl_live_t *e, const bl_project_t *p);
+int bl_live_set_composer(bl_live_t *e, const bl_compcfg_t *cfg, bl_tick_t request);
+int bl_live_select_composer_stage(bl_live_t *e, int section, bl_tick_t request);
+/* Same product used by the renderer and suppression display. */
+f64 bl_live_voice_density(const bl_live_t *e, int voice);
 /* enqueue(_:atTick:): 0, or -1 when the action's queue is full and it is dropped (Swift would keep it) */
 int bl_live_enqueue(bl_live_t *e, const bl_action_t *a, bl_tick_t request);
 /* render(range: lo..<hi): the notes sorted by (at, voice id, MIDI note), stably; windows must follow one another.
@@ -154,7 +160,7 @@ enum { BL_REQ_NONE, BL_REQ_BLANK, BL_REQ_REGENERATE };
 /* UpcomingEvent.Kind, the ported ones, and their raw values */
 enum {
     BL_UP_KEY, BL_UP_RECALL, BL_UP_DENSITY, BL_UP_BPART, BL_UP_VOICE_ACTIVE, BL_UP_TENSION, BL_UP_ARRANGER,
-    BL_UP_ADVANCE, BL_UP_SCENE, BL_NUPS
+    BL_UP_ADVANCE, BL_UP_SCENE, BL_UP_COMPOSER, BL_NUPS
 };
 extern const char *const BL_UP_RAW[BL_NUPS];
 
@@ -190,6 +196,9 @@ typedef struct {
     bl_key_t key;
     int32_t bar;
     uint8_t scene;
+    uint8_t composing;
+    uint8_t pending_section; /* chronological index + 1, zero: none */
+    uint32_t composition_cycle, manual_voices;
 } bl_status_t;
 
 void bl_live_status(const bl_live_t *e, bl_status_t *out);

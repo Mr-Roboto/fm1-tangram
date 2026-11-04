@@ -149,6 +149,31 @@ The selected voice: its strip, generation, lifecycle (plays left or established,
 (regenerate, a blank cycle) and its CC. Knobs: **Channel** (editable, 1 to 16), and shown only: Loop, Register,
 Generator. Registers are named with C3 = 60 (as Ableton and Logic): middle C is C3.
 
+### Tangram Composer and voice density
+
+For current hardware mappings, see [FM-1 pages](ui-pages.md). GLO now cycles
+SETUP / APPEARANCE: APPEARANCE K1 selects CLASSIC, GRAPHITE, AMBER, NOCTURNE,
+MONO or FIRE; K2 retries a failed global save. All themes use pure black backgrounds.
+Appearance updates live and saves after
+250 ms settled while stopped. Wait for SAVED before switching off. Theme and
+clock choices are device-global, independent of projects and snapshots.
+Hold a button for help; keep holding for another card every five seconds.
+Help follows the current subpage. See [themes and help](ui-themes-and-help.md)
+for persistence, coverage and verification limits.
+
+HOME now cycles QUICK → PLAY → COMPOSE. COMPOSE K1 enables Composer, K2 selects
+the form while stopped, K3 selects AUTO or a 4–64-bar phrase unit, and K4 sets
+Evolution. Composer runs continuous Intro, A, Development, B, Breakdown, Return
+and Outro sections through the existing arranger boundary and phase-preserving
+theme snapshot. It defaults OFF.
+
+ENV ROUTING retains channel/register on K1/K2; K3 is selected-voice density and
+K4 is Composer Tension. MASTER remains global density/Dynamics. Effective
+density is MASTER × voice × section activity. Manual edits and LOCK take
+ownership from Composer until the next performance. See [Composer](composer.md)
+for behavior, migration and deferred features. This implementation has not been
+built or verified on hardware.
+
 ### ARP: Pattern
 
 ![The Pattern page](img/screen-pattern.png "Pattern")

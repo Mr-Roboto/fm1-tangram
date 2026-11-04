@@ -1,10 +1,11 @@
 # Global device settings (GLOBAL1 / GLOBAL2 / GLOBAL3)
 
 Status: **NOT TESTED**. This stage stores INTERNAL/EXTERNAL synchronization and
-USB/TRS/BOTH clock input, defaulting to INTERNAL/BOTH. These settings are now
+USB/TRS/BOTH clock input and UI theme, defaulting to INTERNAL/BOTH/CLASSIC. These settings are now
 authoritative for runtime, existing GLO controls and host clock-setting commands.
-The project record is format 6, with read-only compatibility for format 5; old
-project clock values are ignored. Snapshot slot format 8 is unchanged.
+The musical project record is format 7, with readers for formats 5/6; old
+project clock values are ignored. Musical snapshot slots use format 9 with a
+format-8 reader. Global theme storage changes neither musical format.
 
 `OBJ_DEVICE_SETTINGS` is appended as ID 8; IDs 0..7 and their locations remain
 unchanged. Its A/B sectors are `[0xCE000,0xCF000)` and `[0xCF000,0xD0000)`.
@@ -19,15 +20,19 @@ Static allocation review against the pinned platform establishes:
   user-data range from its write window. The package's flash image is 0x93000
   bytes; its VM descriptor is not a settings payload written over this pair.
 
-The seven-byte payload is little-endian magic `TGDS`, format byte 1, sync byte
-and port-mask byte. There are no reserved fields or serialized padding.
+The eight-byte payload is little-endian magic `TGDS`, format byte 2, sync byte,
+port-mask byte and theme byte (0..5). IDs 0..4 retain their meanings; FIRE is 5.
+The seven-byte format-1 reader preserves
+its clock choices and defaults theme to CLASSIC. There are no reserved fields
+or serialized padding; loading older settings does not write flash.
 Missing, malformed, oversized or unsupported records select defaults without
 writing flash at boot. `device_settings_init()` returns 1 for that fallback,
 otherwise 0, and is called during `app_init()` after `rt_init()`. The loaded
 settings are applied immediately afterward, before project load/application.
 
 `device_settings_get()` returns the current value; `device_settings_set()`
-validates both fields atomically and applies accepted changes to runtime.
+validates all three fields atomically. Clock changes apply to runtime; a
+theme-only edit bypasses clock application and updates display tokens directly.
 Mode changes are rejected during playback or a pending external Start; routing
 edits retain the existing live behavior. Unchanged edits do nothing; edits returning
 to the last saved value cancel pending persistence. `device_settings_poll()`
@@ -42,6 +47,10 @@ negative status is latched and logged once, preventing repeated flash attempts.
 edit also rearms it. `device_settings_status()` exposes clean (0), pending (1)
 or a negative save error. Flash failures cannot guarantee the last edit survives
 a restart. Edits made shortly before power loss may not yet have been saved.
+GLO APPEARANCE K1 selects theme and K2 retries a failed global save. Live edits
+remain pending until transport is stopped and releases are drained. Older
+firmware without a format-2 reader falls back to its defaults on this record;
+no downgrade writer is provided.
 
 Host storage survives simulated `reboot` within a process, not separate simulator
 processes, and does not emulate physical torn writes. The pinned update path

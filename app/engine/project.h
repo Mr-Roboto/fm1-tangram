@@ -17,6 +17,7 @@
 #include "arrange.h"
 #include "cc.h"
 #include "delay.h"
+#include "composer.h"
 
 /* The voice ids and scene names of the templates. An action names a voice or a scene by one of these codes rather
  * than by its place in a project, because the app's project and the running engine's may differ (a template loaded
@@ -76,6 +77,8 @@ typedef struct {
     f64 ratchet_p;
     int8_t scene_by_phase[7];
     bl_scene_t scene[BL_MAX_SCENES];
+    bl_compcfg_t composer;       /* optional: shares the existing AUTO boundary, off by default */
+    uint8_t composer_start;     /* session-local chronological section, not serialized */
 } bl_project_t;
 
 /* the templates: Project.demo, .fullEnsemble, .ambientDrift */

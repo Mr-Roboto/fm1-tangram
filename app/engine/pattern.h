@@ -65,6 +65,8 @@ int bl_first_sounding(const bl_pattern_t *p);
  * Direct rendering passes the loop ordinal relative to its cursor's origin.
  * Non-ARP/MOTIF callers leave these fields zero. */
 bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops);
+/* Source index selected by the same traversal; -1 for an invalid onset. */
+int bl_direction_index(const bl_pattern_t *p, int onset, bl_tick_t completed_loops);
 void bl_direction_advance(bl_pattern_t *p);
 int bl_direction_valid(const bl_pattern_t *p);
 /* Available source positions, at least one even for an empty pattern. PHASE

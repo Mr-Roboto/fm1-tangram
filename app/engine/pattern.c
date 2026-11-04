@@ -72,12 +72,12 @@ int bl_direction_valid(const bl_pattern_t *p)
     return p->direction == BL_DIR_M_PENDULUM ? p->direction_cursor <= period : p->direction_cursor < period;
 }
 
-bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops)
+int bl_direction_index(const bl_pattern_t *p, int onset, bl_tick_t completed_loops)
 {
-    if (onset < 0 || onset >= p->n) return (bl_pitch_t){0};
+    if (onset < 0 || onset >= p->n) return -1;
     if ((p->generator != BL_GEN_ARP && p->generator != BL_GEN_MOTIF) ||
         (p->direction == BL_DIR_UP && !p->pitch_phase) || p->direction >= BL_NDIRS ||
-        (!p->pitch_phase && !bl_direction_valid(p))) return p->note[onset].pitch;
+        (!p->pitch_phase && !bl_direction_valid(p))) return onset;
     int n = direction_tones(p), period = direction_period(p);
     /* Reduce before multiplication: bounded 32-bit arithmetic on the FM-1.
      * Live rendering passes zero (its cursor is advanced at boundaries); direct
@@ -85,7 +85,7 @@ bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t comple
     int step = p->direction_cursor + onset + (int)bl_floor_mod(completed_loops, period) * p->n +
         p->pitch_phase % bl_pitch_phase_count(p), index;
     if (p->direction == BL_DIR_M_PENDULUM && !step && completed_loops) step = period;
-    if (n < 2) return p->note[0].pitch;
+    if (n < 2) return 0;
     switch (p->direction) {
     case BL_DIR_UP: index = step % n; break;
     case BL_DIR_DOWN: index = n - 1 - step % n; break;
@@ -97,9 +97,15 @@ bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t comple
         index = phase < n ? phase : period - phase;
         break;
     }
-    default: return p->note[onset].pitch;
+    default: return onset;
     }
-    return p->note[index].pitch;
+    return index;
+}
+
+bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t completed_loops)
+{
+    int index = bl_direction_index(p, onset, completed_loops);
+    return index < 0 ? (bl_pitch_t){0} : p->note[index].pitch;
 }
 
 void bl_direction_advance(bl_pattern_t *p)

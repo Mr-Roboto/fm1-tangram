@@ -112,14 +112,18 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
             int index = total++;
             if (index >= max) continue;
             bl_pitch_t pitch = note->pitch;
+            int source = occ[i].index;
             if ((p->generator == BL_GEN_ARP || p->generator == BL_GEN_MOTIF) &&
-                (p->direction != BL_DIR_UP || p->pitch_phase))
-                pitch = bl_direction_pitch(p, occ[i].index,
+                (p->direction != BL_DIR_UP || p->pitch_phase)) {
+                source = bl_direction_index(p, occ[i].index,
                     bl_floor_div(occ[i].at + p->start_offset, p->length));
+                pitch = p->note[source].pitch;
+            }
             if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));
             int32_t resolved = bl_resolve(key, pitch, v->ref_c);
             out[index] = (bl_note_t){occ[i].at, note->gate, voice_index, bl_fold(v->reg_low, v->reg_high, resolved),
-                                     note->velocity, accent, note->ratchet, v->delay, v->midi_channel};
+                                     note->velocity, accent, note->ratchet, v->delay, v->midi_channel, 0};
+            out[index].source_onset = (uint32_t)(p->note[source].position + 1);
         }
     }
     return total;

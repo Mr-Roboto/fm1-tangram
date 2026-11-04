@@ -184,8 +184,8 @@ def manual(md_path, out, lang, version, repo):
 
 # ---------------------------------------------------------------- the installer
 # fm1-base's page, filled in as make_site.py fills it (the name as Berlinan writes it), in the site's colours: only
-# styles and a header with the way back are added; the identity check, the install and the way back to M-VAVE's
-# firmware are fm1-base's, unchanged. The Czech page adds a "cs" strings table and starts in it (Czech, English,
+# styles and a header with the way back are added. A local adapter handles discovery and restart confirmation;
+# the update protocol and stock-firmware safety checks remain fm1-base's. The Czech page adds a "cs" strings table (Czech, English,
 # 日本語 in turn on the language button).
 THEME = """<style>
   /* Berlinan's site (assets/site.css): its night, its ink and its tangerine, over fm1-base's colours */
@@ -303,7 +303,11 @@ def installer(lang, version, pkg_name, product, conf, out):
         page = once(page, re.compile(r"<footer>.*?</footer>", re.S), CS_FOOTER, "its footer")
     # as make_site.py fills it in, then the library and the package's metadata
     lib = strip_module((BASE / "web" / "fm1pkg.js").read_text(encoding="utf-8")) + "\n" + \
-        strip_module((BASE / "web" / "fm1ota.js").read_text(encoding="utf-8"))
+        strip_module((BASE / "web" / "fm1ota.js").read_text(encoding="utf-8")) + "\n" + \
+        (SRC / "tools" / "installer-discovery.js").read_text(encoding="utf-8")
+    page = once(page, "const up = new Updater(midi, log);",
+                "const up = new TangramUpdater(midi, log, product);", "the install discovery adapter")
+    page = once(page, "new Updater(midi).find", "new TangramUpdater(midi).find", "the report discovery adapter")
     meta = json.dumps({"version": version, "product": product, "pkg": root + "firmware/" + pkg_name})
     repo, credits = conf.get("repo", ""), conf.get("credits", "")
     for key, val in (("NAME", "Berlinan"), ("REPO", repo), ("REPO_SHORT", re.sub(r"^https?://", "", repo)),

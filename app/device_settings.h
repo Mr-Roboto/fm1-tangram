@@ -4,17 +4,21 @@
 #include "plat.h"
 
 enum { DEVICE_SYNC_INTERNAL, DEVICE_SYNC_EXTERNAL };
+enum { DEVICE_THEME_CLASSIC, DEVICE_THEME_GRAPHITE, DEVICE_THEME_AMBER,
+       DEVICE_THEME_NOCTURNE, DEVICE_THEME_MONO, DEVICE_THEME_FIRE, DEVICE_NTHEMES };
+extern const char *const DEVICE_THEME_NAME[DEVICE_NTHEMES];
 enum {
     DEVICE_CLOCK_USB = 1u << PORT_USB,
     DEVICE_CLOCK_TRS = 1u << PORT_TRS,
     DEVICE_CLOCK_BOTH = DEVICE_CLOCK_USB | DEVICE_CLOCK_TRS
 };
 typedef struct {
-    uint8_t sync, ext_ports;
+    uint8_t sync, ext_ports, theme;
 } device_settings_t;
 
-/* Main-loop API. Accepted edits apply to the global runtime clock settings.
- * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH.
+/* Main-loop API. Clock edits apply to runtime; theme-only edits affect drawing.
+ * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH/CLASSIC.
+ * Format 1 imports clock choices with CLASSIC; format 2 also stores theme.
  * set rejects invalid values or a mode change during playback/pending Start
  * (-1); an accepted edit (0) is saved after settling. Port-only edits retain
  * the existing live input-routing behavior.
