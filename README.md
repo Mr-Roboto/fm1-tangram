@@ -1,74 +1,183 @@
-# Tangram for the M-VAVE FM-1
+![FM-Tangram logo](app/site/assets/tangram-logo.svg)
 
-Tangram is an independent firmware fork of [Berlinan for the FM-1](https://github.com/jiripisa/fm1-berlinan)
-by Jiří Píša, maintained at [Mr-Roboto/fm1-tangram](https://github.com/Mr-Roboto/fm1-tangram).
-`main` preserves the upstream baseline; Tangram development takes place on `dev/tangram`.
+# FM-Tangram
 
-Its build name is `TANGRAM`, with USB manufacturer `Mr. Roboto` and product `FM-Tangram`.
-The identity prefix is `FM-1_975`: development builds use `FM-1_97500`, and releases append major, minor
-and patch as two digits each (`FM-1_975XXYYZZ`). The planned v0.1.0 identity is `FM-1_975000100`.
-The pinned fm1-base identity generator supports this format without changes.
+**Generative MIDI Sequencer & Composer for the M-VAVE FM-1**
 
-This identity change retains Berlinan's engine, update loader and MIDI functionality. Original copyright
-notices, Jiří Píša's attribution, GPL-2.0-or-later licensing and dependency licences are preserved.
-The documentation and website links below describe the inherited Berlinan baseline; its hosted installer
-and emulator serve upstream Berlinan.
+*Berlin School · Ambient · Minimalism · Evolving electronic music*
 
-## Berlinan heritage
+FM-Tangram is a standalone, performance-oriented MIDI sequencer and generative composition environment for the **M-VAVE FM-1**. It combines independently evolving voices, musical patterns, rhythmic variation and a multi-stage Composer to create long-form electronic performances directly on the hardware — without a computer in the performance workflow.
 
-Berlinan is a generative sequencer in the Berlin School tradition: a small ensemble of voices that repeat, phase
-against each other on loops of unequal length, and earn their mutations over time. This is its firmware for the
-M-VAVE FM-1, so the sequencer runs on its own box and needs no laptop. The FM-1 makes no sound: plug it by USB
-into a MIDI router, and each voice goes out on its own MIDI channel to your synthesizers. You play it from the
-panel: the keys, the buttons, the encoders and the screen.
+**Tangram is MIDI-only.** It generates no audio and has no internal synthesizer. Connect a synthesizer, drum machine, sampler or MIDI-compatible software instrument to hear its output. Tangram sends its musical MIDI output over USB; external clock can be received over USB or TRS MIDI.
 
-It plays what Berlinan for macOS plays: the same template and seed, with the
-same actions at the same bars, give the same notes and the same CC, event for event. Tests check this against the
-unchanged Swift engine. It starts from Berlinan's built-in templates and a seed; projects do not move between the
-Mac and the FM-1. The FM-1 is the MIDI clock master (clock, Start and Stop over USB), or follows an incoming
-clock from USB or the TRS jack. SAVE keeps the state across power-off.
+> **Development status — 5 November 2026:** Active pre-release development on [`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram). The core sequencer, Composer, Heartbeat drums, MIDI delay, display and project saving have been used on real FM-1 hardware. Features described as *planned* below are not implemented yet.
 
-Status: complete for its first version: the engine, the panel and the seven pages, MIDI out over USB, the clock
-(INT and EXT), SAVE and the six slots. What it leaves out (harmony modes, melody, the MIDI echo, Link, capture) is
-listed in the manual.
+## Musical approach
 
-**Website: <https://jiripisa.github.io/fm1-berlinan/>** (in English and [Czech](https://jiripisa.github.io/fm1-berlinan/cs/)).
-Install it from the browser: open the [install page](https://jiripisa.github.io/fm1-berlinan/install/) in Chrome or
-Edge, connect the FM-1 by USB and press Install; the same page puts M-VAVE's firmware back. You can also
-[try it in the browser](https://jiripisa.github.io/fm1-berlinan/emu/), its MIDI out to your synths over Web MIDI.
+Tangram is designed for music that **develops instead of merely repeats**:
 
-Upstream Berlinan's identity is `FM-1_23XXYYZZ` (0.5.1 answers `FM-1_23000501`). It reads no other firmware's projects or samples: a
-saved record it does not recognise, another firmware's, is ignored, and it starts on the Demo trio with a fresh seed.
+- Multiple voices play patterns of different lengths and retain their own phases, allowing slowly shifting relationships and polymetric movement.
+- ARP and MOTIF generators support different musical traversal directions, timing and groove.
+- Seed-based, controlled variation supports coherent, reproducible starting material.
+- The Composer structures a performance into sections, with changing activity, tension and timing while respecting live intervention.
+- MIDI delay, density and ratcheting offer further rhythmic complexity without requiring additional audio effects inside the FM-1.
 
-## Where to read
+The goal is an instrument that can sustain a musical idea, transform it gradually, and still give the performer immediate control.
 
-- [docs/MANUAL.md](docs/MANUAL.md): installing it, the controls, the pages, saving, sync, and how it differs from
-  Berlinan on the Mac. In Czech: [docs/MANUAL.cs.md](docs/MANUAL.cs.md).
-- The site: `tools/site.sh [VERSION]` builds it in `app/build/site` (the release package, the emulator, fm1-base's
-  installer and Berlinan's own pages, `app/site/`, through `tools/site_pages.py`); `tools/publish.sh VERSION` pushes
-  it to the repository's gh-pages branch. The drawing of the panel is `tools/gen_panel.py`'s.
-- [The design](docs/superpowers/specs/2026-10-26-berlinan-fm1-design.md) (the spec) and
-  [the plan](docs/superpowers/plans/2026-10-26-berlinan-fm1.md).
-- [tools/reference](tools/reference): RefTool, a small Swift program over the unchanged Berlinan engine (the pinned
-  commit, fetched with `git archive`), which writes the reference renders. `tools/reference/make_refs.sh` regenerates
-  them; nothing is written into the Berlinan checkout.
-- [tests/equiv/README.md](tests/equiv/README.md): how equivalence is tested. A script (a template, a seed, actions at
-  ticks) is played by the C engine and compared, line by line, with what the Swift engine rendered for it
-  (`tests/equiv/*.ref`, committed, so the tests need no Swift). The runtime's MIDI is compared the same way.
-- [BUILDING.md](BUILDING.md): prerequisites, the build, the tests.
+## Core features
 
-## Building and testing
+| Area | Current capabilities |
+| --- | --- |
+| **Voices** | Up to seven instrument roles, with independent MIDI channels, generators, pattern lengths and phases |
+| **Generators** | ARP, MOTIF and further inherited generative modes; configurable direction, groove, rate, gate, register and pitch phase where supported |
+| **Musical control** | Root, scale, voice density, global density, ratcheting, LOCK, MUTATE, DICE and undo |
+| **Composer** | Seven musical sections, selectable starting section, activity ramps, controlled development, tension and phase-preserving return of earlier motifs |
+| **Drums** | HEARTBEAT: four General MIDI drum instruments on one MIDI track, with selectable parts and groove |
+| **MIDI effects** | Per-voice MIDI delay with time, feedback and decay controls |
+| **Performance display** | Individual pattern strips, source-note and timing playheads, suppressed-note indication and Composer counters |
+| **Interface** | FM-1 buttons and encoders, contextual on-device help and six display themes |
+| **Persistence** | Current project settings and six musical snapshot slots; device-wide settings stored separately |
+| **Clock** | Internal MIDI clock or external sync through USB/TRS input |
 
-[BUILDING.md](BUILDING.md) has the prerequisites. In short:
+Tangram uses the existing FM-1 panel, screen and controls. No laptop, DAW or companion application is required to operate the sequencer after installation.
 
+## Voices and built-in templates
+
+Tangram currently defines these **seven roles**: **Pluck 1, Pluck 2, Bass, Pad, Lead, Drone and Heartbeat**. Not every role needs to be active in a performance.
+
+The built-in templates are *starting configurations*, not user performance-preset slots:
+
+| Template | Voices | Instrumentation |
+| --- | ---: | --- |
+| **String Trio** | 3 | Pluck 1, Pluck 2, Bass |
+| **Full Ensemble** | 6 | Pluck 1, Pluck 2, Bass, Pad, Lead, Heartbeat |
+| **Ambient Drift** | 4 | Drone, Pluck 1, Pluck 2, Pad |
+
+**String Trio** is the default startup template. The internal architecture supports up to seven roles even though the current templates use fewer at once.
+
+## Tangram Composer
+
+The Composer is an optional higher-level musical controller built on the existing sequencer and arranger. It is intended for extended performances rather than a fixed, linear song file.
+
+Its form follows:
+
+**INTRO → A → DEVELOPMENT → B → BREAKDOWN → RETURN → OUTRO → INTRO …**
+
+Depending on the selected form, phrase length, evolution level and tension, the Composer can:
+
+- Bring voices in and out through staggered activity ramps.
+- Develop eligible melodic patterns through controlled loop-length, rate and register changes.
+- Build harmonic tension in B and release it in BREAKDOWN.
+- Restore captured thematic material in RETURN while preserving the relevant musical phases.
+- Respect LOCK and manual edits instead of overwriting the performer's decisions.
+
+A starting section can be selected from **HOME COMPOSE** before PLAY. The Composer currently does **not** save that starting-section choice as part of the persistent project record; including it in future Performance Presets is planned.
+
+**TIME**, **PART** and **TOTAL** counters show elapsed playback time, bars in the current section, and total bars. Their STOP/PLAY behavior was checked successfully on FM-1 hardware on 5 November 2026.
+
+Further details: [Composer](docs/composer.md) · [Composer Phase II](docs/composer-phase-ii.md).
+
+## HEARTBEAT drum voice
+
+HEARTBEAT is a single MIDI drum voice that produces four General MIDI instruments without harmonic transposition:
+
+| Instrument | MIDI note |
+| --- | ---: |
+| Bass drum | 36 |
+| Snare drum | 38 |
+| Closed hi-hat | 42 |
+| Open hi-hat | 46 |
+
+The **PARTS** control enables progressively larger subsets of the kit; **GROOVE** offers **SPARSE**, **STEADY** and **DRIVE**. The basic kick and snare pulse is retained while the hi-hat activity varies. Full Ensemble normally assigns HEARTBEAT to MIDI channel 10, but channel assignments are configurable.
+
+See [Heartbeat drums](docs/heartbeat.md).
+
+## Playing and editing on the FM-1
+
+The interface is organized into the FM-1's existing sections. Some sections have multiple subpages:
+
+| Section | Purpose |
+| --- | --- |
+| **HOME** | QUICK voice controls, PLAY direction/delay controls, COMPOSE configuration and counters |
+| **ENV** | TIMING (rate, gate, loop, phase) and ROUTING (channel, register, voice density, tension) |
+| **ARP** | Generator, harmony and direction controls |
+| **LFO** | CC lane and scene information |
+| **SEQ** | Musical motion, groove and loop-related controls |
+| **FX** | Per-voice MIDI delay settings |
+| **GLO** | Global setup and APPEARANCE |
+
+The **MASTER** control adjusts global musical density rather than audio volume. Each voice also has its own density setting; when Composer is active, section activity contributes another factor. Musical transport and phases continue even when new notes are suppressed.
+
+The display distinguishes the **red source-note playhead** (the note position actually played) from the **grey time playhead** (the advancing pattern position). These markers remain independent of MIDI delay echoes.
+
+Six display themes are available: **CLASSIC, GRAPHITE, AMBER, NOCTURNE, FIRE and MONO**. Themes and clock settings are device-global, not part of the musical project.
+
+For detailed encoder assignments and contextual behavior, see [FM-1 pages and controls](docs/ui-pages.md) and [Themes and help](docs/ui-themes-and-help.md).
+
+## Saving: projects, snapshots and planned presets
+
+Tangram currently distinguishes between:
+
+1. **The current project:** SAVE stores its musical configuration, including voice parameters, MIDI routing, delay settings, density, arranger/Composer configuration and seed. If SAVE is requested during playback, the flash write waits for a safe stop.
+2. **Six snapshot slots:** These store and recall musical engine states. They are separate from the planned bank of named Performance Presets.
+3. **Global device settings:** Clock-related settings and display theme are persisted independently of the project.
+
+### Planned: Performance Presets
+
+A future dedicated bank of **10 named Performance Presets** is being designed. Its purpose is to store and recall complete *starting configurations* — including the selected Composer starting section — independently of the three built-in templates. **This bank is not yet implemented.**
+
+Resumable Composer checkpoints and recording every live control movement are **not** part of the current plan.
+
+## Build and installation
+
+The repository uses [fm1-base](https://github.com/charlesvestal/fm1-base) as a Git submodule, with the JieLi toolchain and AC79 SDK supplied separately. Development has been carried out under **WSL2 / Ubuntu**; the build requires Python 3 with Pillow and the dependencies described by fm1-base.
+
+```sh
+git clone --recursive https://github.com/Mr-Roboto/fm1-tangram.git
+cd fm1-tangram
+git switch dev/tangram
+./build.sh
 ```
-git submodule update --init --recursive
-./build.sh                    # app/build/tangram.fwsc
-sh tests/run_tests.sh         # the host tests and the simulator scenarios
+
+The development firmware package is generated as:
+
+```text
+app/build/tangram.fwsc
 ```
 
-## Licence
+The project also contains a Python USB-MIDI firmware installation adapter at [`tools/install_firmware.py`](tools/install_firmware.py). For the Windows/WSL workflow, it is run with native **Windows Python** and the required MIDI dependencies; it uses the existing fm1-base update protocol. A project-specific web installation page can also be generated from the site sources.
 
-GPL-2.0-or-later (see [LICENSE](LICENSE)). It is built on [fm1-base](https://github.com/charlesvestal/fm1-base)
-(`base/`, MPL-2.0) and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments); they keep their own
-licences.
+**Firmware flashing is at your own risk.** Check the target hardware, installed firmware and update procedure before installing. Never assume the MIDI port name alone proves device identity.
+
+Focused host tests are kept in [`tests/host/`](tests/host/); broad test suites are not required for every small change. This repository's inherited [`BUILDING.md`](BUILDING.md) still contains historical Berlinan-specific paths and should not be treated as an authoritative Tangram build-output listing until updated.
+
+## Development status and roadmap
+
+**Implemented and hardware-used:** multivoice sequencing, ARP/MOTIF, Composer, HEARTBEAT drums, MIDI delay, per-voice/global density, the dual pattern playheads, six display themes, project saving and Python firmware installation.
+
+**Next priority:** named Performance Presets, with a small dedicated bank that does not alter the existing instrument templates or six musical snapshot slots.
+
+**Deferred:** live Composer FORM replacement during playback, further Composer evolution, BLE-MIDI and additional instrument-role templates. There are no plans to add an internal sound engine or audio processing.
+
+This is a **pre-release development branch**, not a declared stable release. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
+
+## Project documentation
+
+- [Composer and musical form](docs/composer.md)
+- [Composer Phase II](docs/composer-phase-ii.md)
+- [HEARTBEAT drum generator](docs/heartbeat.md)
+- [FM-1 UI controls](docs/ui-pages.md)
+- [MIDI delay](docs/midi-delay.md)
+- [ARP](docs/arpeggiator.md) and [MOTIF](docs/motif.md)
+- [Scales](docs/scales.md), [Directions](docs/directions.md) and [Grooves](docs/grooves.md)
+- [Project record format](docs/project-format.md) and [Global settings](docs/device-settings.md)
+
+Some detailed documents originate from earlier development stages and may contain historical verification notes; the source code and confirmed hardware tests take precedence for the current branch.
+
+## Origins, acknowledgements and licence
+
+Tangram builds on the original [Berlinan firmware for the FM-1](https://github.com/jiripisa/fm1-berlinan) and the Berlinan musical engine by **Jiří Píša**. The original project provides important foundations for its generative sequencer, templates and musical behavior. Tangram extends that foundation with its own Composer developments, generators/controls, MIDI effects and interface work. The original author's attribution and copyright notices remain in the source.
+
+Tangram also depends on [fm1-base](https://github.com/charlesvestal/fm1-base) by **Charles Vestal**, components originating in **Felucca / felucca-bsp** by **Leo Kuroshita (Hügelton Instruments)**, and Berkeley SoftFloat. These dependencies retain their respective licences and notices.
+
+**Tangram is licensed under [GPL-2.0-or-later](LICENSE).** See the repository and its submodules for applicable third-party notices.
