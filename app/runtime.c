@@ -117,6 +117,72 @@ static struct {
 } rt;
 static uint32_t rt_source_serial;        /* does not restart at Play, unlike the note registry */
 
+/* Display accounting only. No MIDI queue entries or engine state. One cue per
+ * rendered bar at most: EXT's existing 24-interval/ms rate bound and 100 ms
+ * lookahead cover fewer than 27 bars, so 32 slots include the partial window.
+ * Packed parallel arrays avoid padding each timestamp/section pair to 16 bytes. */
+#define RT_COUNT_CUES 32
+#define RT_COUNT_ON 8u
+static struct {
+    bl_tick_t total, part, at[RT_COUNT_CUES];
+    uint32_t seconds;
+    uint16_t ms;
+    uint8_t section, composing, rendered, qr, qn;
+    uint8_t cue[RT_COUNT_CUES];
+} rt_count;
+
+static void rt_count_clear(void)
+{
+    memset(&rt_count, 0, sizeof rt_count);
+    rt_count.section = rt_count.rendered = 0xFFu;
+}
+
+static void rt_count_apply(uint8_t cue)
+{
+    rt_count.composing = (cue & RT_COUNT_ON) != 0;
+    if (rt_count.composing) {
+        uint8_t section = cue & 7u;
+        if (section != rt_count.section) rt_count.part = 0;
+        rt_count.section = section;
+    }
+}
+
+/* Tick context: split even a clock-pulse jump at every due section boundary.
+ * Counters use sounding time, never the engine's future rendered bar count. */
+static void rt_count_advance(bl_tick_t lo, bl_tick_t hi)
+{
+    if (hi < lo) return;
+    while (rt_count.qn && rt_count.at[rt_count.qr] <= hi) {
+        bl_tick_t at = rt_count.at[rt_count.qr];
+        if (at > lo) {
+            rt_count.total += at - lo;
+            if (rt_count.composing) rt_count.part += at - lo;
+            lo = at;
+        }
+        rt_count_apply(rt_count.cue[rt_count.qr]);
+        rt_count.qr = (uint8_t)((rt_count.qr + 1u) % RT_COUNT_CUES);
+        rt_count.qn--;
+    }
+    rt_count.total += hi - lo;
+    if (rt_count.composing) rt_count.part += hi - lo;
+}
+
+/* Main loop, after rendering the window beginning at at. Windows cannot cross
+ * a bar, so the final Composer section is the one starting at this window. */
+static void rt_count_window(bl_tick_t at)
+{
+    uint8_t cue = rt_eng.composer.section | (rt_eng.project.composer.enabled ? RT_COUNT_ON : 0);
+    uint32_t f = plat_lock();
+    if (rt.playing && cue != rt_count.rendered && rt_count.qn < RT_COUNT_CUES) {
+        int i = (rt_count.qr + rt_count.qn) % RT_COUNT_CUES;
+        rt_count.at[i] = at;
+        rt_count.cue[i] = cue;
+        rt_count.qn++;
+        rt_count.rendered = cue;
+    }
+    plat_unlock(f);
+}
+
 #ifdef PLAT_HOST
 static void host_sent(bl_tick_t tick, uint32_t pkt);   /* host.c: dumpmidi */
 static bl_tick_t (*rt_host_window)(bl_tick_t head);   /* host.c: a test's hook at each window's start (its actions
@@ -292,6 +358,7 @@ static void rt_purge(uint8_t vid, uint32_t ch)
 /* the transport stops (from the tick or the main loop, locked): Stop (INT), the flush, nothing more to send */
 static void rt_halt(void)
 {
+    /* Keep final counter statistics/fractions until a newly accepted PLAY. */
     rt.playing = 0;
     rt.stop_at = -1;
     rt.ext_run = 0;
@@ -311,6 +378,7 @@ static void rt_clock(uint32_t now)       /* the sounding tick, one ms on */
             rt.started = 1;
         return;
     }
+    bl_tick_t before = rt.tick;
     rt.frac += rt.rate;
     rt.tick += rt.frac / 1000;
     rt.frac %= 1000;
@@ -327,6 +395,14 @@ static void rt_clock(uint32_t now)       /* the sounding tick, one ms on */
         && rt.tick >= rt.pulse_tick + RT_PULSE) {
         rt.tick = rt.pulse_tick + RT_PULSE - 1;   /* never past the next pulse */
         rt.frac = 999;
+    }
+    if (rt.playing) {
+        if (++rt_count.ms == 1000) {
+            rt_count.ms = 0;
+            if (rt_count.seconds < UINT32_MAX) rt_count.seconds++;
+        }
+        bl_tick_t end = rt.stop_at >= 0 && rt.tick > rt.stop_at ? rt.stop_at : rt.tick;
+        rt_count_advance(before, end);
     }
 }
 
@@ -359,8 +435,13 @@ static void rt_pulse(uint32_t now)       /* EXT: an F8 from the chosen ports */
             rt.pulse_tick = r ? rt.tick + RT_PULSE - r : rt.tick;
         }
         if (rt.tick < rt.pulse_tick) {
+            bl_tick_t before = rt.tick;
             rt.tick = rt.pulse_tick;
             rt.frac = 0;
+            if (rt.playing) {
+                bl_tick_t end = rt.stop_at >= 0 && rt.tick > rt.stop_at ? rt.stop_at : rt.tick;
+                rt_count_advance(before, end);
+            }
         }
     }
     rt.last_pulse = now;
@@ -531,6 +612,7 @@ static void rt_window(bl_tick_t lo, bl_tick_t hi)
 {
     int n = bl_live_render(&rt_eng, lo - rt.origin, hi - rt.origin, rt_note, RT_NOTES), m, i, k;
     bl_tick_t t;
+    rt_count_window(lo);
     if (n > RT_NOTES) {
         rt.over += (uint32_t)(n - RT_NOTES);
         n = RT_NOTES;
@@ -643,6 +725,7 @@ static void rt_render(void)
 void rt_init(void)                       /* the Full ensemble until the saved project (project.c) gives one */
 {
     memset(&rt, 0, sizeof rt);
+    rt_count_clear();
     rt.pend_bpm = -1;
     rt.swap_tick = rt.tempo_tick = rt.stop_at = -1;
     rt.ext_ports = 1u << PORT_USB | 1u << PORT_TRS;
@@ -674,6 +757,7 @@ static void rt_start(int fa)
         return;
     }
     rt.qn = 0;
+    rt_count_clear();
     rt.swap_tick = rt.stop_at = -1;
     memset(rt.source, 0, sizeof rt.source);
     if (!rt.ext) {
@@ -710,6 +794,23 @@ void rt_stop(void)                       /* Transport.stop */
 }
 
 int rt_playing(void) { return rt.playing; }
+
+/* Scalar out-of-line division avoids the FM-1 CPU's unsafe inlined 64-bit
+ * arithmetic patterns near state loads. Copy shared ticks under the lock. */
+static __attribute__((noinline)) uint32_t rt_count_bars(bl_tick_t ticks)
+{
+    bl_tick_t bars = ticks / BL_TICKS_PER_BAR;
+    return bars > UINT32_MAX ? UINT32_MAX : (uint32_t)bars;
+}
+
+rt_counters_t rt_counters(void)
+{
+    uint32_t f = plat_lock();
+    uint32_t seconds = rt_count.seconds;
+    bl_tick_t total = rt_count.total, part = rt_count.part;
+    plat_unlock(f);
+    return (rt_counters_t){seconds, rt_count_bars(part), rt_count_bars(total)};
+}
 
 /* stopped, and what the stop sends (MIDI Stop, the flush) gone out, RT_DRAIN_MS since: a flash write, which stops
  * everything for a moment, may come now */

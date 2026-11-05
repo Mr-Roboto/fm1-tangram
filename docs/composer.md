@@ -166,13 +166,67 @@ Live cycle/RNG position is not a resumable song file. Template changes keep
 their existing reset semantics and take their own settings (templates default
 Composer OFF).
 
+## Playback counters
+
+HOME COMPOSE displays three read-only counters below its section labels:
+
+- **TIME:** accumulated actual playback time in `MM:SS` (minutes can exceed 99).
+- **PART:** completed bars played in the current heard Composer section.
+- **TOTAL:** completed bars played in this performance, including Composer OFF.
+
+The counters replace the CONTROL/MASTER status rows; all four COMPOSE encoders,
+section navigation, pending-stage display and the footer remain available. The
+screen reader also reports the counters.
+
+Accounting uses the existing 1 kHz transport callback and sounding musical ticks,
+not note activity, render-head progress, or a tempo-derived wall-time estimate.
+Preroll and stopped time are excluded. Internal tempo changes, external pulse
+correction and existing external-clock freewheel retain their current behavior.
+TIME has millisecond accounting with whole seconds displayed. Bars are whole
+4/4 bars of 3840 ticks, with fractional time/bars retained when playback stops.
+
+STOP freezes TIME, PART and TOTAL so the final performance statistics remain
+readable. It leaves fractional milliseconds, partial bars and pending counter
+cues untouched. Repeated STOP also preserves them. The selected Composer starting
+section is preserved; changing it while stopped does not erase the statistics.
+Only an accepted stopped-to-playing PLAY transition clears all counter values,
+fractions and stale cues, starting a fresh performance for the selected section.
+Repeated PLAY events while already playing do not reset anything. The existing
+preroll remains excluded from accounting. PLAY still creates its
+usual fresh musical engine; counter resets do not alter Composer or MIDI state.
+During uninterrupted playback, manual and automatic changes reset PART only at the sounding boundary,
+never during render-ahead. This also works when starting directly in B or
+Development. PART measures played bars, so it can exceed the planned section
+length during an AUTO pause. Composer OFF freezes PART while
+TIME/TOTAL continue; re-enabling in a different section resets PART.
+
+Runtime initialization begins with zero counters. Project/template replacements,
+seed changes, ordinary edits and stopped preview rebuilds do not reset the run.
+During continuous playback a different sounding section still resets PART only;
+TIME/TOTAL continue. The next accepted PLAY is the run-reset trigger.
+Nothing is added to project/slot storage,
+settings, undo state or migration logic, and no MIDI events are added.
+
+The metadata-only section cue buffer has 32 fixed slots, separate from the MIDI
+queue; runtime counter state uses approximately 320 bytes. A locked snapshot
+supplies the UI. Whole-second and displayed bar counters saturate at UINT32_MAX.
+Hardware timing overhead, firmware fit and display readability are unverified.
+
+Focused source coverage is in `tests/host/composer_counters_test.c`, with runner
+`sh tests/host/run_composer_counters.sh`. It covers all direct starting sections,
+silent playback, preroll, frozen final statistics after repeated/scheduled STOP,
+stopped section selection, fresh accepted PLAY and cleared partial bars, tempo
+changes, manual and automatic section boundaries, stale-cue clearing on PLAY, project replacement,
+external Start/Stop/Continue, pulse correction and freewheel. Neither compilation
+nor test execution was performed for this change.
+
 ## Deferred
 
 Timing evolution for legacy, multi-bar and short/irregular foundations,
 automatic pitch PHASE changes, a separate register macro, arbitrary ARP/MOTIF
 pitch mutation, resumable Composer checkpoints and live form replacement are deferred.
 Existing TIMING/MOTION controls, including 15/16 phasing, retain local-boundary
-semantics and take manual ownership. No new rates, LCM calculations or event queues
+semantics and take manual ownership. No new rates, LCM calculations or MIDI event queues
 were added. Original Note-Ons carry an extra display grid identity through the
 existing scheduling buffers. Firmware fit and runtime timing remain
 unverified until an explicitly authorized build and hardware review.

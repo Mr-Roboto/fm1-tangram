@@ -138,7 +138,7 @@ def manual(md_path, out, lang, version, repo):
 <body>
 <a class="skip" href="#content">{u["skip"]}</a>
 <header class="wrap masthead">
-  <a class="brand" href="../"><img src="{root}assets/icon.png" alt="" width="32" height="32">Berlinan FM-1</a>
+  <a class="brand" href="../"><img src="{root}assets/icon.png" alt="" width="32" height="32">FM-Tangram</a>
   <nav aria-label="{u["nav"]}">
     <a href="../">{u["overview"]}</a>
     <a href="./" aria-current="page">{u["manual"]}</a>
@@ -203,7 +203,7 @@ THEME = """<style>
 </style>
 """
 HEADER = """<header class="bl-mast">
-  <a class="bl-brand" href="../"><img src="{root}assets/icon.png" alt="" width="28" height="28">Berlinan FM-1</a>
+  <a class="bl-brand" href="../"><img src="{root}assets/icon.png" alt="" width="48" height="48">FM-Tangram</a>
   <nav aria-label="{nav}"><a href="../manual/">{manual}</a> <a href="{root}emu/">{emu}</a> <a href="{other}" hreflang="{olang}" lang="{olang}">{oname}</a></nav>
 </header>
 """
@@ -304,13 +304,14 @@ def installer(lang, version, pkg_name, product, conf, out):
     # as make_site.py fills it in, then the library and the package's metadata
     lib = strip_module((BASE / "web" / "fm1pkg.js").read_text(encoding="utf-8")) + "\n" + \
         strip_module((BASE / "web" / "fm1ota.js").read_text(encoding="utf-8")) + "\n" + \
-        (SRC / "tools" / "installer-discovery.js").read_text(encoding="utf-8")
+        (SRC / "tools" / "installer-discovery.js").read_text(encoding="utf-8") + "\n" + \
+        (SRC / "tools" / "installer-amb1.js").read_text(encoding="utf-8")
     page = once(page, "const up = new Updater(midi, log);",
                 "const up = new TangramUpdater(midi, log, product);", "the install discovery adapter")
     page = once(page, "new Updater(midi).find", "new TangramUpdater(midi).find", "the report discovery adapter")
     meta = json.dumps({"version": version, "product": product, "pkg": root + "firmware/" + pkg_name})
     repo, credits = conf.get("repo", ""), conf.get("credits", "")
-    for key, val in (("NAME", "Berlinan"), ("REPO", repo), ("REPO_SHORT", re.sub(r"^https?://", "", repo)),
+    for key, val in (("NAME", "Tangram"), ("REPO", repo), ("REPO_SHORT", re.sub(r"^https?://", "", repo)),
                      ("LICENSE", conf.get("licence", "MPL-2.0")), ("CREDITS", " " + credits if credits else "")):
         page = page.replace("{{" + key + "}}", val)
     page = once(page, "/*LIB*/", lib, "/*LIB*/")

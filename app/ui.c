@@ -85,7 +85,7 @@ static const uint8_t WHITE_K[16] = PLAT_WHITE_KEYS, BLACK_K[11] = PLAT_BLACK_KEY
 #define KEY_ADVANCE 25                   /* F#5 */
 #define KEY_TENSION 26                   /* G5 */
 
-static const char *const TPL_NAME[BL_NTPL] = {"DEMO TRIO", "FULL ENSEMBLE", "AMBIENT DRIFT"};
+static const char *const TPL_NAME[BL_NTPL] = {"STRING TRIO", "FULL ENSEMBLE", "AMBIENT DRIFT"};
 static const char *const MODE_NAME[BL_NMODES] = {"NATURAL MINOR", "DORIAN", "PHRYGIAN", "MIXOLYDIAN", "LYDIAN",
                                                  "LYDIAN DOMINANT", "HARMONIC MINOR", "MINOR PENTATONIC", "LOCRIAN",
                                                  "MAJOR", "PMAJ", "EGYP", "HIRA", "MELM", "HMAJ", "ALTR", "GYPS",

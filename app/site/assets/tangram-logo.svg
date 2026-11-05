@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Tangram: geometrisches T aus sieben Spielsteinen">
+  <defs>
+    <radialGradient id="back" cx="45%" cy="36%" r="83%"><stop offset="0" stop-color="#0c2228"/><stop offset="0.62" stop-color="#071317"/><stop offset="1" stop-color="#02080b"/></radialGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#239ba8"/><stop offset="1" stop-color="#096170"/></linearGradient>
+    <linearGradient id="teal2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#147d89"/><stop offset="1" stop-color="#063f4b"/></linearGradient>
+    <linearGradient id="copper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7af42"/><stop offset="1" stop-color="#b66817"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe4a3"/><stop offset="1" stop-color="#c79249"/></linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%"><feGaussianBlur stdDeviation="4"/></filter>
+  </defs>
+  <rect width="240" height="240" rx="24" fill="url(#back)"/>
+  <g opacity=".23" filter="url(#shadow)" transform="translate(1 5)"><path d="M24 34 H114 L74 84 Z M120 34 H218 L169 84 Z M118 48 L151 81 L118 114 L85 81 Z M87 117 L158 159 L87 203 Z M87 117 H158 V159 Z M158 161 V210 L125 178 Z M87 210 H124 L158 224 H87 Z" fill="#70e3c7"/></g>
+  <g stroke="#031013" stroke-width="4" stroke-linejoin="miter">
+    <!-- Seven canonical piece types: five triangles, one square, one parallelogram. -->
+    <polygon points="24,34 114,34 74,84" fill="url(#teal)"/>
+    <polygon points="120,34 218,34 169,84" fill="url(#copper)"/>
+    <polygon points="118,48 151,81 118,114 85,81" fill="url(#gold)"/>
+    <polygon points="87,117 158,159 87,203" fill="url(#teal)"/>
+    <polygon points="87,117 158,117 158,159" fill="url(#teal2)"/>
+    <polygon points="158,161 158,210 125,178" fill="url(#copper)"/>
+    <polygon points="87,210 124,210 158,224 87,224" fill="url(#teal2)"/>
+  </g>
+</svg>

@@ -13,13 +13,23 @@ class TangramUpdater extends Updater {
       /fm-(?:berlinan|tangram)|fm-?1|felucca|ota|composite|sinco|usb-midi/i.test(p.name || "");
     const portName = (p) => (p.name || "").replace(/\s+\d+$/, "");
     const outs = [...this.access.outputs.values()].filter(eligible);
-    for (const input of this.access.inputs.values()) {
+    const choose = (ports, direction) => {
+      if (ports.length <= 1) return ports;
+      const started = Date.now();
+      const answer = window.prompt(`Select the FM-1 MIDI ${direction} by number:\n` +
+        ports.map((p, i) => `${i + 1}: ${p.name} (${p.manufacturer || ""}; ${p.id})`).join("\n"));
+      deadline += Date.now() - started;
+      const index = answer && /^\d+$/.test(answer.trim()) ? Number(answer.trim()) - 1 : -1;
+      if (!Number.isInteger(index) || index < 0 || index >= ports.length)
+        throw fail("selection", "Select a MIDI port explicitly, or connect only the intended FM-1 and retry.");
+      return [ports[index]];
+    };
+    const inputs = [...this.access.inputs.values()].filter(eligible);
+    for (const input of choose(inputs, "input")) {
       if (Date.now() >= deadline) break;
-      if (!eligible(input)) continue;
-      const matches = outs.filter((o) => o.name === input.name);
+      // Even equal numeric suffixes do not identify a Windows device pair.
       const numbered = outs.filter((o) => portName(o) === portName(input));
-      const output = matches.length === 1 ? matches[0] : numbered.length === 1 ? numbered[0] :
-        outs.length === 1 ? outs[0] : null;
+      const output = choose(numbered, "output")[0];
       if (!output) continue;
       let link, keep = false;
       try {

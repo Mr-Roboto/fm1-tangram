@@ -53,12 +53,26 @@ def worker(argv):
                 stage("discovering the FM-1", 15)
             end = self.deadline if self.deadline is not None else time.monotonic() + 10
             outs = self.backend.output_names()
-            for name in self.candidates(only_port):
+            names = self.candidates(only_port)
+            if self.port:
+                preferred = [n for n in names if self.port.lower() in n.lower()]
+                if preferred:
+                    names = preferred
+            if len(names) > 1:
+                raise base.InstallError("notfound", "multiple MIDI inputs match; select one with --port NAME: "
+                                        + ", ".join(names))
+            for name in names:
                 if time.monotonic() >= end:
                     break
-                out = base.pair_output(name, outs)
-                if not out:
+                # Windows input/output numbers are independent, not device IDs.
+                stem = re.sub(r"\s+\d+$", "", name)
+                matches = [o for o in outs if re.sub(r"\s+\d+$", "", o) == stem]
+                if len(matches) > 1:
+                    raise base.InstallError("notfound", "ambiguous MIDI outputs for " + name
+                                            + "; disconnect other matching devices and retry")
+                if not matches:
                     continue
+                out = matches[0]
                 try:
                     link = self.backend.open(name, out)
                 except Exception:

@@ -14,6 +14,11 @@ int rt_idle(void);                       /* stopped, and what the stop sends gon
 bl_tick_t rt_tick(void);                 /* the tick sounding now (0 before tick 0) */
 bl_tick_t rt_head(void);                 /* the render head */
 bl_tick_t rt_play_tick(void);            /* the tick sounding now, in the running engine's ticks (the panel's playheads) */
+/* Read-only performance telemetry, outside the engine recreated by PLAY.
+ * STOP freezes values/fractions; only a newly accepted PLAY clears the run.
+ * Nothing is persisted. */
+typedef struct { uint32_t seconds, part_bars, total_bars; } rt_counters_t;
+rt_counters_t rt_counters(void);
 /* Latest dispatched original source/event tick + 1; zero during silence.
  * Release/retrigger clears it; echoes never select a source. */
 uint32_t rt_source_onset(int vid);

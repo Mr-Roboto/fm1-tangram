@@ -15,7 +15,7 @@
 
 #include <stddef.h>
 
-static const char *const TPL_TITLE[BL_NTPL] = {"Demo trio", "Full ensemble", "Ambient drift"};   /* the Mac's */
+static const char *const TPL_TITLE[BL_NTPL] = {"String Trio", "Full ensemble", "Ambient drift"};
 /* by voice id (BL_VID_ order): the Mac's names (VoiceRole.displayName) and colours (VoiceColor) */
 static const char *const VID_NAME[BL_NVIDS] = {"Pluck 1", "Pluck 2", "Bass", "Pad", "Lead", "Heartbeat", "Drone"};
 /* the generators (BL_GEN_ order: GeneratorID's raw values, in words) */
@@ -1557,17 +1557,23 @@ static void draw_composer(void)
             cv_rect(7 + i * 33, 84, 26, 2, K_FOCUS);
         }
     }
-    int manual = 0;
-    for (int i = 0; ui.st_ok && i < ui_st.nvoices; i++)
-        manual += (ui_st.manual_voices >> i & 1u) || ui_st.voice[i].locked;
+    rt_counters_t counters = rt_counters();
+    text_box(4, 94, 72, 12, &FONT_T, "TIME", K_DIM, 0);
+    text_box(84, 94, 72, 12, &FONT_T, "PART", K_DIM, 0);
+    text_box(164, 94, 72, 12, &FONT_T, "TOTAL", K_DIM, 0);
     t[0] = 0;
-    cat_u(cat(t, "USER OWNS "), (uint32_t)manual);
-    cat(t, " VOICES");
-    row(4, 94, 64, "CONTROL", t, K_TEXT2);
+    uint32_t minutes = counters.seconds / 60u, seconds = counters.seconds % 60u;
+    if (minutes < 10) cat(t, "0");
+    cat_u(t, minutes);
+    cat(t, seconds < 10 ? ":0" : ":");
+    cat_u(t, seconds);
+    text_box(4, 107, 72, 18, &FONT_XS, t, K_TEXT2, 0);
     t[0] = 0;
-    cat_u(t, ui.st_ok ? pct(ui_st.density) : proj.density_pct);
-    cat(t, "%  x VOICE x SECTION");
-    row(4, 112, 64, "MASTER", t, K_TEXT2);
+    cat_u(t, counters.part_bars);
+    text_box(84, 107, 72, 18, &FONT_XS, t, K_TEXT2, 0);
+    t[0] = 0;
+    cat_u(t, counters.total_bars);
+    text_box(164, 107, 72, 18, &FONT_XS, t, K_TEXT2, 0);
     if (on && (ui_st.motion_pending || ui_st.motion_active)) {
         t[0] = 0;
         cat_u(cat(t, "AUTO FRAMES "), ui_st.motion_active);
@@ -1698,8 +1704,11 @@ static uint32_t main_sig(void)
     h = hash(h, device_settings_get().theme);
     if (ui.view == V_SETUP) h = hash(h, (uint32_t)device_settings_status());
     h = hash(h, ui.page[ui.view]);
-    if (ui.view == V_PERFORM && ui.page[V_PERFORM] == 2)
+    if (ui.view == V_PERFORM && ui.page[V_PERFORM] == 2) {
         h = hash(h, (uint32_t)proj_composer_start()); /* stopped ALGORITHM changes no voice/cell state */
+        rt_counters_t counters = rt_counters();
+        h = hash(hash(hash(h, counters.seconds), counters.part_bars), counters.total_bars);
+    }
     for (int j = 0; j < 4; j++) {
         cell_t c;
         cell(ui.view, j, &c);
@@ -2074,6 +2083,13 @@ static void sp_main(void)
                 sp_cat("Starting section ");
                 sp_cat(BL_COMP_NAME[bl_comp_phase(proj_composer_start())]);
             }
+            sp_flush();
+            rt_counters_t counters = rt_counters();
+            sp_cat("Playback time "); sp_int(counters.seconds / 60u);
+            sp_cat(" minutes "); sp_int(counters.seconds % 60u); sp_cat(" seconds.");
+            sp_flush();
+            sp_cat("Part "); sp_int(counters.part_bars);
+            sp_cat(" bars. Total "); sp_int(counters.total_bars); sp_cat(" bars.");
             sp_flush();
             sp_cat("Master times voice density times section activity.");
             sp_flush();

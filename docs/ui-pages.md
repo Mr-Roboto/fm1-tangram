@@ -17,6 +17,15 @@ verification were performed.
 | GLO SETUP | Global root | Sync | External clock input | Lights |
 | GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
 
+HOME COMPOSE also shows read-only TIME (`MM:SS`), PART (played bars in the heard
+section) and TOTAL (played bars this performance). They replace its CONTROL/MASTER
+status rows without changing encoder controls. STOP freezes all counters and
+fractions without changing the selected starting section; stopped selection
+changes preserve the final statistics. Only a newly accepted PLAY starts from
+zero and clears old fractions/cues; repeated PLAY while playing does not. During uninterrupted
+playback, section changes reset PART only. Silence/density zero still counts. Preroll
+and stopped time do not. See [Composer counter semantics and reset conditions](composer.md#playback-counters).
+
 Heartbeat exceptions: HOME QUICK keeps K3 PARTS / K4 drum GROOVE; ARP HARMONY
 disables K2 Root / K3 Scale and ALGORITHM; ENV ROUTING disables K2 Register.
 The hidden controls do not edit voice or global pitch settings. Melodic
