@@ -485,11 +485,28 @@ int bl_make_pattern(const bl_gencfg_t *cfg, int role, const bl_key_t *key, uint6
         begin(out, cfg->kind, cfg->a * bl_ticks_per_bar(M), seed);
         chord_layer(out->length, key, &r, out);
         break;
-    case BL_GEN_HEARTBEAT:      /* the quarter-note kick */
+    case BL_GEN_HEARTBEAT: {    /* one voice: pulse, backbeat and seeded hats */
         begin(out, cfg->kind, bl_ticks_per_bar(M), seed);
-        for (int b = 0; b < M.beats; b++)
-            add_note(out, b * bl_ticks_per_beat(M), degree(0), 92, bl_ticks_per_beat(M) / 2, 0);
+        int open = bl_rand_index(&r, 2) ? 14 : 6;
+        for (int s = 0; s < 16; s++) {
+            int32_t at = s * step();
+            if (!(s % 4))
+                add_note(out, at, degree(BL_DRUM_KICK), 92, bl_ticks_per_beat(M) / 2, 1);
+            if (s == 4 || s == 12)
+                add_note(out, at, degree(BL_DRUM_SNARE), 88, bl_ticks_per_beat(M) / 2, 0);
+            int hat = !(s % 2);
+            if (!hat) hat = bl_rand_index(&r, 4) < (cfg->groove == BL_DRUM_DRIVE ? 2 : 1);
+            if (cfg->groove == BL_DRUM_SPARSE && s % 4) hat = 0;
+            if (hat)
+                add_note(out, at, degree(s == open ? BL_DRUM_OPEN_HAT : BL_DRUM_CLOSED_HAT),
+                         s == open ? 68 : s % 2 ? 48 : 60, s % 2 ? step() / 2 : step(), 0);
+        }
+        int kept = 0;
+        for (int i = 0; i < out->n; i++)
+            if (bl_drum_allowed(cfg->direction, out->note[i].pitch.degree)) out->note[kept++] = out->note[i];
+        out->n = (uint8_t)kept;
         break;
+    }
     case BL_GEN_DRONE:          /* root and fifth for the whole loop */
         begin(out, cfg->kind, cfg->a * bl_ticks_per_bar(M), seed);
         add_note(out, 0, degree(0), 64, out->length, 0);

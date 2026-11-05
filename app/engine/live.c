@@ -10,6 +10,7 @@
 #include "gen.h"
 #include "pattern.h"
 #include "rng.h"
+#include "develop.h"
 
 #define NONE (-1)
 #define ZERO F64(0x0000000000000000)    /* 0.0 */
@@ -25,6 +26,10 @@ enum { BPART_BARS = 4 };                                      /* its barsPerStep
  * a constant, which the compiler may make one) */
 static __attribute__((noinline)) bl_tick_t bar_tick(int64_t bar) { return bar * BL_TICKS_PER_BAR; }
 static __attribute__((noinline)) int64_t bar_of(bl_tick_t t) { return t / BL_TICKS_PER_BAR; }
+/* Remainder also generates quotient * divisor. Isolate signed source ticks
+ * and unsigned seed arithmetic from the voice-selection loop's loads. */
+static __attribute__((noinline)) bl_tick_t motion_tick_mod(bl_tick_t a, bl_tick_t b) { return a % b; }
+static __attribute__((noinline)) uint64_t motion_seed_mod(uint64_t a, uint64_t b) { return a % b; }
 
 static bl_tick_t max_tick(bl_tick_t a, bl_tick_t b) { return a > b ? a : b; }
 static bl_tick_t min_tick(bl_tick_t a, bl_tick_t b) { return a < b ? a : b; }
@@ -135,6 +140,7 @@ int bl_live_get_config(const bl_live_t *e, int vid, bl_vconfig_t *active, bl_vco
 
 static void composer_cancel_voice(bl_live_t *e, int i)
 {
+    e->composer.motion_pending &= ~(1u << i);
     if (!(e->composer.requests >> i & 1u)) return;
     e->st[i].accent_req = e->st[i].nudge_req = NONE;
     e->composer.requests &= ~(1u << i);
@@ -144,6 +150,7 @@ static void composer_manual_voice(bl_live_t *e, int i)
 {
     composer_cancel_voice(e, i);
     e->composer.manual_voices |= 1u << i;
+    e->composer.motion_changed &= ~(1u << i);
 }
 
 int bl_live_set_config(bl_live_t *e, int vid, const bl_vconfig_t *target)
@@ -223,7 +230,7 @@ void bl_live_init(bl_live_t *e, const bl_project_t *p)
         e->has_arr = 1;
         if (p->composer.enabled) {
             bl_comp_init(&e->composer, &p->composer, form, p->seed);
-            bl_comp_select(&e->composer, p->composer_start);
+            bl_comp_start(&e->composer, p->composer_start);
             e->composer.legacy_enabled = p->has_arr && p->arr.enabled;
             e->composer.legacy_form = p->has_arr ? p->arr : ARR_DEFAULT;
             e->arr.phase = e->composer.phase;
@@ -506,6 +513,31 @@ static int composer_owns(const bl_live_t *e, int i)
         !s->voice.pat.locked && !s->voice.config_dirty && s->regen_req < 0 && s->blank_req < 0;
 }
 
+static const bl_voice_t *composer_foundation(const bl_live_t *e, int i)
+{
+    if (!e->has_theme) return NULL;
+    for (int j = 0; j < e->theme.n; j++)
+        if (!strcmp(e->theme.v[j].id, e->st[i].voice.id)) return &e->theme.v[j];
+    return NULL;
+}
+
+static void composer_motion_apply(bl_live_t *e, int i, bl_tick_t tick)
+{
+    uint32_t bit = 1u << i;
+    if (!(e->composer.motion_pending & bit)) return;
+    e->composer.motion_pending &= ~bit;
+    const bl_voice_t *base = composer_foundation(e, i);
+    if (!base || !composer_owns(e, i)) return;
+    bl_voice_t *v = &e->st[i].voice;
+    if (bl_develop_voice(v, base, &e->composer.motion[i], tick, &e->capped.pat) < 0) return;
+    e->project.voice[i].has_config = 1;
+    e->project.voice[i].config = v->config;
+    if (v->config.length == base->config.length && v->config.gen.a == base->config.gen.a &&
+        v->reg_low == base->reg_low && v->reg_high == base->reg_high)
+        e->composer.motion_changed &= ~bit;
+    else e->composer.motion_changed |= bit;
+}
+
 f64 bl_live_voice_density(const bl_live_t *e, int i)
 {
     if (i < 0 || i >= e->project.nvoices) return ZERO;
@@ -591,6 +623,8 @@ static int apply_voice_config(bl_live_t *e, int i, bl_tick_t tick)
     if (!mask) return 0;       /* manual configuration is independent of LOCK */
     int rebuild = (mask & ((1u << BL_CFG_GENERATOR) | (1u << BL_CFG_SCALE) |
                            (1u << BL_CFG_RATE) | (1u << BL_CFG_LOOP))) != 0;
+    if (v->pending.gen.kind == BL_GEN_HEARTBEAT &&
+        (mask & ((1u << BL_CFG_DRUM_PARTS) | (1u << BL_CFG_DRUM_GROOVE)))) rebuild = 1;
     if (v->pending.gen.kind != BL_GEN_ARP && v->pending.gen.kind != BL_GEN_MOTIF &&
         (mask & (1u << BL_CFG_GATE))) rebuild = 1; /* legacy b is not a gate */
     v->config = v->pending;
@@ -637,6 +671,7 @@ static void process_boundary(bl_live_t *e, int i, bl_tick_t tick)
     /* render_voice computed tick using the old length, so shortening only takes
      * effect after that entire cycle has completed. */
     int reconfigured = apply_voice_config(e, i, tick);
+    composer_motion_apply(e, i, tick); /* original note-offs/echoes remain transport-owned */
     if (s->blank_req >= 0 && tick >= s->blank_req) {
         s->blank_req = NONE;
         s->blank = 1;
@@ -708,6 +743,7 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                 uint64_t seed = s->voice.pat.seed;
                 bl_tick_t offset = s->voice.pat.start_offset;
                 const bl_voice_t *src = &s->voice;
+                uint32_t source_grid = bl_pattern_grid(&s->voice.pat);
                 f64 density = bl_live_voice_density(e, i);
                 int directed = (src->pat.generator == BL_GEN_ARP || src->pat.generator == BL_GEN_MOTIF)
                     && (src->pat.direction != BL_DIR_UP || src->pat.pitch_phase);
@@ -730,6 +766,7 @@ static int render_voice(bl_live_t *e, int i, bl_tick_t lo, bl_tick_t hi, bl_note
                                         room ? out + n : out, room);
                 for (int j = 0; j < k && j < room; j++) {
                     bl_note_t *q = &out[n + j];
+                    q->source_grid = source_grid; /* actual grid before scratch density compaction */
                     /* The scratch voice has already mapped pitches and may
                      * have compacted its onset grid for density. Recover the
                      * original onset by tick, then retain its pitch source. */
@@ -778,13 +815,14 @@ static int render_window(bl_live_t *e, bl_tick_t lo, bl_tick_t hi, bl_note_t *ou
         uint8_t channel = e->tension_note[k].channel;
         bl_delay_t delay = e->tension_note[k].delay;
         uint32_t source_onset = e->tension_note[k].source_onset;
+        uint32_t source_grid = e->tension_note[k].source_grid;
         memmove(&e->tension_note[k], &e->tension_note[k + 1],
                 (size_t)(e->ntension - k - 1) * sizeof e->tension_note[0]);
         e->ntension--;
         for (int i = 0; i < e->project.nvoices; i++) {
             if (bl_vid(e->project.voice[i].id) != vid || vid == BL_VID_NONE) continue;
             if (!f64_lt(ZERO, bl_live_voice_density(e, i))) break;
-            if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1, delay, channel, source_onset};
+            if (n < max) out[n] = (bl_note_t){tick, BL_TICKS_PER_BAR, (uint8_t)i, midi, 110, 1, 1, delay, channel, source_onset, source_grid};
             n++;
             break;
         }
@@ -830,7 +868,7 @@ static void composer_config_apply(bl_live_t *e, const bl_compcfg_t *cfg, bl_tick
     e->has_theme = 0;                   /* each controller captures its own established theme */
     if (cfg->enabled) {
         bl_comp_init(&e->composer, cfg, composer_form(e), e->project.seed);
-        bl_comp_select(&e->composer, e->project.composer_start);
+        bl_comp_start(&e->composer, e->project.composer_start);
         e->composer.started_at = tick;
         e->composer.manual_voices = manual;
         e->composer.manual_harmony = harmony;
@@ -884,6 +922,8 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
         }
         break;
     case BL_A_TENSION:
+        s = state_of(e, c->voice);
+        if (s && s->voice.pat.generator == BL_GEN_HEARTBEAT) break; /* no pitched one-shot on drums */
         if (e->tension > 0) {
             e->tension--;
             if (e->ntension < BL_MAX_TENSION) {
@@ -893,8 +933,10 @@ static void apply_change(bl_live_t *e, const bl_change_t *c)
                 e->tension_note[e->ntension].channel = 0;
                 e->tension_note[e->ntension].delay = bl_delay_config((bl_delay_t){0});
                 e->tension_note[e->ntension].source_onset = 0;
+                e->tension_note[e->ntension].source_grid = 0;
                 s = state_of(e, c->voice);
                 if (s) {
+                    e->tension_note[e->ntension].source_grid = bl_pattern_grid(&s->voice.pat);
                     e->tension_note[e->ntension].channel = s->voice.midi_channel;
                     e->tension_note[e->ntension].delay = s->voice.delay;
                     /* A one-shot is not a stored pattern note. Preserve its
@@ -968,6 +1010,107 @@ static void apply_directives(bl_live_t *e, const bl_dir_t *d, int n, bl_tick_t t
  * activity), the due advances, the bar's clock (not on the bar the SM was made, nor at tick 0), all against the
  * locks as they stand; then a phase change fires its scene and captures (bed) or recalls (payoff, with reprise) the
  * theme */
+static int composer_timing_source(const bl_voice_t *b)
+{
+    if ((b->pat.generator != BL_GEN_ARP && b->pat.generator != BL_GEN_MOTIF) || !b->pat.n ||
+        (b->config.length != 15u * 240u && b->config.length != 16u * 240u) ||
+        (b->config.gen.a != 240 && b->config.gen.a != 480)) return 0;
+    for (int j = 0; j < b->pat.n; j++)
+        if (b->pat.note[j].position < 0 || b->pat.note[j].position >= b->config.length ||
+            motion_tick_mod(b->pat.note[j].position, b->config.gen.a) ||
+            (j && b->pat.note[j].position <= b->pat.note[j - 1].position)) return 0;
+    return 1;
+}
+
+static int composer_motion_voice(const bl_live_t *e)
+{
+    static const uint8_t roles[] = {BL_ROLE_BED2, BL_ROLE_LEAD, BL_ROLE_BED1};
+    int n = e->project.nvoices;
+    if (!n) return 255;
+    uint64_t mixed = motion_seed_mod(e->project.seed, (uint64_t)n) + e->composer.cycle % (uint32_t)n;
+    int start = (int)motion_seed_mod(mixed, (uint32_t)n);
+    for (int r = 0; r < 3; r++)
+        for (int k = 0; k < n; k++) {
+            int i = (start + k) % n;
+            const bl_voice_t *b = composer_foundation(e, i);
+            if (!b || !composer_owns(e, i) || !e->st[i].active || b->role != roles[r]) continue;
+            if (composer_timing_source(b)) return i;
+        }
+    return 255;
+}
+
+static void composer_motion_plan(bl_live_t *e)
+{
+    bl_composer_t *c = &e->composer;
+    for (int i = 0; i < e->project.nvoices; i++) {
+        uint32_t bit = 1u << i;
+        const bl_voice_t *b = composer_foundation(e, i);
+        if (!b || !composer_owns(e, i) || !e->st[i].active) {
+            c->motion_pending &= ~bit;
+            continue;
+        }
+        const bl_voice_t *v = &e->st[i].voice;
+        int melodic = b->role == BL_ROLE_BED1 || b->role == BL_ROLE_BED2 || b->role == BL_ROLE_LEAD;
+        if (!melodic) continue;               /* bass/support are structural anchors */
+        bl_compmotion_t t = {b->config.length, 0, b->reg_low, b->reg_high};
+        int arp = b->pat.generator == BL_GEN_ARP || b->pat.generator == BL_GEN_MOTIF;
+        if (arp) t.rate = (uint16_t)b->config.gen.a;
+        if (c->cfg.evolution >= 2 && i == c->motion_voice) {
+            if (c->phase == BL_PH_VARIATION && c->bars_in_section >= 4)
+                t.length = (uint32_t)(c->cfg.evolution == 3 && c->bars_in_section >= 8 ? 13 : 15) * 240u;
+            if (c->phase == BL_PH_BPART) {
+                t.length = (uint32_t)(c->cfg.evolution == 3 ? 13 : 15) * 240u;
+                if (c->cfg.evolution == 3 && c->cfg.tension >= 2 && c->bars_in_section >= 2)
+                    t.rate = t.rate == 240 ? 480 : 240;
+            }
+        }
+        if (c->cfg.evolution && b->reg_high - b->reg_low >= 24) {
+            int steps = (c->bars_in_section + (c->phase == BL_PH_SUBTRACT ? 2 : 0)) / 4;
+            if (steps > c->cfg.evolution) steps = c->cfg.evolution;
+            if ((c->phase == BL_PH_VARIATION || c->phase == BL_PH_BPART) && steps) {
+                int low = b->reg_low + 12 * steps;
+                if (low > b->reg_high - 12) low = b->reg_high - 12;
+                t.reg_low = (uint8_t)low;
+            } else if (c->phase == BL_PH_SUBTRACT && steps) {
+                int high = b->reg_high - 12 * steps;
+                if (high < b->reg_low + 12) high = b->reg_low + 12;
+                t.reg_high = (uint8_t)high;
+            }
+            /* B carries Development's established height; its own slower
+             * ramp must not first drop the window back down an octave. */
+            if (c->phase == BL_PH_BPART && v->reg_low > t.reg_low) t.reg_low = v->reg_low;
+        }
+        c->motion[i] = t;
+        if (t.length != v->config.length || (arp && t.rate != v->config.gen.a) ||
+            t.reg_low != v->reg_low || t.reg_high != v->reg_high) c->motion_pending |= bit;
+        else c->motion_pending &= ~bit;
+    }
+}
+
+static void composer_tension(bl_live_t *e, bl_tick_t tick)
+{
+    bl_composer_t *c = &e->composer;
+    if (c->manual_harmony) return;
+    for (int i = 0; i < e->project.nvoices; i++) if (e->st[i].voice.pat.locked) return;
+    int lift;
+    if (c->phase == BL_PH_BPART && c->cfg.tension) {
+        int limit = c->cfg.tension == 1 ? 3 : c->cfg.tension == 2 ? 4 : 5;
+        lift = c->start_pending ? limit : 1 + c->bars_in_section / 2;
+        if (lift > limit) lift = limit;
+        if (lift < c->harmonic_step) lift = c->harmonic_step;
+    } else if (c->phase == BL_PH_SUBTRACT) {
+        if (!c->release_from) return; /* no earlier B lift: leave existing harmony alone */
+        lift = c->release_from - (1 + c->bars_in_section / 2);
+        if (lift < 0) lift = 0;
+    } else return;
+    int32_t bar = (int32_t)bar_of(tick);
+    if (e->has_theme) c->harmonic_base = bl_sched_offset(&e->theme.sched, bar);
+    if (c->harmonic_base < -128 || c->harmonic_base > 127 - lift) return;
+    if (lift == c->harmonic_step && bl_sched_offset(&e->sched, bar) == c->harmonic_base + lift) return;
+    bl_tev_t event = {bar, c->harmonic_base + lift};
+    if (!bl_sched_merge(&e->sched, &event, 1, event.bar)) c->harmonic_step = (uint8_t)lift;
+}
+
 static void composer_section(bl_live_t *e, bl_tick_t tick)
 {
     const bl_composer_t *c = &e->composer;
@@ -980,22 +1123,22 @@ static void composer_section(bl_live_t *e, bl_tick_t tick)
     if (c->phase == BL_PH_BED && !e->has_theme) {
         bl_live_capture(e, &e->theme);
         e->has_theme = 1;
+        e->composer.motion_voice = (uint8_t)composer_motion_voice(e);
     }
+    if (c->phase == BL_PH_BUILD && e->has_theme)
+        e->composer.motion_voice = (uint8_t)composer_motion_voice(e);
     if (c->phase == BL_PH_PAYOFF && e->has_theme) {
         for (int i = 0; i < e->project.nvoices; i++) composer_cancel_voice(e, i);
         apply_recall_mask(e, &e->theme, tick, owned, !protected, 0);
+        e->composer.motion_changed &= ~owned;
+        if (!protected) e->composer.harmonic_step = 0;
     }
-    if (c->phase == BL_PH_BPART && c->cfg.tension && !protected) {
-        /* One shared, scale-degree harmonic move; bass and upper voices use
-         * the same schedule. No private clock, rate change or random reseed. */
-        int32_t bar = head_bar(e);
-        int base = e->has_theme ? bl_sched_offset(&e->theme.sched, bar) : bl_sched_offset(&e->sched, bar);
-        int lift = c->cfg.tension == 1 ? 3 : c->cfg.tension == 2 ? 4 : 5;
-        if (base >= -128 && base <= 127 - lift) {
-            bl_tev_t ev = {bar, base + lift};
-            (void)bl_sched_merge(&e->sched, &ev, 1, bar); /* full schedule: retain the existing harmony */
-        }
+    if (c->phase == BL_PH_BPART) {
+        int32_t bar = (int32_t)bar_of(tick);
+        e->composer.harmonic_base = e->has_theme ? bl_sched_offset(&e->theme.sched, bar) : bl_sched_offset(&e->sched, bar);
+        e->composer.harmonic_step = 0;
     }
+    if (c->phase == BL_PH_SUBTRACT) e->composer.release_from = c->harmonic_step;
     if (!c->manual_scene && !locked) start_morph(e, e->project.scene_by_phase[c->phase], 8, tick);
 }
 
@@ -1053,6 +1196,11 @@ static void composer_boundary(bl_live_t *e, bl_tick_t tick, int created)
     }
     if (changed || (e->has_arr && e->composer.cfg.evolution >= 2 && e->composer.bars_in_section &&
         !(e->composer.bars_in_section % 8))) composer_development(e, tick);
+    if (e->has_arr || selected) {
+        composer_tension(e, tick);
+    }
+    if (e->has_arr || selected || !e->composer.cfg.evolution) composer_motion_plan(e);
+    e->composer.start_pending = 0;
     e->arr.phase = e->composer.phase;
     e->arr.bars_in_phase = e->composer.bars_in_section;
     e->arr.bars_until_change = e->composer.bars_left;
@@ -1271,6 +1419,10 @@ void bl_live_status(const bl_live_t *e, bl_status_t *out)
     out->composing = e->project.composer.enabled;
     out->composition_cycle = e->composer.cycle;
     out->pending_section = e->composer.pending_stage;
+    for (int i = 0; i < e->project.nvoices; i++) {
+        out->motion_pending += (uint8_t)(e->composer.motion_pending >> i & 1u);
+        out->motion_active += (uint8_t)(e->composer.motion_changed >> i & 1u);
+    }
     out->manual_voices = e->composer.manual_voices;
     if (e->has_arr || out->composing) {
         out->phase = e->arr.phase;

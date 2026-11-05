@@ -92,8 +92,8 @@ int bl_mutate(bl_voice_t *v, const bl_key_t *key, uint64_t seed, int repeats, f6
     int nreq = bl_anchor_ticks(v->anchor, req);
 
     /* 1. degree shifts: 30 % for each note not at the first (the least) position, by -count...count degrees, kept
-     * only while the whole pattern spans two octaves at most; the bass's pitch never moves */
-    if (v->role != BL_ROLE_BASS && p->n > 0) {
+     * only while the whole pattern spans two octaves at most; bass and absolute drum pitches never move */
+    if (p->generator != BL_GEN_HEARTBEAT && v->role != BL_ROLE_BASS && p->n > 0) {
         bl_tick_t first = p->note[bl_first_sounding(p)].position;
         for (int i = 0; i < p->n; i++) {
             if (p->note[i].position == first) continue;
@@ -109,8 +109,9 @@ int bl_mutate(bl_voice_t *v, const bl_key_t *key, uint64_t seed, int repeats, f6
         }
     }
 
-    /* 2. time nudge: 30 % that one note off the anchors moves by 1-2 16ths, within the loop and onto a free tick */
-    if (f64_lt(bl_rand_unit(&r), P30)) {
+    /* 2. time nudge: 30 % that one note off the anchors moves by 1-2 16ths, within the loop and onto a free tick.
+     * Heartbeat keeps its kick/backbeat grid; seeded hats, accents and ratchets supply its variation. */
+    if (p->generator != BL_GEN_HEARTBEAT && f64_lt(bl_rand_unit(&r), P30)) {
         int movable = 0;
         for (int i = 0; i < p->n; i++)
             if (!anchored(p, req, nreq, p->note[i].position)) movable++;

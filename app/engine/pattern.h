@@ -69,6 +69,10 @@ bl_pitch_t bl_direction_pitch(const bl_pattern_t *p, int onset, bl_tick_t comple
 int bl_direction_index(const bl_pattern_t *p, int onset, bl_tick_t completed_loops);
 void bl_direction_advance(bl_pattern_t *p);
 int bl_direction_valid(const bl_pattern_t *p);
+/* Composer source resizing: preserve direction/pickup state, fold cursor only. */
+void bl_direction_refold(bl_pattern_t *p);
+/* Display identity of the actual onset grid, independent of pitch/density. */
+uint32_t bl_pattern_grid(const bl_pattern_t *p);
 /* Available source positions, at least one even for an empty pattern. PHASE
  * range is 0..count-1; the render helper safely folds after source thinning. */
 int bl_pitch_phase_count(const bl_pattern_t *p);

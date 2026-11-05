@@ -13,7 +13,7 @@ K3/K4 are unused. No SHIFT combination or new physical page was introduced.
 | Theme | Palette |
 | --- | --- |
 | CLASSIC | Original orange/cyan accents and role colors on pure black |
-| GRAPHITE | #5FC9D8 / #239BA8 accents, #D5E5EA text |
+| GRAPHITE | #5FC9D8 bright cyan / #239BA8 teal accents, #D5E5EA text |
 | AMBER | #E96F25 / #F48532 accents, #F5D5AD text |
 | NOCTURNE | #A46AFF / #EE57BC accents, #E6D9FF text |
 | MONO | #F5F5F5 / #969696 accents, #D0D0D0 text |
@@ -21,6 +21,11 @@ K3/K4 are unused. No SHIFT combination or new physical page was introduced.
 
 All six themes use #000000 backgrounds and base surfaces, including panels,
 strips and empty steps. Status chips have black rather than tinted backgrounds.
+GRAPHITE retains its bright cyan focus and secondary text, with readable
+dim text (#B0B0B0), disabled text (#888888), muted labels (#A0A0A0) and restored
+teal information/role indicators (#239BA8). Its cyan/teal
+controls remain distinct from NOCTURNE's violet/magenta controls. Other palettes
+and theme IDs are unchanged by this adjustment; hardware contrast is unverified.
 Accent values pass directly through RGB565 truncation; no desaturation is added.
 Existing IDs 0..4 remain unchanged; FIRE is appended as ID 5 in format 2.
 

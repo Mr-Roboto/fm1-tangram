@@ -107,6 +107,10 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
         int n = bl_occurrences(p, a, b, occ, BL_MAX_NOTES);
         for (int i = 0; i < n; i++) {
             const bl_pnote_t *note = &p->note[occ[i].index];
+            /* Permission is independent of density, Composer activity and
+             * stored material: none may re-enable an excluded instrument. */
+            if (p->generator == BL_GEN_HEARTBEAT &&
+                !bl_drum_allowed(v->config.gen.direction, note->pitch.degree)) continue;
             uint8_t accent = note->accent;
             if (!bl_groove_onset(p, note->position, &accent)) continue;
             int index = total++;
@@ -119,10 +123,20 @@ int bl_render_voice(const bl_voice_t *v, uint8_t voice_index, const bl_sched_t *
                     bl_floor_div(occ[i].at + p->start_offset, p->length));
                 pitch = p->note[source].pitch;
             }
-            if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));
-            int32_t resolved = bl_resolve(key, pitch, v->ref_c);
-            out[index] = (bl_note_t){occ[i].at, note->gate, voice_index, bl_fold(v->reg_low, v->reg_high, resolved),
-                                     note->velocity, accent, note->ratchet, v->delay, v->midi_channel, 0};
+            uint8_t midi;
+            bl_tick_t gate = note->gate;
+            if (p->generator == BL_GEN_HEARTBEAT) {
+                midi = (uint8_t)pitch.degree; /* absolute GM percussion; no key/register/harmony */
+                /* Runtime spaces ratchets within one sixteenth. Half that
+                 * slice stays below its generic gate cap, so paired Note-Offs
+                 * retain the drum's 50% duty cycle without scheduler changes. */
+                if (note->ratchet > 1) gate = (BL_PPQN / 4 / note->ratchet) / 2;
+            } else {
+                if (v->participates) pitch.degree += bl_sched_offset(s, bar_of(occ[i].at));
+                midi = bl_fold(v->reg_low, v->reg_high, bl_resolve(key, pitch, v->ref_c));
+            }
+            out[index] = (bl_note_t){occ[i].at, gate, voice_index, midi,
+                                     note->velocity, accent, note->ratchet, v->delay, v->midi_channel, 0, 0};
             out[index].source_onset = (uint32_t)(p->note[source].position + 1);
         }
     }

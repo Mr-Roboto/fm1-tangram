@@ -110,6 +110,7 @@ typedef struct bl_live {
         uint8_t channel;
         bl_delay_t delay;
         uint32_t source_onset;      /* voice-local event position captured at the action tick */
+        uint32_t source_grid;
     } tension_note[BL_MAX_TENSION];
     uint8_t nmorph;
     bl_smorph_t morph[BL_MAX_MORPHS];
@@ -198,6 +199,7 @@ typedef struct {
     uint8_t scene;
     uint8_t composing;
     uint8_t pending_section; /* chronological index + 1, zero: none */
+    uint8_t motion_pending, motion_active;
     uint32_t composition_cycle, manual_voices;
 } bl_status_t;
 

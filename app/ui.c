@@ -32,7 +32,8 @@ static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_F
  * only. Legacy AUTO/FORM/AMBIENT/RATCHET handlers remain for later placement. */
 enum {
     KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS, KN_RATCHET,
-    KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME,
+    KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DRUM_PARTS, KN_DRUM_GROOVE,
+    KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME,
     KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_VDENSITY, KN_DECAY,
     KN_COMPOSER, KN_COMP_BARS, KN_COMP_EVOLUTION, KN_COMP_TENSION,
     KN_THEME, KN_DEVICE_RETRY,
@@ -137,15 +138,27 @@ static const char *view_name(int v)
            ui.page[v] && v == V_VOICE ? "ENV ROUTING" :
            ui.page[v] && v == V_SETUP ? "GLO APPEARANCE" : VIEW_NAME[v];
 }
+static int heartbeat_selected(void);
 static int view_knob(int v, int i)
 {
-    return ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
+    int k = ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
            ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] :
            ui.page[v] && v == V_SETUP ? APPEARANCE_KNOB[i] : VIEW_KNOB[v][i];
+    int pitch = ((v == V_PERFORM && !ui.page[v]) || v == V_PATTERN) && (k == KN_VROOT || k == KN_SCALE);
+    if ((pitch || (v == V_VOICE && k == KN_REGISTER)) && heartbeat_selected()) {
+        if (v == V_PERFORM && k == KN_VROOT) return KN_DRUM_PARTS;
+        if (v == V_PERFORM && k == KN_SCALE) return KN_DRUM_GROOVE;
+        return KN_NONE;
+    }
+    return k;
 }
 static const char *knob_label(int v, int i)
 {
+    int k = view_knob(v, i);
+    if (k == KN_NONE) return "Unused";
+    if (k == KN_DRUM_PARTS) return "Parts";
+    if (k == KN_DRUM_GROOVE) return "Groove";
     return ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
            ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] :
@@ -260,6 +273,20 @@ static int key_vid(int k)                /* voice key k's voice id code (Ruling 
 {
     int i = key_voice(k);
     return i < 0 ? BL_VID_NONE : bl_vid(tpl_now()->voice[i].id);
+}
+
+static int heartbeat_selected(void)
+{
+    int voice = key_voice(ui.sel);
+    if (voice < 0) return 0;
+    if (rt_playing()) {
+        bl_vconfig_t cfg;
+        if (!rt_get_voice_config(key_vid(ui.sel), NULL, &cfg)) return cfg.gen.kind == BL_GEN_HEARTBEAT;
+    }
+    /* Stopped: inspect the target directly, without regenerating a preview
+     * for each knob-label lookup. */
+    return (proj.voice_configured[voice] ? proj.voice_config[voice].gen.kind :
+            tpl_now()->voice[voice].gen.kind) == BL_GEN_HEARTBEAT;
 }
 
 static void mirror(void)                 /* refresh: the running engine's snapshot (stopped: none) */
@@ -586,6 +613,11 @@ static int voice_knob(int role, int k, int32_t e)
         warn("CONFIG", "NOT AVAILABLE");
         return 1;
     }
+    if (target.gen.kind == BL_GEN_HEARTBEAT && k == KN_GATE) return 1; /* fixed drum gate */
+    if (target.gen.kind == BL_GEN_HEARTBEAT && (k == KN_DIRECTION || k == KN_GROOVE)) {
+        warn("CONTROL", "ARP / MOTIF ONLY");
+        return 1; /* existing N/A controls must not edit the reused drum fields */
+    }
     bl_vconfig_t next = target;
     int field = -1, value = 0;
     switch (k) {
@@ -593,6 +625,19 @@ static int voice_knob(int role, int k, int32_t e)
     case KN_GENERATOR: field = BL_CFG_GENERATOR; value = clamp(target.gen.kind + d, 0, BL_NGENS - 1); break;
     case KN_VROOT: field = BL_CFG_ROOT; value = (target.key.root + d + 12) % 12; break;
     case KN_SCALE: field = BL_CFG_SCALE; value = (target.key.scale.mode + d + BL_NMODES) % BL_NMODES; break;
+    case KN_DRUM_PARTS:
+        if (target.gen.kind != BL_GEN_HEARTBEAT) return 1;
+        field = BL_CFG_DRUM_PARTS;
+        value = clamp(bl_drum_parts(target.gen.direction) + d, 1, 4) % 4;
+        break;
+    case KN_DRUM_GROOVE: {
+        if (target.gen.kind != BL_GEN_HEARTBEAT) return 1;
+        static const uint8_t order[] = {BL_DRUM_SPARSE, BL_DRUM_STEADY, BL_DRUM_DRIVE};
+        int index = target.gen.groove == BL_DRUM_SPARSE ? 0 : target.gen.groove == BL_DRUM_DRIVE ? 2 : 1;
+        field = BL_CFG_DRUM_GROOVE;
+        value = order[clamp(index + d, 0, 2)];
+        break;
+    }
     case KN_DIRECTION: field = BL_CFG_DIRECTION; value = clamp(target.gen.direction + d, 0, BL_NDIRS - 1); break;
     case KN_GROOVE: field = BL_CFG_GROOVE; value = clamp(target.gen.groove + d, 0, BL_NGROOVES - 1); break;
     case KN_RATE: field = BL_CFG_RATE; value = d > 0 ? 240 : 480; break;
@@ -964,7 +1009,7 @@ static void input(void)
         ui.turn_t = plat_ms();
     }
     if ((e = plat_enc(EN_ALGO)) != 0) {
-        if (ui.view == V_PERFORM && ui.page[V_PERFORM] == 2) {
+        if (ui.view == V_PERFORM && ui.page[V_PERFORM] == 2 && proj.composer.enabled) {
             const bl_composer_t *c = &rt_engine()->composer;
             int previous = rt_playing() ? (c->pending_stage ? c->pending_stage - 1 : c->section) : proj_composer_start();
             /* Raw detent count only: no acceleration and no cyclic wrap. */
@@ -974,17 +1019,20 @@ static void input(void)
                 else show(BL_COMP_NAME[bl_comp_phase(section)], !rt_playing() ? "START SECTION" :
                     c->pending_stage ? "NEXT BAR" : "CURRENT SECTION");
             }
-        } else if (ui.view != V_PERFORM) {
+        } else if (ui.view != V_PERFORM && !(ui.view == V_PATTERN && heartbeat_selected())) {
             int m = (proj.key_mode + (e > 0 ? 1 : -1) + BL_NMODES) % BL_NMODES;
             if (proj_set_key(proj.key_root, m)) warn("MODE", "QUEUE FULL");
             else say("MODE", MODE_NAME[m]);
         }
         if (ui.view != V_PERFORM || ui.page[V_PERFORM] == 2) ui.turn_t = plat_ms();
     }
-    if ((e = plat_enc(EN_PRESET)) != 0) {   /* PRESETS: the template, round (applyTemplate) */
-        proj_set_template((proj.tpl + (e > 0 ? 1 : -1) + BL_NTPL) % BL_NTPL);
-        sel_fix();
-        say(TPL_NAME[proj.tpl], rt_playing() ? "NEXT BAR" : 0);
+    if ((e = plat_enc(EN_PRESET)) != 0) {   /* PRESETS: clamp; endpoints must not reseed */
+        int tpl = clamp(proj.tpl + (e > 0 ? 1 : -1), 0, BL_NTPL - 1);
+        if (tpl != proj.tpl) {
+            proj_set_template(tpl);
+            sel_fix();
+            say(TPL_NAME[proj.tpl], rt_playing() ? "NEXT BAR" : 0);
+        }
         ui.turn_t = plat_ms();
     }
     for (i = 0; i < 4; i++)

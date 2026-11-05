@@ -17,6 +17,14 @@ verification were performed.
 | GLO SETUP | Global root | Sync | External clock input | Lights |
 | GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
 
+Heartbeat exceptions: HOME QUICK keeps K3 PARTS / K4 drum GROOVE; ARP HARMONY
+disables K2 Root / K3 Scale and ALGORITHM; ENV ROUTING disables K2 Register.
+The hidden controls do not edit voice or global pitch settings. Melodic
+voices retain the mappings above. See [Heartbeat drums](heartbeat.md).
+
+PRESETS clamps in the existing Demo / Full / Ambient order. Turning beyond an
+endpoint leaves the selected preset and seed intact.
+
 Short-pressing the active section cycles its pages; HOME has three, ENV/GLO two.
 Switching away and returning restores that section's last page. Page memory is
 runtime-only and starts at QUICK/TIMING after initialization. Other sections
@@ -65,8 +73,10 @@ port selection retains live routing behavior. Persistence is deferred until
 settled and safely idle; no UI handler writes flash. See
 [device-settings.md](device-settings.md) for host aliases and reboot limitations.
 GLO ROOT and ALGORITHM outside HOME
-retain global key-control behavior; HOME QUICK/PLAY ignore ALGORITHM and HOME
-COMPOSE uses it for stage selection. HOME/ARP ROOT and SCALE edit
+retain global key-control behavior, except ALGORITHM on Heartbeat's ARP page.
+HOME QUICK/PLAY ignore ALGORITHM and HOME COMPOSE uses it for stage selection
+only while COMPOSE is ON. Turning it while OFF preserves the stored selection;
+the target underline is hidden until enabled again. HOME/ARP ROOT and SCALE edit
 the selected voice. Transport, voice-key combinations, SEL lock on ENV, SAVE and
 snapshot keys, OCT+ Dice, update-mode combination, MASTER density,
 and PRESETS are retained. Parameter edits use the existing undo-point mechanism;
@@ -75,9 +85,19 @@ OCT− short alone now invokes MUTATE using the existing unlocked-voice re-roll
 mechanism (also retained on EDIT); HOME + OCT− invokes the existing undo path.
 
 AUTO, AMBIENT and RATCHET retain their implementations and stored settings;
-their old knob access is deferred. FORM is accessible on HOME COMPOSE.
+their old knob access is deferred. FORM is accessible on HOME COMPOSE while
+stopped. NONE means no explicit arranger configuration; turning K2 while
+stopped installs a preset form. During playback the existing WHEN STOPPED
+restriction remains; live form replacement is not implemented.
 Composer details are in [composer.md](composer.md). Global theme changes do not
 change musical project/slot formats, engine behavior or MIDI scheduling.
+
+HOME QUICK/PLAY use one shared row of three 2x5 neutral grey marks below all
+pattern strips, at steps 5, 9 and 13. Their main-panel coordinates are
+(114,83), (140,83), (166,83), or display y=111 after the 28-pixel header.
+The row is clear of strips/playheads and the HORIZON area. Individual strips,
+including ENV's single strip, have no quarter-note ticks or dividers. Fixed
+16-step spacing and both playheads are retained.
 
 ## Readability pass — TGM-005C
 

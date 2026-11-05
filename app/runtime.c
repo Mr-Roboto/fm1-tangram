@@ -68,6 +68,7 @@ typedef struct {
     uint8_t kind;
     bl_delay_t delay;                    /* editable prospective settings on an unsent original only */
     uint32_t source_onset;               /* visual source tick + 1, carried only by originals */
+    uint32_t source_grid;
 } rt_ev_t;
 
 static bl_live_t rt_eng PLAT_POOL;       /* the running engine */
@@ -111,6 +112,7 @@ static struct {
         uint8_t channel, pitch;
         uint32_t event_onset;           /* last original's position survives its Note-Off for the UI */
         uint32_t serial;
+        uint32_t grid;
     } source[BL_NVIDS];
 } rt;
 static uint32_t rt_source_serial;        /* does not restart at Play, unlike the note registry */
@@ -201,6 +203,7 @@ static int rt_dispatch(uint32_t *room)
             rt.source[e.vid].channel = (uint8_t)ch;
             rt.source[e.vid].pitch = (uint8_t)n;
             rt.source[e.vid].event_onset = e.source_onset;
+            rt.source[e.vid].grid = e.source_grid;
             if (!++rt_source_serial) ++rt_source_serial;
             rt.source[e.vid].serial = rt_source_serial;
             rt_echoes(&e, ch);           /* capture only now; echoes never enter this branch */
@@ -228,6 +231,7 @@ static void rt_now(uint32_t pkt)
     e->kind = RT_EV_MIDI;
     e->delay = (bl_delay_t){0};
     e->source_onset = 0;
+    e->source_grid = 0;
 }
 
 /* Request explicit offs, bounded by the registry rather than the immediate
@@ -265,6 +269,7 @@ static rt_ev_t *rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid)   /* after 
     e->kind = RT_EV_MIDI;
     e->delay = (bl_delay_t){0};
     e->source_onset = 0;
+    e->source_grid = 0;
     rt.qn++;
     return e;
 }
@@ -516,6 +521,7 @@ static void rt_hit(bl_tick_t at, bl_tick_t gate, uint32_t ch, const bl_note_t *q
         e->kind = RT_EV_ORIGINAL;
         e->delay = bl_delay_config(q->delay);
         e->source_onset = q->source_onset;
+        e->source_grid = q->source_grid;
     } else if (rt.playing) rt.dropped++;
     plat_unlock(f);
 }
@@ -741,15 +747,23 @@ uint32_t rt_source_onset(int vid)
     return onset;
 }
 
-uint32_t rt_source_event(int vid, uint32_t *onset)
+uint32_t rt_source_event_grid(int vid, uint32_t *onset, uint32_t *grid)
 {
     *onset = 0;
+    *grid = 0;
     if (vid < 0 || vid >= BL_NVIDS) return 0;
     uint32_t f = plat_lock();
     uint32_t serial = rt.source[vid].serial;
     if (rt.playing) *onset = rt.source[vid].event_onset;
+    if (rt.playing) *grid = rt.source[vid].grid;
     plat_unlock(f);
     return serial;
+}
+
+uint32_t rt_source_event(int vid, uint32_t *onset)
+{
+    uint32_t grid;
+    return rt_source_event_grid(vid, onset, &grid);
 }
 
 int rt_loading(void) { return rt.playing && rt.has_next; }   /* pendingProject: one waits for its bar line */

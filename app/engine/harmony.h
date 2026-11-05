@@ -46,6 +46,7 @@ typedef struct {
      * Zero means no position. 32 bits retain long legacy patterns without
      * truncation; this is display metadata, never part of MIDI conversion. */
     uint32_t source_onset;
+    uint32_t source_grid;        /* display-only; reject stale positions after a source resize */
 } bl_note_t;
 
 /* HarmonyEngine.render(voices: [v], schedule:key:meter: 4/4, in: lo..<hi): the voice's onsets in the window in

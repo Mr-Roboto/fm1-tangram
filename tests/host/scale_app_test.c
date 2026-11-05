@@ -8,7 +8,7 @@
 #include "test.h"
 
 static uint8_t scale_fixture_store[OBJ_NOBJ][PLAT_STORE_MAX];
-static int saved_len[OBJ_NOBJ], playing, algo_delta, actions;
+static int saved_len[OBJ_NOBJ], playing, algo_delta, preset_delta, actions, stage_calls;
 static bl_project_t loaded, next_project;
 static bl_live_t engine;
 static int fresh = 1, has_next;
@@ -20,6 +20,7 @@ uint32_t plat_buttons(void) { return 0; }
 uint32_t plat_keys(void) { return 0; }
 int32_t plat_enc(int role)
 {
+    if (role == EN_PRESET) { int d = preset_delta; preset_delta = 0; return d; }
     if (role != EN_ALGO) return 0;
     int d = algo_delta;
     algo_delta = 0;
@@ -151,6 +152,23 @@ int rt_muted(int vid) { (void)vid; return 0; }
 void rt_play(void) { materialize_loaded(); playing = 1; }
 void rt_stop(void) { playing = 0; }
 const bl_live_t *rt_engine(void) { materialize_loaded(); return &engine; }
+int rt_select_composer_stage(int section)
+{
+    stage_calls++;
+    if (playing) { materialize_loaded(); return bl_live_select_composer_stage(&engine, section, engine.rendered); }
+    loaded.composer_start = (uint8_t)section;
+    return 0;
+}
+int rt_set_composer(const bl_compcfg_t *cfg)
+{
+    if (playing) {
+        materialize_loaded();
+        if (bl_live_set_composer(&engine, cfg, engine.rendered)) return -1;
+    }
+    loaded.composer = *cfg;
+    if (!playing) fresh = 1;
+    return 0;
+}
 static int plat_host_exact = 1;
 #define ANN_NOW 1u
 #define ANN_KEEP 2u
@@ -229,6 +247,7 @@ static void test_algorithm(void)
             proj_defaults();
             CHECK(proj_set_key(root, 0) == 0, "initial key");
             ui_init();
+            ui.view = V_SETUP; /* ALGORITHM's existing global-mode mapping is outside HOME. */
             const int deltas[] = {1, -1, 7, -7};
             for (unsigned j = 0; j < sizeof deltas / sizeof deltas[0]; j++) {
                 int mode = 0;
@@ -248,12 +267,159 @@ static void test_algorithm(void)
     playing = 0;
 }
 
+static void test_drum_controls(void)
+{
+    for (int live = 0; live < 2; live++) {
+        playing = 0;
+        proj_defaults();
+        proj_set_template(BL_TPL_FULL);
+        ui_init();
+        playing = live;
+        ui.sel = NVKEYS - 1; /* existing RHYTHM/Heartbeat voice */
+        CHECK(heartbeat_selected(), "Heartbeat UI follows selected generator");
+        ui.page[V_PERFORM] = 0;
+        ui.page[V_VOICE] = 1;
+        CHECK(view_knob(V_PERFORM, 0) == KN_TRACK && view_knob(V_PERFORM, 1) == KN_GENERATOR,
+              "drum HOME preserves track/generator controls");
+        CHECK(view_knob(V_PERFORM, 2) == KN_DRUM_PARTS && view_knob(V_PERFORM, 3) == KN_DRUM_GROOVE,
+              "drum HOME assigns PARTS/GROOVE instead of Root/Scale");
+        CHECK(view_knob(V_VOICE, 1) == KN_NONE && view_knob(V_VOICE, 0) == KN_CHANNEL &&
+              view_knob(V_VOICE, 2) == KN_VDENSITY && view_knob(V_VOICE, 3) == KN_COMP_TENSION,
+              "drum ROUTING hides Register and preserves valid controls");
+        bl_vconfig_t before = {0}, after = {0};
+        int voice = key_voice(ui.sel), root = proj.key_root, mode = proj.key_mode;
+        CHECK(!proj_get_voice_config(voice, &before), "capture drum controls");
+        CHECK(before.gen.direction == BL_DRUM_ALL && before.gen.groove == BL_DRUM_STEADY,
+              "drum controls default to ALL / STEADY");
+        knob(EN_K3, view_knob(V_PERFORM, 2), 1);
+        CHECK(!proj_get_voice_config(voice, &after) && after.gen.direction == BL_DRUM_ALL,
+              "PARTS clamps at ALL");
+        for (int parts = 3; parts >= 1; parts--) {
+            knob(EN_K3, view_knob(V_PERFORM, 2), -1);
+            CHECK(!proj_get_voice_config(voice, &after) && bl_drum_parts(after.gen.direction) == parts,
+                  "PARTS selects instrument count %d", parts);
+        }
+        knob(EN_K3, view_knob(V_PERFORM, 2), -1);
+        CHECK(!proj_get_voice_config(voice, &after) && after.gen.direction == BL_DRUM_BD, "PARTS clamps at BD");
+        for (int parts = 2; parts <= 4; parts++) knob(EN_K3, view_knob(V_PERFORM, 2), 1);
+        knob(EN_K4, view_knob(V_PERFORM, 3), -1);
+        knob(EN_K4, view_knob(V_PERFORM, 3), -1);
+        CHECK(!proj_get_voice_config(voice, &after) && after.gen.groove == BL_DRUM_SPARSE, "GROOVE clamps at SPARSE");
+        knob(EN_K4, view_knob(V_PERFORM, 3), 1);
+        CHECK(!proj_get_voice_config(voice, &after) && after.gen.groove == BL_DRUM_STEADY, "GROOVE selects STEADY");
+        knob(EN_K4, view_knob(V_PERFORM, 3), 1);
+        knob(EN_K4, view_knob(V_PERFORM, 3), 1);
+        CHECK(!proj_get_voice_config(voice, &after) && after.gen.groove == BL_DRUM_DRIVE, "GROOVE clamps at DRIVE");
+        knob(EN_K4, view_knob(V_PERFORM, 3), -1); /* return to defaults */
+        knob(EN_K2, view_knob(V_VOICE, 1), 1);
+        knob(EN_K2, KN_GATE, 1);
+        knob(EN_K1, KN_DIRECTION, 1);
+        knob(EN_K2, KN_GROOVE, 1);
+        CHECK(!proj_get_voice_config(voice, &after) && !bl_config_diff(&before, &after),
+              "restored drum defaults, hidden Register and fixed Gate preserve configuration");
+        CHECK(proj.key_root == root && proj.key_mode == mode, "drum UI preserves global root/scale");
+        CHECK(view_knob(V_PATTERN, 1) == KN_NONE && view_knob(V_PATTERN, 2) == KN_NONE,
+              "drum ARP hides actual Root/Scale mappings");
+        knob(EN_K2, view_knob(V_PATTERN, 1), 1);
+        knob(EN_K3, view_knob(V_PATTERN, 2), 1);
+        ui.view = V_PATTERN;
+        algo_delta = 1;
+        ui_input_only();
+        CHECK(proj.key_root == root && proj.key_mode == mode && !proj_get_voice_config(voice, &after) &&
+              !bl_config_diff(&before, &after), "drum ARP knobs and ALGORITHM preserve global/voice pitch settings");
+        ui.view = V_PERFORM;
+        if (!live) {
+            knob(EN_K3, view_knob(V_PERFORM, 2), -1);
+            knob(EN_K4, view_knob(V_PERFORM, 3), 1);
+            CHECK(proj_save() == 0, "save drum PARTS/GROOVE");
+            proj_defaults();
+            CHECK(!proj_load() && !proj_get_voice_config(voice, &after) &&
+                  after.gen.direction == BL_DRUM_BD_SD_CH && after.gen.groove == BL_DRUM_DRIVE,
+                  "project SAVE/load preserves both drum controls");
+        }
+        ui.sel = 0;
+        CHECK(!heartbeat_selected() && view_knob(V_PERFORM, 2) == KN_VROOT &&
+              view_knob(V_PERFORM, 3) == KN_SCALE && view_knob(V_VOICE, 1) == KN_REGISTER &&
+              view_knob(V_PATTERN, 1) == KN_VROOT && view_knob(V_PATTERN, 2) == KN_SCALE,
+              "melodic voices retain Root/Scale/Register mappings");
+        ui.page[V_PERFORM] = 1;
+        CHECK(view_knob(V_PERFORM, 2) == KN_DELAY_ON, "HOME PLAY mapping preserved");
+    }
+    playing = 0;
+}
+
+static void test_ui_corrections(void)
+{
+    playing = 0;
+    proj_defaults();
+    ui_init();
+    ui.view = V_PERFORM;
+    ui.page[V_PERFORM] = 2;
+    CHECK(!proj_select_composer_stage(3), "establish stored start section");
+    int calls = stage_calls;
+    algo_delta = 1;
+    ui_input_only();
+    CHECK(proj_composer_start() == 3 && stage_calls == calls, "COMPOSE OFF ignores ALGORITHM while stopped");
+    bl_compcfg_t cfg = proj.composer;
+    cfg.enabled = 1;
+    CHECK(!proj_set_composer(&cfg), "enable Composer navigation");
+    algo_delta = 1;
+    ui_input_only();
+    CHECK(proj_composer_start() == 4 && stage_calls == calls + 1, "enabling restores stage navigation");
+    cfg.enabled = 0;
+    CHECK(!proj_set_composer(&cfg), "disable Composer without resetting selection");
+    algo_delta = -1;
+    ui_input_only();
+    CHECK(proj_composer_start() == 4 && stage_calls == calls + 1, "OFF retains selected starting section");
+    cfg.enabled = 1;
+    CHECK(!proj_set_composer(&cfg), "re-enable Composer");
+    playing = 1;
+    materialize_loaded();
+    algo_delta = 1;
+    ui_input_only();
+    CHECK(stage_calls == calls + 2, "playing Composer accepts stage navigation");
+    knob(EN_K1, KN_COMPOSER, -1);
+    int pending = engine.composer.pending_stage;
+    algo_delta = -1;
+    ui_input_only();
+    CHECK(!proj.composer.enabled && stage_calls == calls + 2 && engine.composer.pending_stage == pending,
+          "COMPOSE OFF ignores ALGORITHM while playing, including pending targets");
+
+    playing = 0;
+    proj_defaults();
+    ui_init();
+    uint64_t seed = proj.seed;
+    preset_delta = -1;
+    ui_input_only();
+    CHECK(proj.tpl == BL_TPL_DEMO && proj.seed == seed, "first preset clamps without reseeding");
+    preset_delta = 1; ui_input_only();
+    CHECK(proj.tpl == BL_TPL_FULL, "preset order keeps FULL second");
+    preset_delta = 1; ui_input_only();
+    CHECK(proj.tpl == BL_TPL_AMBIENT, "preset order keeps AMBIENT last");
+    seed = proj.seed;
+    preset_delta = 1; ui_input_only();
+    CHECK(proj.tpl == BL_TPL_AMBIENT && proj.seed == seed, "last preset clamps without reseeding");
+    preset_delta = -1; ui_input_only();
+    CHECK(proj.tpl == BL_TPL_FULL, "preset can move back from upper endpoint");
+
+    proj_defaults();
+    CHECK(!proj.arr_has, "NONE means no explicit arranger form");
+    knob(EN_K2, KN_FORM, 1);
+    CHECK(proj_form() == FORM_CLASSIC, "FORM works while stopped even from NONE");
+    playing = 1;
+    knob(EN_K2, KN_FORM, 1);
+    CHECK(proj_form() == FORM_CLASSIC && !strcmp(ui.msg[1], "WHEN STOPPED"), "live FORM edit retains existing prerequisite");
+    playing = 0;
+}
+
 int main(void)
 {
     device_settings_init();
     CHECK(!device_settings_apply(), "apply global clock settings");
     test_settings();
     test_algorithm();
-    printf(fails ? "scale app: %d FAILED\n" : "scale app: ok (settings, storage, ALGORITHM)\n", fails);
+    test_drum_controls();
+    test_ui_corrections();
+    printf(fails ? "scale app: %d FAILED\n" : "scale app: ok (settings, storage, ALGORITHM, drum controls)\n", fails);
     return fails != 0;
 }

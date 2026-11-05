@@ -25,11 +25,11 @@ static const ui_palette_t UI_PALETTE[DEVICE_NTHEMES] = {
     },
     [DEVICE_THEME_GRAPHITE] = {
         .background = RGB(0,0,0), .panel = RGB(0,0,0), .strip = RGB(0,0,0),
-        .step = RGB(0,0,0), .line = RGB(52,52,52), .text = RGB(213,229,234),
-        .secondary = RGB(95,201,216), .dim = RGB(150,150,150), .disabled = RGB(100,100,100),
+        .step = RGB(0,0,0), .line = RGB(40,40,40), .text = RGB(213,229,234),
+        .secondary = RGB(95,201,216), .dim = RGB(176,176,176), .disabled = RGB(136,136,136),
         .focus = RGB(95,201,216), .info = RGB(35,155,168), .locked = RGB(213,229,234),
-        .muted = RGB(150,150,150), .source = RGB(255,32,32), .timing = RGB(126,126,126),
-        .suppressed = RGB(112,112,112), .inverse = RGB(0,0,0),
+        .muted = RGB(160,160,160), .source = RGB(255,32,32), .timing = RGB(126,126,126),
+        .suppressed = RGB(104,104,104), .inverse = RGB(0,0,0),
         .track = {RGB(95,201,216), RGB(35,155,168), RGB(95,201,216), RGB(35,155,168),
                   RGB(213,229,234), RGB(35,155,168), RGB(95,201,216)}
     },

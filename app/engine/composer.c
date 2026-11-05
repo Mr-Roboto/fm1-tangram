@@ -33,6 +33,7 @@ static void phrase_unit(bl_composer_t *c, const bl_arrcfg_t *form)
 
 static void enter(bl_composer_t *c)
 {
+    c->start_pending = 0;
     c->phase = ORDER[c->section];
     c->bars_in_section = 0;
     c->bars_left = (c->cfg.bars ? c->cfg.bars : c->unit) * DWELL[c->section];
@@ -41,6 +42,7 @@ static void enter(bl_composer_t *c)
 void bl_comp_select(bl_composer_t *c, int section)
 {
     if (section < 0 || section >= 7 || section == c->section) return;
+    for (int r = 0; r < 8; r++) c->from_level[r] = (uint8_t)bl_comp_level(c, r);
     c->section = (uint8_t)section;
     enter(c);
     c->enter_pending = 1;
@@ -50,6 +52,8 @@ void bl_comp_init(bl_composer_t *c, const bl_compcfg_t *cfg, const bl_arrcfg_t *
 {
     memset(c, 0, sizeof *c);
     c->cfg = *cfg;
+    c->from_level[BL_ROLE_DRONE] = 100;
+    c->motion_voice = 255;
     bl_rng_seed(&c->rng, bl_seed_derive(seed, "composer", (const char *)0));
     phrase_unit(c, form);
     enter(c);
@@ -58,6 +62,8 @@ void bl_comp_init(bl_composer_t *c, const bl_compcfg_t *cfg, const bl_arrcfg_t *
 int bl_comp_tick(bl_composer_t *c, const bl_arrcfg_t *form, int advance)
 {
     if (!c->cfg.enabled) return 0;
+    if (advance || c->bars_left <= 1)
+        for (int r = 0; r < 8; r++) c->from_level[r] = (uint8_t)bl_comp_level(c, r);
     c->bars_in_section++;
     if (--c->bars_left > 0 && !advance) return 0;
     if (++c->section == 7) {
@@ -69,7 +75,7 @@ int bl_comp_tick(bl_composer_t *c, const bl_arrcfg_t *form, int advance)
     return 1;
 }
 
-int bl_comp_level(const bl_composer_t *c, int role)
+static int target_level(const bl_composer_t *c, int role)
 {
     /* Roles: pluck 1, pluck 2, bass, pad, lead, drone, rhythm, auxiliary.
      * Source loops keep running even when a role's audible activity is zero. */
@@ -87,15 +93,28 @@ int bl_comp_level(const bl_composer_t *c, int role)
     /* Tension enriches B without touching rate, gate, pitch order or clocks. */
     if (c->phase == BL_PH_BPART && (role == BL_ROLE_LEAD || role == BL_ROLE_BED2))
         level = 70 + 10 * c->cfg.tension;
-    /* Four bar activity ramps introduce/remove roles without stopping their
-     * source clocks. These are density targets, never gate truncation or MIDI
-     * volume messages. The initial drone remains the introduction's anchor. */
-    if (c->bars_in_section < 4) {
-        int previous = LEVEL[ORDER[c->section ? c->section - 1 : 6]][role];
-        if (!c->cycle && !c->section) previous = role == BL_ROLE_DRONE ? 100 : 0;
-        if (c->section && ORDER[c->section - 1] == BL_PH_BPART &&
-            (role == BL_ROLE_LEAD || role == BL_ROLE_BED2)) previous = 70 + 10 * c->cfg.tension;
-        level = previous + (level - previous) * (c->bars_in_section + 1) / 4;
-    }
     return level;
+}
+
+int bl_comp_level(const bl_composer_t *c, int role)
+{
+    if (role < 0 || role > BL_ROLE_AUX) return 100;
+    int level = target_level(c, role);
+    /* Bass/first pluck establish the pulse before upper activity joins it.
+     * Manual jumps depart from the real ramp value, not a presumed neighbor. */
+    static const uint8_t DELAY[8] = {0, 1, 0, 1, 2, 0, 2, 1};
+    int duration = c->phase == BL_PH_BPART ? 4 + 2 * c->cfg.tension : 4;
+    int progress = c->bars_in_section + 1 - DELAY[role];
+    if (progress < 0) progress = 0;
+    if (progress < duration)
+        level = c->from_level[role] + (level - c->from_level[role]) * progress / duration;
+    return level;
+}
+
+void bl_comp_start(bl_composer_t *c, int section)
+{
+    if (section <= 0 || section >= 7) return;
+    bl_comp_select(c, section);
+    for (int r = 0; r < 8; r++) c->from_level[r] = (uint8_t)target_level(c, r);
+    c->start_pending = 1;
 }

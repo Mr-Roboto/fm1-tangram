@@ -65,14 +65,16 @@ typedef struct {
 } lane_t;
 static lane_t lane[BL_MAX_VOICES];
 static int nlanes;
-static uint32_t source_marker(int vid)
+static uint32_t source_marker(int vid, const bl_pattern_t *pattern)
 {
     if (vid < 0 || vid >= BL_NVIDS) return 0;
-    uint32_t onset;
+    uint32_t onset, grid;
     /* Runtime owns one dispatch latch per BL_VID_, independent of selection,
-     * Note-Off, redraw cadence and echo playback. Keep its last source. */
-    rt_source_event(vid, &onset);
-    return onset;
+     * Note-Off, redraw cadence and echo playback. Keep its last source while
+     * the displayed grid still matches; never reinterpret an old onset after
+     * render-ahead has resized that source. */
+    rt_source_event_grid(vid, &onset, &grid);
+    return grid == bl_pattern_grid(pattern) ? onset : 0;
 }
 
 static uint32_t hash(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
@@ -122,7 +124,7 @@ static void lanes(void)
             l->gen = ui_st.voice[i].generation;
             l->remaining = ui_st.voice[i].remaining;
             l->vid = ui_st.voice[i].vid;
-            l->source_onset = source_marker(l->vid);
+            l->source_onset = source_marker(l->vid, l->pat);
             l->active = ui_st.voice[i].active;
             l->blank = ui_st.voice[i].blank;
             l->locked = ui_st.voice[i].locked;
@@ -231,6 +233,17 @@ static void reg_text(int lo, int hi, char *t, int words)
 static int degree_label(const bl_pnote_t *n, const bl_key_t *k)
 {
     return (int)bl_floor_mod(n->pitch.degree, k->scale.count) + 1;
+}
+
+static char drum_label(int note)
+{
+    switch (note) {
+    case BL_DRUM_KICK: return 'K';
+    case BL_DRUM_SNARE: return 'S';
+    case BL_DRUM_CLOSED_HAT: return 'H';
+    case BL_DRUM_OPEN_HAT: return 'O';
+    default: return '?';
+    }
 }
 
 /* DelayHint.compute(role:bpm:): the division by role (dotted 8th on the plucks, the heartbeat and aux; 8th on the
@@ -359,6 +372,12 @@ static int voice_cell(int k, cell_t *c)
         return 1;
     }
     int arp = cfg->gen.kind == BL_GEN_ARP || cfg->gen.kind == BL_GEN_MOTIF;
+    if (cfg->gen.kind == BL_GEN_HEARTBEAT && k == KN_GATE) {
+        c->kind = CELL_TEXT;
+        cat(c->val, "50%");
+        cat(c->sub, "FIXED");
+        return 1;
+    }
     if (!arp && (k == KN_RATE || k == KN_GATE || k == KN_DIRECTION || k == KN_GROOVE)) {
         c->kind = CELL_TEXT;
         cat(c->val, "N/A");
@@ -366,6 +385,18 @@ static int voice_cell(int k, cell_t *c)
         return 1;
     }
     switch (k) {
+    case KN_DRUM_PARTS:
+        c->kind = CELL_TEXT;
+        c->v = (int16_t)bl_drum_parts(cfg->gen.direction);
+        cat_u(c->val, (uint32_t)c->v);
+        cat(c->sub, (const char *const[]){"", "BD", "BD SD", "BD SD CH", "ALL"}[c->v]);
+        break;
+    case KN_DRUM_GROOVE:
+        c->kind = CELL_TEXT;
+        c->v = cfg->gen.groove == BL_DRUM_SPARSE ? 1 : cfg->gen.groove == BL_DRUM_DRIVE ? 3 : 2;
+        cat_u(c->val, (uint32_t)c->v);
+        cat(c->sub, (const char *const[]){"", "SPARSE", "STEADY", "DRIVE"}[c->v]);
+        break;
     case KN_VDENSITY:
         c->hi = 100; c->v = (int16_t)(100 - cfg->density_cut);
         cat_u(c->val, (uint32_t)c->v); cat(c->val, "%"); break;
@@ -917,7 +948,7 @@ static void strip_source_marker(int32_t x, int32_t y, int32_t w, int32_t h, cons
     cv_rect(sx, y, mw, h, K_SOURCE);
 }
 
-/* a pattern strip (PatternStripView): the beats, the notes by position, length and pitch (self-scaling to the
+/* a pattern strip (PatternStripView): the notes by position, length and pitch (self-scaling to the
  * pattern's range, in the key at MIDI 60, the Mac's referenceC), the accents' tops tangerine, the voice's own
  * playhead (its loop position: the phasing, visible); dimmed when muted, waiting or blanked */
 static void strip(int32_t x, int32_t y, int32_t w, int32_t h, const lane_t *l, uint16_t c, int dim)
@@ -937,11 +968,11 @@ static void strip(int32_t x, int32_t y, int32_t w, int32_t h, const lane_t *l, u
     if (len <= 0)
         return;
     visible_onsets(p, audible);
-    for (j = BL_PPQN; j < BL_TICKS_PER_BAR && j < len - page; j += BL_PPQN)
-        cv_rect(x + j * w / BL_TICKS_PER_BAR, y + 1, 1, h - 2, mix(K_STRIP, K_LINE, 10));
     key_now(&k);
+    if (p->generator == BL_GEN_HEARTBEAT) { lo = BL_DRUM_KICK; hi = BL_DRUM_OPEN_HAT; }
     for (i = 0; i < p->n; i++) {
-        pitch[i] = bl_resolve(&k, p->note[i].pitch, 60);
+        pitch[i] = p->generator == BL_GEN_HEARTBEAT ? p->note[i].pitch.degree :
+                   bl_resolve(&k, p->note[i].pitch, 60);
         lo = pitch[i] < lo ? pitch[i] : lo;
         hi = pitch[i] > hi ? pitch[i] : hi;
     }
@@ -1210,6 +1241,11 @@ static void draw_perform(void)
         text_r(211, ty, &FONT_T, t, K_DIM);
         dots(214, y + (sh - 4) / 2, l);
     }
+    /* One shared quarter-note row, below every strip and above HORIZON.
+     * Match strip(88, ..., 105, ...)'s fixed 16-step coordinates. */
+    if (nlanes)
+        for (i = 1; i <= 3; i++)
+            cv_rect(88 + i * 105 / 4, LANES_H - 3, 2, 5, mix(K_BG, K_TIMING, 12));
     /* the horizon */
     cv_text(4, 91, &FONT_T, "HORIZON", K_DIM);
     n = horizon(hz);
@@ -1322,7 +1358,9 @@ static void draw_voice(void)
     } else {
         cat(t, "none");
     }
-    row(6, 129, 84, "CC", t, K_TEXT2);
+    if (l->pat->generator == BL_GEN_HEARTBEAT && !vc->ncc)
+        row(6, 129, 84, "DRUMS", "BD SD CH OH", K_TEXT2);
+    else row(6, 129, 84, "CC", t, K_TEXT2);
 }
 
 /* ---- PATTERN: the selected voice's pattern in steps, a bar a row: an onset lit (its degree in it where there is
@@ -1354,10 +1392,15 @@ static void draw_pattern(void)
         for (s = a + 1; s <= b && s < n; s++)
             if (!on[s])
                 on[s] = 2;
+        if (p->generator == BL_GEN_HEARTBEAT && a < n) {
+            char label = drum_label(p->note[i].pitch.degree);
+            if (!deg[a]) deg[a] = (uint8_t)label;
+            else if (deg[a] != (uint8_t)label) deg[a] = '+';
+        }
         if (a < n && on[a] != 1 && on[a] != 3) { /* (a chord: its first note's degree) */
             on[a] = audible[i] ? 1 : 3;
             acc[a] = p->note[i].accent;
-            deg[a] = (uint8_t)degree_label(&p->note[i], &k);
+            if (p->generator != BL_GEN_HEARTBEAT) deg[a] = (uint8_t)degree_label(&p->note[i], &k);
         } else if (a < n && on[a] == 3 && audible[i]) on[a] = 1; /* a retained chord tone sounds here */
     }
     rows = (n + 15) / 16;
@@ -1378,7 +1421,7 @@ static void draw_pattern(void)
         if (on[s] == 1 && acc[s])
             cv_rect(x, y, 12, 2, K_FOCUS);
         if (onset && h >= 13) {
-            t[0] = (char)('0' + deg[s]);
+            t[0] = p->generator == BL_GEN_HEARTBEAT ? (char)deg[s] : (char)('0' + deg[s]);
             t[1] = 0;
             text_c(x + 6, y + (h - 12) / 2, &FONT_T, t, on[s] == 3 ? K_SUPPRESSED : K_INVERSE);
         }
@@ -1509,7 +1552,7 @@ static void draw_composer(void)
         text_c(20 + i * 33, 69, &FONT_T, label[i], active ? K_INVERSE : K_DIM);
         /* Match ALGORITHM's target: pending/current while playing, START
          * while stopped. Fill still identifies the current sounding section. */
-        if (pending ? pending == i + 1 : on ? active : start == i) {
+        if (proj.composer.enabled && (pending ? pending == i + 1 : on ? active : start == i)) {
             if (active) cv_rect(5 + i * 33, 82, 30, 2, K_BG);
             cv_rect(7 + i * 33, 84, 26, 2, K_FOCUS);
         }
@@ -1525,7 +1568,12 @@ static void draw_composer(void)
     cat_u(t, ui.st_ok ? pct(ui_st.density) : proj.density_pct);
     cat(t, "%  x VOICE x SECTION");
     row(4, 112, 64, "MASTER", t, K_TEXT2);
-    cv_text(4, 130, &FONT_T, "ALGORITHM: STAGE / NEXT BAR", K_DIM);
+    if (on && (ui_st.motion_pending || ui_st.motion_active)) {
+        t[0] = 0;
+        cat_u(cat(t, "AUTO FRAMES "), ui_st.motion_active);
+        cat_u(cat(t, " / NEXT LOOP "), ui_st.motion_pending);
+        cv_text(4, 130, &FONT_T, t, K_INFO);
+    } else cv_text(4, 130, &FONT_T, proj.composer.enabled ? "ALGORITHM: STAGE / NEXT BAR" : "ENABLE COMPOSE TO SELECT", K_DIM);
 }
 
 static void draw_arranger(void)
@@ -1898,7 +1946,8 @@ static void sp_item(const char *s, const char *sep)   /* s after what is gathere
  * STEPS"); a range as "G2 to G4", "8 to 16" */
 static void sp_knob(int view, int i)
 {
-    static const uint8_t WITH_SUB[] = {KN_LOOP, KNS_LOOP, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_LENGTH, KNS_PHASE, KNS_PLAYS};
+    static const uint8_t WITH_SUB[] = {KN_LOOP, KN_DRUM_PARTS, KN_DRUM_GROOVE,
+        KNS_LOOP, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_LENGTH, KNS_PHASE, KNS_PLAYS};
     cell_t c;
     uint32_t j;
     int k = view_knob(view, i);

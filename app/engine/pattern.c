@@ -45,6 +45,14 @@ int bl_pitch_phase_count(const bl_pattern_t *p)
     return n > 0 ? n : 1;
 }
 
+uint32_t bl_pattern_grid(const bl_pattern_t *p)
+{
+    uint32_t h = (UINT32_C(2166136261) ^ (uint32_t)p->length) * UINT32_C(16777619);
+    h = (h ^ p->n) * UINT32_C(16777619);
+    for (int i = 0; i < p->n; i++) h = (h ^ (uint32_t)p->note[i].position) * UINT32_C(16777619);
+    return h ? h : 1u;
+}
+
 static int direction_period(const bl_pattern_t *p)
 {
     int n = direction_tones(p);
@@ -52,15 +60,20 @@ static int direction_period(const bl_pattern_t *p)
     return p->direction == BL_DIR_PENDULUM || p->direction == BL_DIR_M_PENDULUM ? 2 * (n - 1) : n;
 }
 
-/* For a phase-bearing source whose size changes outside regeneration, fold the
- * cursor to the new period without changing its selected direction. PHASE 0
- * retains the historical cursor-recovery path exactly. */
-static void phase_cursor_fold(bl_pattern_t *p)
+/* Composer can resize a source without restarting traversal, including PHASE
+ * zero. Existing callers retain their historical PHASE-zero recovery path
+ * through phase_cursor_fold's guard below. */
+void bl_direction_refold(bl_pattern_t *p)
 {
-    if (!p->pitch_phase || p->direction >= BL_NDIRS) return;
+    if (p->direction >= BL_NDIRS) return;
     int period = direction_period(p);
     p->direction_cursor = (uint8_t)(p->direction == BL_DIR_M_PENDULUM && p->direction_cursor
         ? (p->direction_cursor - 1) % period + 1 : p->direction_cursor % period);
+}
+
+static void phase_cursor_fold(bl_pattern_t *p)
+{
+    if (p->pitch_phase) bl_direction_refold(p);
 }
 
 int bl_direction_valid(const bl_pattern_t *p)
@@ -226,11 +239,12 @@ void bl_density_cap(const bl_pattern_t *in, f64 density, bl_pattern_t *out)
  * and established */
 void bl_thin_to_roots(bl_pattern_t *p)
 {
+    int root = p->generator == BL_GEN_HEARTBEAT ? BL_DRUM_KICK : 0;
     int n = 0;
     for (int i = 0; i < p->n; i++)
-        if (p->note[i].pitch.degree == 0) p->note[n++] = p->note[i];
+        if (p->note[i].pitch.degree == root) p->note[n++] = p->note[i];
     if (n == 0 && p->n > 0) {
-        p->note[0].pitch.degree = 0;
+        if (p->generator != BL_GEN_HEARTBEAT) p->note[0].pitch.degree = 0;
         n = 1;
     }
     p->n = (uint8_t)n;

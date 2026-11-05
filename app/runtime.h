@@ -21,6 +21,8 @@ uint32_t rt_source_onset(int vid);
  * advance the serial. The last position persists until a new original or Stop;
  * position is zero when stopped or the latest original has no source metadata. */
 uint32_t rt_source_event(int vid, uint32_t *onset);
+/* Same original dispatch latch plus onset-grid identity; both read atomically. */
+uint32_t rt_source_event_grid(int vid, uint32_t *onset, uint32_t *grid);
 int rt_loading(void);                    /* playing: a loaded project waits for the head's next bar line */
 int rt_channel(int vid);                 /* the transport's channel of voice vid (a BL_VID_), 0-15; -1 none */
 const bl_live_t *rt_engine(void);

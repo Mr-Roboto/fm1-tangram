@@ -27,7 +27,10 @@ LIFT, PEAK. MASTER remains global density/Dynamics. No physical pages, rate
 modes, synthesis, audio effects or routing were added. ALGORITHM remains
 inactive on HOME QUICK/PLAY. On HOME COMPOSE it selects the Composer stage:
 Intro, A, Development, B, Breakdown, Return, Outro. Each detent moves one stage,
-without acceleration or wrapping. Other pages retain their ALGORITHM mapping.
+without acceleration or wrapping. With COMPOSE OFF, ALGORITHM does not change
+the section selection and the accent underline is hidden. Re-enabling restores
+navigation with the stored selection retained. Other pages retain their
+ALGORITHM mapping, except Heartbeat's ARP page disables global scale editing.
 
 While playing, enable Composer first. Turning ALGORITHM replaces the single
 pending stage target for the next safe engine bar, after already-rendered music.
@@ -39,13 +42,21 @@ Advance actions remain queued for the next running bar. AUTO-off keeps the
 clock paused but still permits an explicit stage selection at a bar boundary.
 
 While stopped, ALGORITHM selects START for the next Play (Composer must be
-enabled to use it). This session-local choice resets to Intro on project load
+enabled to change or use it). This session-local choice resets to Intro on project load
 or template change and is not saved in projects or snapshots. OCT- retains its
 re-roll action, HOME + OCT- retains undo, and OCT+ retains Dice; stage selection
 does not add an undo point. Starting/jumping to
 Return before A has been captured retains the existing material: no theme is
 invented. Stage selection consumes no RNG, does not increment the cycle, and
 uses existing section-entry/LOCK/reprise logic without blanket regeneration.
+
+A fresh non-Intro start uses the selected section's role activity immediately.
+Starting B applies its selected Tension target at the first engine bar boundary,
+subject to LOCK/manual harmony protection. This does not advance section age,
+shorten its countdown or fast-forward Phase II evolution. Intro retains its
+normal sparse buildup. Live section changes retain their transition ramps.
+The STOP/PLAY starting choice and AUTO pause/resume paths remain unchanged;
+resuming AUTO does not reinitialize the current section.
 
 COMPOSE shows section, cycle, bars remaining and manually owned/locked voices.
 The existing horizon uses Composer section names; pending controls appear as
@@ -66,7 +77,9 @@ form's period range using a separate seed-derived RNG; AMBIENT uses at least
 32 bars. The automatic unit is chosen once per cycle. Explicit units stay fixed.
 Queued Advance actions move to the next section at their existing bar boundary.
 
-Role activity ramps over the first four bars of each section. Introduction and
+Role activity uses staggered ramps from the actual previous section's activity,
+including when manual navigation interrupts a ramp. Bass/first pluck lead upper
+voices; B uses longer ramps as Tension increases. Introduction and
 breakdown emphasize sparse plucks and sustained support; A and Return restore
 upper activity; B favors the second pluck and lead. Onsets are thinned/enriched
 without changing ticks, gates, groove, traversal, ratchets or loop lengths.
@@ -87,21 +100,27 @@ adds checkpoints every eight bars there. ACTIVE may request an existing bounded
 mutation of an eligible legacy melodic generator. Only one supporting pluck/lead
 is requested per checkpoint; bass and sustained support keep their material.
 ARP/MOTIF pitch generation and MOTIF evolution/RNG streams remain intact.
-Evolution OFF disables Composer requests, not the generator's own evolution.
+Evolution OFF restores eligible developed timing/register frames at local
+boundaries, without disabling the generator's own evolution. Phase II adds
+source-preserving loop/rate and bounded register development; see
+[Composer Phase II](composer-phase-ii.md) for exact eligibility and timing.
 
 Tension sets B's melodic activity and optionally adds a shared scale-degree
-lift at B entry: HOME none, WARM +3, LIFT +4, PEAK +5. Bass and upper voices use
+lift during B: HOME none, WARM up to +3, LIFT +4, PEAK +5, one degree at entry
+then another every two bars. Breakdown releases the lift on that same cadence.
+Short live transitions may end before reaching the target; a fresh B start uses
+the selected target immediately. Bass and upper voices use
 the same schedule. Return restores the theme schedule only when no locked voice
 or explicit harmonic intervention would be overridden. A density/register edit
 does not freeze the ensemble's shared harmonic progression; manual per-voice
 ROOT/SCALE changes do protect it. Shared scene automation also defers to LOCK
 and manual scene selection.
 A full schedule skips the lift. Macro edits update activity on the next bar;
-harmonic choice is made at B entry, not rewritten retroactively.
+the active B lift never jumps downward on a macro edit; Breakdown provides release.
 
 Manual configuration, regeneration, blanking, activation and LOCK take a voice
 out of Composer shaping/development/reprise until Stop/Play. Unlock alone does
-not give it back to automation. Pending Composer accent/nudge requests are
+not give it back to automation. Pending Composer accent/nudge and timing/register requests are
 cancelled on takeover. Key changes and snapshot recall claim affected voices;
 transposition/B-part protects harmony; manual scenes protect scene control.
 Other voices and the section clock continue. MASTER is never automated in
@@ -149,9 +168,11 @@ Composer OFF).
 
 ## Deferred
 
-Automatic loop/rate/PHASE changes, a register macro, arbitrary ARP/MOTIF pitch
-mutation, resumable Composer checkpoints and live form replacement are deferred.
+Timing evolution for legacy, multi-bar and short/irregular foundations,
+automatic pitch PHASE changes, a separate register macro, arbitrary ARP/MOTIF
+pitch mutation, resumable Composer checkpoints and live form replacement are deferred.
 Existing TIMING/MOTION controls, including 15/16 phasing, retain local-boundary
-semantics and take manual ownership. No new rates, LCM calculations, event queues
-or scheduling buffers were added. Firmware fit and runtime timing remain
+semantics and take manual ownership. No new rates, LCM calculations or event queues
+were added. Original Note-Ons carry an extra display grid identity through the
+existing scheduling buffers. Firmware fit and runtime timing remain
 unverified until an explicitly authorized build and hardware review.

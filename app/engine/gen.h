@@ -20,6 +20,28 @@ enum {
     BL_GEN_HEARTBEAT, BL_GEN_DRONE, BL_GEN_ARP, BL_GEN_MOTIF, BL_NGENS
 };
 
+/* Heartbeat stores absolute GM drum notes in pitch.degree (octave/accidental
+ * zero). Its renderer bypasses every melodic pitch transformation. */
+enum { BL_DRUM_KICK = 36, BL_DRUM_SNARE = 38, BL_DRUM_CLOSED_HAT = 42, BL_DRUM_OPEN_HAT = 46 };
+
+/* Heartbeat uses the existing generator direction/groove bytes as its own
+ * controls. Zero is deliberately ALL / STEADY, preserving the default sound.
+ * Parts 1..3 permit that many instruments, ordered BD, SD, CH, OH. */
+enum { BL_DRUM_ALL, BL_DRUM_BD, BL_DRUM_BD_SD, BL_DRUM_BD_SD_CH };
+enum { BL_DRUM_STEADY, BL_DRUM_SPARSE, BL_DRUM_DRIVE };
+static inline int bl_drum_parts(int parts) { return parts ? parts : 4; }
+static inline int bl_drum_allowed(int parts, int midi)
+{
+    int count = bl_drum_parts(parts);
+    switch (midi) {
+    case BL_DRUM_KICK: return count >= 1 && count <= 4;
+    case BL_DRUM_SNARE: return count >= 2 && count <= 4;
+    case BL_DRUM_CLOSED_HAT: return count >= 3 && count <= 4;
+    case BL_DRUM_OPEN_HAT: return count == 4;
+    default: return 0;
+    }
+}
+
 /* seedProcedure: a = bars, b = mutations; pulsingBass: a = accents; stagedPluck, bassMelody, drone: a = bars;
  * chordLayer: a = periodBars; heartbeat: none.
  * ARP/MOTIF: a = onset spacing in ticks (480 eighths or 240 sixteenths; 0/invalid -> 480);
@@ -27,7 +49,9 @@ enum {
  * Gate is independent of rate. Two octaves, one bar before phase_steps.
  * direction = BL_DIR_* for ARP/MOTIF only; omitted/zero -> UP, invalid -> UP.
  * groove = BL_GROOVE_* for ARP/MOTIF only; omitted/invalid -> STRAIGHT.
- * Direction and groove apply during rendering, not to the stored foundation. */
+ * Direction and groove apply during rendering, not to the stored foundation.
+ * HEARTBEAT instead uses direction = BL_DRUM_ALL/BD/BD_SD/BD_SD_CH and
+ * groove = BL_DRUM_STEADY/SPARSE/DRIVE; a/b remain unused. */
 typedef struct {
     uint8_t kind;
     int16_t a, b;

@@ -20,6 +20,9 @@ enum {
     BL_CFG_RATE, BL_CFG_GATE, BL_CFG_LOOP, BL_CFG_DIRECTION, BL_CFG_GROOVE, BL_CFG_PHASE, BL_CFG_DENSITY, BL_NCFG
 };
 #define BL_CFG_ALL ((1u << BL_NCFG) - 1u)
+/* Generator-specific meanings of the existing stored fields and dirty bits. */
+#define BL_CFG_DRUM_PARTS BL_CFG_DIRECTION
+#define BL_CFG_DRUM_GROOVE BL_CFG_GROOVE
 
 /* Straight-grid source size for an ARP/MOTIF target, before playback masks.
  * Legacy generators have no ordered traversal and expose only PHASE 0. */
@@ -65,12 +68,15 @@ static inline int bl_config_valid(const bl_vconfig_t *c)
         if (c->key.scale.off[i] <= c->key.scale.off[i - 1] || c->key.scale.off[i] > 11) return 0;
     if (c->gen.kind == BL_GEN_ARP || c->gen.kind == BL_GEN_MOTIF)
         return (c->gen.a == 240 || c->gen.a == 480) && c->gen.b > 0 && c->gen.b < c->gen.a;
+    if (c->gen.kind == BL_GEN_HEARTBEAT &&
+        (c->gen.direction > BL_DRUM_BD_SD_CH || c->gen.groove > BL_DRUM_DRIVE)) return 0;
     /* Legacy generators use a as bars/accents and b as seed-procedure passes. */
     return c->gen.a >= 1 && c->gen.a <= 32 && c->gen.b >= 0 && c->gen.b <= 32;
 }
 
 /* Edit a copy, then validate: failure leaves the caller's settings untouched.
- * RATE/GATE/DIRECTION/GROOVE are currently meaningful only for ARP/MOTIF. */
+ * RATE/GATE are meaningful only for ARP/MOTIF. Heartbeat's DIRECTION/GROOVE
+ * fields carry drum PARTS/GROOVE, without changing the record layout. */
 static inline int bl_config_edit(bl_vconfig_t *c, int field, int32_t value)
 {
     bl_vconfig_t next = *c;
@@ -83,6 +89,10 @@ static inline int bl_config_edit(bl_vconfig_t *c, int field, int32_t value)
     case BL_CFG_GENERATOR:
         if (value < 0 || value >= BL_NGENS) return -1;
         if (next.gen.kind != value) {
+            if (next.gen.kind == BL_GEN_HEARTBEAT || value == BL_GEN_HEARTBEAT) {
+                next.gen.direction = 0;
+                next.gen.groove = 0;
+            }
             next.gen.kind = (uint8_t)value;
             int new_arp = value == BL_GEN_ARP || value == BL_GEN_MOTIF;
             if (!arp || !new_arp) {
@@ -121,11 +131,15 @@ static inline int bl_config_edit(bl_vconfig_t *c, int field, int32_t value)
         next.length = (uint32_t)value * (BL_PPQN / 4);
         break;
     case BL_CFG_DIRECTION:
-        if (!arp || value < 0 || value >= BL_NDIRS) return -1;
+        if (next.gen.kind == BL_GEN_HEARTBEAT) {
+            if (value < BL_DRUM_ALL || value > BL_DRUM_BD_SD_CH) return -1;
+        } else if (!arp || value < 0 || value >= BL_NDIRS) return -1;
         next.gen.direction = (uint8_t)value;
         break;
     case BL_CFG_GROOVE:
-        if (!arp || value < 0 || value >= BL_NGROOVES) return -1;
+        if (next.gen.kind == BL_GEN_HEARTBEAT) {
+            if (value < BL_DRUM_STEADY || value > BL_DRUM_DRIVE) return -1;
+        } else if (!arp || value < 0 || value >= BL_NGROOVES) return -1;
         next.gen.groove = (uint8_t)value;
         break;
     case BL_CFG_PHASE:
