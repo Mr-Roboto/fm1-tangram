@@ -808,7 +808,7 @@ static int proj_expect(const char *what, int *got)
     else if (!strcmp(what, "ext_ports"))
         *got = device_settings_get().ext_ports;
     else if (!strcmp(what, "lights"))
-        *got = proj.lights;
+        *got = device_settings_get().lights;
     else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])
         *got = slot_used(what[9] - '0');
     else if (!strncmp(what, "slot_lit", 8) && what[8] >= '0' && what[8] < '0' + PROJ_SLOTS && !what[9])

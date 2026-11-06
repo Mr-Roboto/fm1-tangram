@@ -6,6 +6,8 @@
 enum { PROJECT_RECORD_BYTES = 46 + 38 * BL_MAX_VOICES,
        PROJECT_RECORD6_BYTES = 42 + 37 * BL_MAX_VOICES, PROJECT_RECORD5_BYTES = 336 };
 
+typedef char project_record_must_be_312_bytes[PROJECT_RECORD_BYTES == 312 ? 1 : -1];
+
 typedef struct {
     const uint8_t *read;
     uint8_t *write;
@@ -57,18 +59,24 @@ static void project_config_record(project_io_t *io, bl_vconfig_t *c, int legacy,
     c->density_cut = format >= 7 ? (uint8_t)project_bits(io, c->density_cut, 1) : 0;
 }
 
-static void project_record_fields(project_io_t *io, proj_t *p)
+static void project_record_fields(project_io_t *io, proj_t *p, int *legacy_lights)
 {
     p->magic = project_bits(io, p->magic, 4);
     p->format = project_bits(io, p->format, 4);
     int legacy = !io->write && p->format == 5;
-    if (p->magic != PROJ_MAGIC || (!legacy && p->format != 6 && p->format != PROJ_FORMAT) ||
+    if (p->magic != PROJ_MAGIC || (!legacy && p->format != 6 && p->format != 7 && p->format != PROJ_FORMAT) ||
         (legacy && BL_MAX_VOICES != 7)) { io->bad = 1; return; }
     p->tpl = (uint8_t)project_bits(io, p->tpl, 1);
     p->key_root = (uint8_t)project_bits(io, p->key_root, 1);
     p->key_mode = (uint8_t)project_bits(io, p->key_mode, 1);
     if (legacy) project_skip(io, 2);     /* obsolete sync and ext_ports: never imported */
-    p->lights = (uint8_t)project_bits(io, p->lights, 1);
+    uint8_t choice = (uint8_t)project_bits(io, p->composer_start, 1);
+    if (p->format >= 8) p->composer_start = choice;
+    else {
+        if (choice > 2) { io->bad = 1; return; }
+        if (legacy_lights) *legacy_lights = choice;
+        p->composer_start = 0;
+    }
     if (legacy) project_skip(io, 2);     /* seed began at historical byte 16 */
     uint32_t lo = project_bits(io, (uint32_t)p->seed, 4);
     uint32_t hi = project_bits(io, (uint32_t)(p->seed >> 32), 4);
@@ -104,12 +112,12 @@ static void project_record_fields(project_io_t *io, proj_t *p)
     }
 }
 
-static int project_record_read(const uint8_t *record, int bytes, proj_t *out)
+static int project_record_read(const uint8_t *record, int bytes, proj_t *out, int *legacy_lights)
 {
     if (bytes < 8) return -1;
     memset(out, 0, sizeof *out);
     project_io_t io = {record, NULL, bytes, 0, 0};
-    project_record_fields(&io, out);
+    project_record_fields(&io, out, legacy_lights);
     int expected = out->format == 5 ? PROJECT_RECORD5_BYTES :
         out->format == 6 ? PROJECT_RECORD6_BYTES : PROJECT_RECORD_BYTES;
     if (io.bad || io.at != bytes || bytes != expected) return -1;
@@ -122,6 +130,6 @@ static int project_record_write(const proj_t *p, uint8_t *record, int max)
     if (!proj_valid(p) || max < PROJECT_RECORD_BYTES) return -1;
     proj_t copy = *p;
     project_io_t io = {NULL, record, max, 0, 0};
-    project_record_fields(&io, &copy);
+    project_record_fields(&io, &copy, NULL);
     return io.bad || io.at != PROJECT_RECORD_BYTES ? -1 : io.at;
 }

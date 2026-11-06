@@ -457,6 +457,37 @@ static void cell(int view, int i, cell_t *c)
     c->hi = 1;
     if (voice_cell(k, c)) return;
     switch (k) {
+    case KN_PERF_SLOT: {
+        char name[PERFORMANCE_PRESET_NAME_BYTES + 1];
+        int used = performance_preset_used(ui.perf_slot + 1);
+        c->kind = CELL_TEXT;
+        if (ui.perf_slot < 9) cat(c->val, "0");
+        cat_u(c->val, ui.perf_slot + 1u);
+        performance_name(name);
+        cat(c->sub, used < 0 ? "ERROR" : !used && ui.perf_phase != PERF_EDIT ? "EMPTY" : name);
+        break;
+    }
+    case KN_PERF_OP:
+        c->kind = CELL_TEXT;
+        cat(c->val, PERF_OP_NAME[ui.perf_op]);
+        break;
+    case KN_PERF_POS:
+        c->kind = CELL_TEXT;
+        if (ui.perf_phase != PERF_EDIT) cat(c->val, "-");
+        else if (ui.perf_pos == PERFORMANCE_PRESET_NAME_BYTES) cat(c->val, "END");
+        else cat_u(c->val, ui.perf_pos + 1u);
+        break;
+    case KN_PERF_CHAR:
+        c->kind = CELL_TEXT;
+        if (ui.perf_phase != PERF_EDIT) cat(c->val, "-");
+        else if (ui.perf_char == PERF_BACKSPACE) {
+            cat(c->val, "BS"); cat(c->sub, "SEL DEL");
+        } else if (PERF_CHARS[ui.perf_char] == ' ') {
+            cat(c->val, "_"); cat(c->sub, "SPACE");
+        } else {
+            c->val[0] = PERF_CHARS[ui.perf_char]; c->val[1] = 0;
+        }
+        break;
     case KN_THEME:
         c->kind = CELL_TEXT;
         cat(c->val, DEVICE_THEME_NAME[device_settings_get().theme]);
@@ -527,8 +558,8 @@ static void cell(int view, int i, cell_t *c)
         cat(c->val, PORT_SHORT[c->v]);
         break;
     case KN_LIGHTS:
-        c->hi = 2, c->v = proj.lights;
-        cat(c->val, LIGHT_NAME[proj.lights % 3u]);
+        c->hi = 2, c->v = screen_clock().lights;
+        cat(c->val, LIGHT_NAME[screen_clock().lights % 3u]);
         break;
     case KNS_LOOP:
     case KNS_STEPS:
@@ -1624,13 +1655,43 @@ static void seed_hex(char *t, int groups)   /* the seed as 16 hex digits (groups
     t[k] = 0;
 }
 
+/* GLO performance: the bank's selection and a separate, uncommitted name buffer. */
+static void draw_performance_presets(void)
+{
+    char slot[4] = {'0', (char)('1' + ui.perf_slot), 0}, name[PERFORMANCE_PRESET_NAME_BYTES + 1];
+    int used = performance_preset_used(ui.perf_slot + 1), editing = ui.perf_phase == PERF_EDIT;
+    if (ui.perf_slot == 9) { slot[0] = '1'; slot[1] = '0'; }
+    row(4, 3, 64, "SLOT", slot, K_FOCUS);
+    row(4, 23, 64, "ACTION", PERF_OP_NAME[ui.perf_op], K_TEXT);
+    performance_name(name);
+    if (editing) {
+        for (int i = 0; i < PERFORMANCE_PRESET_NAME_BYTES; i++) {
+            char ch[2] = {name[i] == ' ' ? '_' : name[i], 0};
+            text_box(10 + i * 18, 48, 17, 22, &FONT_B, ch, i == ui.perf_pos ? K_FOCUS : K_TEXT, 1);
+        }
+        cv_rect(10 + ui.perf_pos * 18, 73, ui.perf_pos == PERFORMANCE_PRESET_NAME_BYTES ? 8 : 17, 2, K_FOCUS);
+    } else {
+        text_box(6, 48, 228, 26, &FONT_B, used < 0 ? "ERROR" : used ? name : "EMPTY", K_TEXT, 0);
+    }
+    text_box(6, 85, 228, 20, &FONT_XS, performance_status(),
+        ui.perf_phase == PERF_OVERWRITE || ui.perf_feedback == PERF_ERROR ? K_MUTED : K_FOCUS, 0);
+    cv_text(6, 110, &FONT_T, editing ? "K3 POSITION; K4 CHARACTER" : "K1 SLOT; K2 ACTION", K_TEXT2);
+    cv_text(6, 128, &FONT_T, editing ? ui.perf_char == PERF_BACKSPACE ? "K3 LEAVES BS; K1 CANCELS" :
+        "_ SPACE; K1 / GLO CANCEL" : ui.perf_phase == PERF_BROWSE ? "SEL PREPARE; GLO: SETUP" :
+        "SEL CONFIRM; GLO: SETUP", K_DIM);
+}
+
 /* ---- SETUP: the template, the key, the clock, MIDI out, the version; the seed as 16 hex digits (a run is
  * reproducible on the Mac with it) */
 static void draw_setup(void)
 {
     char t[40];
     int32_t x, i;
-    if (ui.page[V_SETUP]) {
+    if (ui.page[V_SETUP] == 2) {
+        draw_performance_presets();
+        return;
+    }
+    if (ui.page[V_SETUP] == 1) {
         int status = device_settings_status();
         text_box(4, 3, 232, 22, &FONT_B, "GLOBAL APPEARANCE", K_FOCUS, 0);
         row(4, 28, 64, "THEME", DEVICE_THEME_NAME[device_settings_get().theme], K_FOCUS);
@@ -1645,7 +1706,7 @@ static void draw_setup(void)
         cv_text(14, 107, &FONT_T, "SOURCE", K_TEXT2);
         cv_rect(100, 107, 1, 12, K_TIMING);
         cv_text(108, 107, &FONT_T, "TIME", K_TEXT2);
-        cv_text(6, 130, &FONT_T, "K1 THEME; GLO: SETUP", K_DIM);
+        cv_text(6, 130, &FONT_T, "K1 THEME; GLO: PERFORMANCE", K_DIM);
         return;
     }
     row(4, 4, 76, "TEMPLATE", TPL_TITLE[proj.tpl], K_TEXT);
@@ -1703,6 +1764,12 @@ static uint32_t main_sig(void)
         return hash(hash(hash(0x48454C50u, ui.help), ui.help_part), device_settings_get().theme);
     h = hash(h, device_settings_get().theme);
     if (ui.view == V_SETUP) h = hash(h, (uint32_t)device_settings_status());
+    if (performance_page()) {
+        char name[PERFORMANCE_PRESET_NAME_BYTES + 1];
+        performance_name(name);
+        h = hash_s(hash_s(h, name), performance_status());
+        h = hash(h, ui.perf_phase | (uint32_t)ui.perf_pos << 8 | (uint32_t)ui.perf_char << 16);
+    }
     h = hash(h, ui.page[ui.view]);
     if (ui.view == V_PERFORM && ui.page[V_PERFORM] == 2) {
         h = hash(h, (uint32_t)proj_composer_start()); /* stopped ALGORITHM changes no voice/cell state */
@@ -1776,6 +1843,10 @@ static void draw_main(void)
 static const char *compact_knob_label(int k, int i)
 {
     switch (k) {
+    case KN_PERF_SLOT: return "SLOT";
+    case KN_PERF_OP: return "ACTION";
+    case KN_PERF_POS: return "POS";
+    case KN_PERF_CHAR: return "CHAR";
     case KN_THEME: return "THEME";
     case KN_DEVICE_RETRY: return "SAVE";
     case KN_COMPOSER: return "COMPOSE";
@@ -1955,7 +2026,7 @@ static void sp_item(const char *s, const char *sep)   /* s after what is gathere
  * STEPS"); a range as "G2 to G4", "8 to 16" */
 static void sp_knob(int view, int i)
 {
-    static const uint8_t WITH_SUB[] = {KN_LOOP, KN_DRUM_PARTS, KN_DRUM_GROOVE,
+    static const uint8_t WITH_SUB[] = {KN_PERF_SLOT, KN_LOOP, KN_DRUM_PARTS, KN_DRUM_GROOVE,
         KNS_LOOP, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_LENGTH, KNS_PHASE, KNS_PLAYS};
     cell_t c;
     uint32_t j;
@@ -1967,6 +2038,12 @@ static void sp_knob(int view, int i)
     }
     sp_cat(knob_label(view, i));
     sp_cat(" ");
+    if (k == KN_PERF_CHAR && ui.perf_phase == PERF_EDIT) {
+        if (ui.perf_char == PERF_BACKSPACE) sp_cat("Backspace. SEL deletes once to the left. Move K3 to leave backspace and save.");
+        else if (PERF_CHARS[ui.perf_char] == ' ') sp_cat("Space");
+        else { char ch[2] = {PERF_CHARS[ui.perf_char], 0}; sp_cat(ch); }
+        return;
+    }
     if (k == KNS_REGISTER && sel_cfg()) {   /* (its notes may have a minus of their own) */
         char t[24];
         reg_text(sel_cfg()->reg_low, sel_cfg()->reg_high, t, 1);
@@ -2215,7 +2292,17 @@ static void sp_main(void)
         break;
     }
     default:
-        if (ui.page[V_SETUP]) {
+        if (ui.page[V_SETUP] == 2) {
+            char name[PERFORMANCE_PRESET_NAME_BYTES + 1];
+            performance_name(name);
+            sp_cat("Performance slot "); sp_int(ui.perf_slot + 1u);
+            sp_cat(". Name "); sp_cat(performance_preset_used(ui.perf_slot + 1) == 0 && ui.perf_phase != PERF_EDIT ? "empty" : name);
+            sp_cat(". "); sp_cat(PERF_OP_NAME[ui.perf_op]);
+            sp_cat(". "); sp_cat(performance_status());
+            sp_cat(". K1 or leave page to cancel edits. SAVE saves project and snapshots.");
+            break;
+        }
+        if (ui.page[V_SETUP] == 1) {
             int status = device_settings_status();
             sp_cat("Global theme ");
             sp_cat(DEVICE_THEME_NAME[device_settings_get().theme]);
@@ -2426,7 +2513,7 @@ static void speak_dump(void)
         proj.key_root = (uint8_t)x;
         preview_clock.sync = (uint8_t)(x & 1);
         preview_clock.ext_ports = (uint8_t)(x % 3 == 0 ? 1u << PORT_USB : x % 3 == 1 ? 1u << PORT_TRS : 3u);
-        proj.lights = (uint8_t)(x % 3);
+        preview_clock.lights = (uint8_t)(x % 3);
         sp_page(0);
         sp_print("KNOB", sp_buf);
     }

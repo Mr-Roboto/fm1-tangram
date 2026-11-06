@@ -78,7 +78,7 @@ typedef struct {
     int8_t scene_by_phase[7];
     bl_scene_t scene[BL_MAX_SCENES];
     bl_compcfg_t composer;       /* optional: shares the existing AUTO boundary, off by default */
-    uint8_t composer_start;     /* session-local chronological section, not serialized */
+    uint8_t composer_start;     /* chronological start section, persisted by the app */
 } bl_project_t;
 
 /* the templates: Project.demo, .fullEnsemble, .ambientDrift */

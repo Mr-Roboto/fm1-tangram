@@ -39,7 +39,6 @@
 #define SLOT_HEAD 8                      /* magic, format */
 #define STATE_MAX ((int)PLAT_STORE_MAX - SLOT_HEAD)
 #define HUNDRED F64(0x4059000000000000)  /* 100.0 */
-static uint8_t composer_start;          /* next-Play choice; no project-format change */
 #define UNDO_BYTES 32768                 /* 20 undo points of 1,636 bytes (the templates' states: 800 or less); larger
                                           * ones leave room for fewer */
 
@@ -124,7 +123,7 @@ static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: 
     proj.density_pct = 100;
     proj.has_density = 0;
     proj.composer = (bl_compcfg_t){0, 0, 1, 1};
-    composer_start = 0;
+    proj.composer_start = 0;
     memset(proj.channel, 0, sizeof proj.channel);
     memset(proj.voice_configured, 0, sizeof proj.voice_configured);
     memset(proj.voice_config, 0, sizeof proj.voice_config);
@@ -139,7 +138,6 @@ void proj_defaults(void)
     memset(&proj, 0, sizeof proj);
     proj.magic = PROJ_MAGIC;
     proj.format = PROJ_FORMAT;
-    proj.lights = 1;
     from_template(BL_TPL_DEMO, 0);
     proj.seed = proj_eng.seed;           /* (the template's own until the first Play draws one) */
     proj_unseeded = 1;
@@ -154,7 +152,7 @@ static int proj_valid(const proj_t *p)
     if (p->ratchet_pct > 50 || p->ratchet_pct % 5)
         return 0;
     if (p->tpl >= BL_NTPL || p->key_root > 11 || p->key_mode >= BL_NMODES
-        || p->lights > 2 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
+        || p->composer_start > 6 || p->bpm < 40 || p->bpm > 220 || p->density_pct > 100 || p->has_density > 1)
         return 0;
     if (!bl_comp_valid(&p->composer) || p->arr_has > 1 || p->arr_on > 1 || p->arr_ambient > 1 || p->arr_reprise > 1)
         return 0;
@@ -168,7 +166,7 @@ static int proj_valid(const proj_t *p)
     return 1;
 }
 
-#include "project_record.c"              /* explicit format 7, readers for formats 5 and 6 */
+#include "project_record.c"              /* explicit format 8, readers for formats 5, 6 and 7 */
 
 static void slot_load(int k)             /* the slot's record, if it is one (its state unpacks) */
 {
@@ -188,9 +186,9 @@ static void slot_load(int k)             /* the slot's record, if it is one (its
 
 int proj_load(void)
 {
-    composer_start = 0;
+    proj.composer_start = 0;
     static proj_t rec;
-    int n, k;
+    int n, k, legacy_lights = -1;
     undo_used = undo_n = 0;
     proj_stale = proj_saving = 0;
     proj_template_pending = 0;
@@ -198,7 +196,8 @@ int proj_load(void)
         slot_load(k);
     memset(&rec, 0, sizeof rec);
     n = plat_store_load(OBJ_PROJ, proj_buf, sizeof proj_buf);
-    if (!project_record_read(proj_buf, n, &rec)) {
+    if (!project_record_read(proj_buf, n, &rec, &legacy_lights)) {
+        if (legacy_lights >= 0) device_settings_import_lights(legacy_lights);
         proj = rec;
         proj_unseeded = 0;
         return 0;
@@ -236,13 +235,14 @@ int proj_save(void)                      /* the project; the slots stored since 
     }
     sync_voice_configs();
     proj_saving = 0;
+    int lights_error = device_settings_preserve_lights();
 #ifdef PLAT_HOST
     host_saving();
 #endif
     draw_seed();                         /* (a project saved has its seed) */
     uint8_t record[PROJECT_RECORD_BYTES];
     int bytes = project_record_write(&proj, record, sizeof record);
-    r = bytes < 0 ? -1 : save_obj(OBJ_PROJ, record, (uint32_t)bytes);
+    r = lights_error || bytes < 0 ? -1 : save_obj(OBJ_PROJ, record, (uint32_t)bytes);
     for (k = 0; k < PROJ_SLOTS; k++)
         if (slots[k].dirty) {
             if (save_obj(OBJ_SLOT0 + (uint32_t)k, slots[k].rec, slots[k].n))
@@ -268,7 +268,7 @@ void proj_to_engine(bl_project_t *out)
     out->has_arr = proj.arr_has;
     arr_get(&out->arr);
     out->composer = proj.composer;
-    out->composer_start = composer_start;
+    out->composer_start = proj.composer_start;
     if (proj.has_density)
         out->density = pct_of(proj.density_pct);
     out->has_ratchet = 1;
@@ -420,14 +420,14 @@ int proj_set_voice_config_field(int voice, int field, int32_t value)
     return proj_set_voice_config(voice, &target);
 }
 
-int proj_composer_start(void) { return composer_start; }
+int proj_composer_start(void) { return proj.composer_start; }
 
 int proj_select_composer_stage(int section)
 {
     if (section < 0 || section >= 7 || rt_loading()) return -1;
     if (rt_select_composer_stage(section)) return -1;
     if (rt_playing()) return 0;
-    composer_start = (uint8_t)section;
+    proj.composer_start = (uint8_t)section;
     return 0;
 }
 
@@ -724,3 +724,5 @@ int undo_pop(void)                      /* the point kept when the engine's queu
     undo_used = (uint16_t)at;
     return 0;
 }
+
+#include "performance_presets.c"          /* musical records only; snapshots remain independent */

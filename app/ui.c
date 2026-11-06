@@ -25,8 +25,8 @@
 
 /* the pages, a button each */
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
-static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "Setup"};
-static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 1, 2};
+static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "GLO SETUP"};
+static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 1, 3};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
 /* Page bindings: KN_ edits through the project interfaces; KNS_ remains shown
  * only. Legacy AUTO/FORM/AMBIENT/RATCHET handlers remain for later placement. */
@@ -37,6 +37,7 @@ enum {
     KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_VDENSITY, KN_DECAY,
     KN_COMPOSER, KN_COMP_BARS, KN_COMP_EVOLUTION, KN_COMP_TENSION,
     KN_THEME, KN_DEVICE_RETRY,
+    KN_PERF_SLOT, KN_PERF_OP, KN_PERF_POS, KN_PERF_CHAR,
     KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
     KNS_REPRISE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
 };
@@ -63,6 +64,8 @@ static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DE
 static const uint8_t ROUTING_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
 static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
 static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, KN_NONE};
+static const uint8_t PERFORMANCE_KNOB[4] = {KN_PERF_SLOT, KN_PERF_OP, KN_PERF_POS, KN_PERF_CHAR};
+static const char *const PERFORMANCE_LABEL[4] = {"Slot", "Operation", "Position", "Character"};
 static const char *const PLAY_LABEL[4] = {"Direction", "Groove", "Delay", "Delay time"};
 static const char *const ROUTING_LABEL[4] = {"MIDI channel", "Register", "Voice density", "Comp tension"};
 static const char *const COMPOSER_LABEL[4] = {"Composer", "Form", "Phrase bars", "Evolution"};
@@ -102,7 +105,18 @@ static const char *const FORM_NAME[] = {"", "CLASSIC ARC", "SLOW BUILD", "AMBIEN
                                           * pot's place; the device's smoothing converges within a few ms */
 enum { POT_BOOT, POT_REST, POT_MOVING };
 
+enum { PERF_LOAD, PERF_STORE, PERF_RENAME };
+enum { PERF_BROWSE, PERF_CONFIRM, PERF_EDIT, PERF_OVERWRITE };
+enum { PERF_NO_FEEDBACK, PERF_SAVED, PERF_LOADED, PERF_ERROR };
+static const char *const PERF_OP_NAME[] = {"LOAD", "STORE", "RENAME"};
+/* Backspace is a choice, never a rotary side effect. SEL applies one deletion. */
+static const char PERF_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ";
+#define PERF_BACKSPACE (sizeof PERF_CHARS - 1u)
+#define PERF_SPACE (PERF_BACKSPACE - 1u)
+
 static struct {
+    uint8_t perf_slot, perf_op, perf_phase, perf_pos, perf_char, perf_feedback;
+    char perf_name[PERFORMANCE_PRESET_NAME_BYTES + 1]; /* unconfirmed, RAM only */
     uint8_t view, sel;                   /* the page; the selected voice (its key) */
     uint8_t page[NVIEWS];                /* runtime-only page memory, independent for each section */
     uint32_t btn, keys, btn_used, key_used;
@@ -133,7 +147,8 @@ static struct {
 
 static const char *view_name(int v)
 {
-    return ui.page[v] == 2 && v == V_PERFORM ? "HOME COMPOSE" :
+    return ui.page[v] == 2 && v == V_SETUP ? "GLO PERFORMANCE" :
+           ui.page[v] == 2 && v == V_PERFORM ? "HOME COMPOSE" :
            ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
            ui.page[v] && v == V_VOICE ? "ENV ROUTING" :
            ui.page[v] && v == V_SETUP ? "GLO APPEARANCE" : VIEW_NAME[v];
@@ -141,7 +156,8 @@ static const char *view_name(int v)
 static int heartbeat_selected(void);
 static int view_knob(int v, int i)
 {
-    int k = ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
+    int k = ui.page[v] == 2 && v == V_SETUP ? PERFORMANCE_KNOB[i] :
+           ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
            ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] :
            ui.page[v] && v == V_SETUP ? APPEARANCE_KNOB[i] : VIEW_KNOB[v][i];
@@ -159,7 +175,8 @@ static const char *knob_label(int v, int i)
     if (k == KN_NONE) return "Unused";
     if (k == KN_DRUM_PARTS) return "Parts";
     if (k == KN_DRUM_GROOVE) return "Groove";
-    return ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
+    return ui.page[v] == 2 && v == V_SETUP ? PERFORMANCE_LABEL[i] :
+           ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
            ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] :
            ui.page[v] && v == V_SETUP ? APPEARANCE_LABEL[i] : KNOB_LABEL[v][i];
@@ -517,7 +534,21 @@ static int held_voice(void)              /* the voice key held (the lowest), -1 
 }
 
 /* ----------------------------------------------------------- the values --- */
-static void set_view(int v) { ui.view = (uint8_t)v; }
+static int performance_page(void) { return ui.view == V_SETUP && ui.page[V_SETUP] == 2; }
+static void performance_cancel(void)
+{
+    ui.perf_phase = PERF_BROWSE;
+    ui.perf_feedback = PERF_NO_FEEDBACK;
+    ui.perf_pos = 0;
+    ui.perf_char = PERF_SPACE;
+    memset(ui.perf_name, ' ', PERFORMANCE_PRESET_NAME_BYTES);
+    ui.perf_name[PERFORMANCE_PRESET_NAME_BYTES] = 0;
+}
+static void set_view(int v)
+{
+    performance_cancel();              /* all navigation discards unconfirmed name edits */
+    ui.view = (uint8_t)v;
+}
 
 static void saved(int r)                 /* what a SAVE did (proj_save's, proj_stopped's): 1, nothing yet */
 {
@@ -663,6 +694,140 @@ static int voice_knob(int role, int k, int32_t e)
     return 1;
 }
 
+/* Performance page: selecting/browsing never calls a project mutation. Only
+ * the explicit SEL path reaches the backend; SAVE retains its existing path. */
+static void performance_name(char out[PERFORMANCE_PRESET_NAME_BYTES + 1])
+{
+    memset(out, ' ', PERFORMANCE_PRESET_NAME_BYTES);
+    out[PERFORMANCE_PRESET_NAME_BYTES] = 0;
+    if (ui.perf_phase != PERF_BROWSE) memcpy(out, ui.perf_name, sizeof ui.perf_name);
+    else performance_preset_name(ui.perf_slot + 1, out);
+}
+
+static int performance_ready(void)
+{
+    return ui.perf_phase != PERF_BROWSE && !rt_playing() && rt_idle() &&
+        (ui.perf_op == PERF_RENAME || !proj_save_pending()) &&
+        performance_preset_used(ui.perf_slot + 1) >= 0;
+}
+
+static const char *performance_status(void)
+{
+    int used = performance_preset_used(ui.perf_slot + 1);
+    if (used < 0 || ui.perf_feedback == PERF_ERROR) return "ERROR";
+    if (rt_playing() && ui.perf_op == PERF_LOAD) return "STOP TO LOAD";
+    if (rt_playing() && ui.perf_op == PERF_STORE) return "STOP TO STORE";
+    if (ui.perf_feedback == PERF_SAVED) return "SAVED";
+    if (ui.perf_feedback == PERF_LOADED) return "LOADED";
+    if (ui.perf_phase != PERF_BROWSE && !performance_ready())
+        return rt_playing() ? "STOP TO RENAME" : "WAIT UNTIL IDLE";
+    if (ui.perf_phase == PERF_OVERWRITE) return "OVERWRITE?";
+    if (ui.perf_phase == PERF_EDIT)
+        return ui.perf_char == PERF_BACKSPACE ? "SEL: BACKSPACE" : "SEL: SAVE NAME";
+    if (ui.perf_phase == PERF_CONFIRM)
+        return ui.perf_op == PERF_LOAD ? "SEL: LOAD" : "SEL: STORE";
+    return !used ? "EMPTY" : "SEL: PREPARE";
+}
+
+static void performance_prepare(void)
+{
+    int used = performance_preset_used(ui.perf_slot + 1);
+    performance_cancel();
+    if (used < 0) {
+        ui.perf_feedback = PERF_ERROR;
+        warn("PERFORMANCE", "ERROR");
+        return;
+    }
+    if (rt_playing() && ui.perf_op != PERF_RENAME) {
+        warn("PERFORMANCE", ui.perf_op == PERF_LOAD ? "STOP TO LOAD" : "STOP TO STORE");
+        return;
+    }
+    if (!used && ui.perf_op != PERF_STORE) {
+        say("PERFORMANCE", "EMPTY");
+        return;
+    }
+    if (used && performance_preset_name(ui.perf_slot + 1, ui.perf_name)) {
+        ui.perf_feedback = PERF_ERROR;
+        warn("PERFORMANCE", "ERROR");
+        return;
+    }
+    ui.perf_phase = ui.perf_op == PERF_RENAME || (ui.perf_op == PERF_STORE && !used) ? PERF_EDIT : PERF_CONFIRM;
+    if (ui.perf_phase == PERF_EDIT) {
+        for (unsigned i = 0; i < PERF_BACKSPACE; i++)
+            if (PERF_CHARS[i] == ui.perf_name[0]) ui.perf_char = (uint8_t)i;
+    }
+    say("PERFORMANCE", performance_status());
+}
+
+static void performance_confirm(void)
+{
+    if (ui.perf_phase == PERF_BROWSE) {
+        performance_prepare();
+        return;
+    }
+    if (ui.perf_phase == PERF_EDIT && ui.perf_char == PERF_BACKSPACE) {
+        if (!ui.perf_pos) {
+            say("NAME", "START OF NAME");
+            return;
+        }
+        {
+            int at = --ui.perf_pos;
+            memmove(ui.perf_name + at, ui.perf_name + at + 1, PERFORMANCE_PRESET_NAME_BYTES - at - 1);
+            ui.perf_name[PERFORMANCE_PRESET_NAME_BYTES - 1] = ' ';
+        }
+        say("NAME", "BACKSPACE");    /* retain BS selection: one deletion per deliberate SEL press */
+        return;
+    }
+    if (!performance_ready()) {
+        warn("PERFORMANCE", performance_status());
+        return;
+    }
+    if (ui.perf_op == PERF_STORE && ui.perf_phase == PERF_CONFIRM) {
+        ui.perf_phase = PERF_OVERWRITE;
+        say("PERFORMANCE", "OVERWRITE?");
+        return;
+    }
+    int error = ui.perf_op == PERF_LOAD ? performance_preset_load(ui.perf_slot + 1) :
+        ui.perf_op == PERF_STORE ? performance_preset_store(ui.perf_slot + 1, ui.perf_name, PERFORMANCE_PRESET_NAME_BYTES) :
+        performance_preset_rename(ui.perf_slot + 1, ui.perf_name, PERFORMANCE_PRESET_NAME_BYTES);
+    if (error) {
+        ui.perf_feedback = PERF_ERROR;
+        warn("PERFORMANCE", "ERROR");
+        return;
+    }
+    performance_cancel();
+    if (ui.perf_op == PERF_LOAD) ui.pre_ok = 0; /* refresh the stopped preview */
+    ui.perf_feedback = ui.perf_op == PERF_LOAD ? PERF_LOADED : PERF_SAVED;
+    say("PERFORMANCE", performance_status());
+}
+
+static void performance_knob(int k, int32_t e)
+{
+    /* One choice per event, without acceleration or destructive rotary actions. */
+    int d = e > 0 ? 1 : -1;
+    ui.msg_until = 0;
+    if (k == KN_PERF_SLOT) {
+        ui.perf_slot = (uint8_t)clamp(ui.perf_slot + d, 0, PERFORMANCE_PRESET_SLOTS - 1);
+        performance_cancel();
+    } else if (k == KN_PERF_OP) {
+        ui.perf_op = (uint8_t)clamp(ui.perf_op + d, PERF_LOAD, PERF_RENAME);
+        performance_prepare();
+    } else if (ui.perf_phase == PERF_EDIT) {
+        ui.perf_feedback = PERF_NO_FEEDBACK;
+        if (k == KN_PERF_POS) {
+            ui.perf_pos = (uint8_t)clamp(ui.perf_pos + d, 0, PERFORMANCE_PRESET_NAME_BYTES);
+            ui.perf_char = PERF_SPACE;
+            if (ui.perf_pos < PERFORMANCE_PRESET_NAME_BYTES)
+                for (unsigned i = 0; i < PERF_BACKSPACE; i++)
+                    if (PERF_CHARS[i] == ui.perf_name[ui.perf_pos]) ui.perf_char = (uint8_t)i;
+        } else {
+            ui.perf_char = (uint8_t)((ui.perf_char + d + PERF_BACKSPACE + 1) % (PERF_BACKSPACE + 1));
+            if (ui.perf_char != PERF_BACKSPACE && ui.perf_pos < PERFORMANCE_PRESET_NAME_BYTES)
+                ui.perf_name[ui.perf_pos] = PERF_CHARS[ui.perf_char];
+        }
+    }
+}
+
 static void knob(int role, int k, int32_t e)   /* a page's knob: the values the Mac can change (shown in the
                                                 * header; a reader hears the strip's value as it settles) */
 {
@@ -673,6 +838,12 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     char t[8];
     if (voice_knob(role, k, e)) return;
     switch (k) {
+    case KN_PERF_SLOT:
+    case KN_PERF_OP:
+    case KN_PERF_POS:
+    case KN_PERF_CHAR:
+        performance_knob(k, e);
+        break;
     case KN_THEME: {
         /* Display order is independent of persistent IDs (MONO=4, FIRE=5). */
         static const uint8_t order[DEVICE_NTHEMES] = {
@@ -776,10 +947,13 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
             show("EXT INPUT", PORT_NAME[i]);
         break;
     }
-    case KN_LIGHTS:
-        proj.lights = (uint8_t)clamp(proj.lights + d, 0, 2);
-        show("LIGHTS", LIGHTS[proj.lights]);
+    case KN_LIGHTS: {
+        device_settings_t settings = device_settings_get();
+        settings.lights = (uint8_t)clamp(settings.lights + d, 0, 2);
+        if (device_settings_set(settings)) warn("LIGHTS", "REFUSED");
+        else show("LIGHTS", LIGHTS[settings.lights]);
         break;
+    }
     case KN_RATCHET: {                   /* 0-50 % in 5s; playing, the project's, for the next Play */
         char m[16] = "RATCHET ";
         v = proj_set_ratchet(clamp(proj.ratchet_pct + 5 * e, 0, 50));
@@ -838,7 +1012,8 @@ static void button(int b)                /* a button's job, on its release (PLAY
     case B_REC: action(BL_A_BPART, BL_VID_NONE, 0, "B PART"); break;
     case B_EDIT: reroll(); break;
     case B_SEL:
-        if (ui.view == V_VOICE)
+        if (performance_page()) performance_confirm();
+        else if (ui.view == V_VOICE)
             voice_combo(B_SEL, ui.sel);
         break;
     case B_SAVE:
@@ -1057,18 +1232,22 @@ static void leds(void)
     uint32_t lb, db;
     const bl_project_t *p = tpl_now();
     int i, d, sc;
+    uint8_t lights = device_settings_get().lights;
     if (rt_playing())
         b |= play;
     if (proj_save_pending() && blink)
         b |= 1u << B_SAVE;
-    for (i = 0; proj.lights && i < NVKEYS; i++) {
+    int confirm = performance_page() && !ui.help && performance_ready();
+    if (confirm && ((plat_ms() >> (ui.perf_phase == PERF_OVERWRITE ? 6 : 8)) & 1u))
+        b |= 1u << B_SEL;
+    for (i = 0; lights && i < NVKEYS; i++) {
         int a = v_active(i), v = key_vid(i);
         if (v == BL_VID_NONE || rt_muted(v))
             continue;
         if (a == 1 || (a == 0 && blink))
             k |= 1u << i;
     }
-    if (proj.lights) {
+    if (lights) {
         d = degree_now();
         if (d >= 1 && d <= 7)
             k |= 1u << WHITE_K[DEGREE_W0 + d - 1];
@@ -1092,8 +1271,9 @@ static void leds(void)
     ui.led_k = k;
     ui.dim_k = dk;
     lb = (b & ~play) | (b & play ? LED_PLAY_GREEN : 0u);
-    db = proj.lights == 1 ? ((1u << NB) - 1u) & ~b & ~play : 0u;   /* the unlit buttons glow (lights 1) */
-    plat_lights(lb, k, db, dk, proj.lights ? 2 : 0);
+    db = lights == 1 ? ((1u << NB) - 1u) & ~b & ~play : 0u;   /* the unlit buttons glow (lights 1) */
+    if (confirm) db &= ~(1u << B_SEL); /* blinking confirmation must have a dark half even in glow mode */
+    plat_lights(lb, k, db, dk, lights ? 2 : 0);
 }
 
 /* ------------------------------------------------------------ the loop --- */
@@ -1109,6 +1289,7 @@ void ui_init(void)
 {
     memset(&ui, 0, sizeof ui);
     ui.touched = -1;
+    performance_cancel();
     ui.pot_state = POT_BOOT;             /* (pot() takes its place once the reading holds) */
     ui.pot_cand = (uint16_t)plat_master();
     ui.pot_t = plat_ms();

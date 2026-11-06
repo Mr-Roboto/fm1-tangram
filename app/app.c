@@ -25,10 +25,14 @@ void app_init(void)                      /* the transport, then the saved projec
     device_settings_init();
     device_settings_apply();            /* global clock ownership, before any project is applied */
     proj_load();
+    performance_presets_init();
     /* Always start on preset 1, even when the saved project selected another.
      * Use normal template selection; leave saved records and slots untouched. */
-    if (proj.tpl != BL_TPL_DEMO)
+    if (proj.tpl != BL_TPL_DEMO) {
+        uint8_t start = proj.composer_start;
         proj_set_template(BL_TPL_DEMO);
+        proj.composer_start = start;
+    }
     proj_apply();
 }
 void app_render(int32_t *lr, uint32_t n, uint32_t gain_q12)   /* the FM-1 makes no sound: MIDI goes out over USB */

@@ -22,23 +22,23 @@ void app_splash(void);
 
 /* the store: the project, the panel calibration (the platform's, at 0xDC000 as AMB-1), six slots and device settings, two
  * 4 KiB sectors each, in the data area 0x97000..0xDFFFF */
-enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT4, OBJ_SLOT5, OBJ_DEVICE_SETTINGS, OBJ_NOBJ };
+enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT4, OBJ_SLOT5, OBJ_DEVICE_SETTINGS, OBJ_PERFORMANCE_PRESETS, OBJ_NOBJ };
 /* Device settings: 0xCE000/0xCF000, below the unchanged existing pairs.
- * The pinned loader preserves [0x97000,0xE0000), including both sectors. */
-#define APP_STORE_MAP {0xDE000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u, 0xD2000u, 0xD0000u, 0xCE000u}
+ * The pinned loader preserves [0x97000,0xE0000), including both sectors. Performance presets: 0xCC000/0xCD000. */
+#define APP_STORE_MAP {0xDE000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u, 0xD2000u, 0xD0000u, 0xCE000u, 0xCC000u}
 
 /* ---- the project (project.c): what SAVE keeps, as a Berlinan document (AppServices.saveDocument): the project in
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 7u                   /* Composer + voice density; explicit readers for formats 5 and 6 */
+#define PROJ_FORMAT 8u                   /* Composer start replaces LIGHTS; reads formats 5, 6 and 7 */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
 
 typedef struct {
     uint32_t magic, format;
-    uint8_t tpl, key_root, key_mode, lights; /* template, root, scale; lights: off / glow / keys only */
+    uint8_t tpl, key_root, key_mode, composer_start; /* template, root, scale, start section 0..6 */
     uint64_t seed;                       /* masterSeed */
     int32_t bpm;                         /* 40-220 */
     uint8_t arr_has, arr_on, arr_ambient, arr_reprise;   /* Project.arrangement: nil (arr_has 0, the rest 0) or its
@@ -111,6 +111,25 @@ enum { UNDO_NONE = -1, UNDO_FULL = -2 };
 int undo_pop(void);                      /* the last undo point recalled at the next bar: 0; UNDO_NONE nothing to
                                           * undo; UNDO_FULL the engine's queue full (the point kept) */
 int undo_depth(void);                    /* the undo points held (UIState.canUndo: more than none) */
+
+/* Performance presets: independent bank, slots numbered 01..10 (API 1..10).
+ * Main-loop only. init: 0 loaded, 1 absent -> empty, -1 malformed/unsupported
+ * -> unavailable (edits refused). No factory content or automatic flash write.
+ * used: 0 empty, 1 occupied, -1 invalid/unavailable. name: 12 ASCII bytes plus
+ * a terminating NUL in the caller's 13-byte buffer; -1 on empty/invalid.
+ * store/rename names accept length 0..12, printable ASCII, space-padded on disk.
+ * load/store require stopped, idle transport and no pending normal SAVE.
+ * rename also requires idle transport for flash safety. Edits persist the bank
+ * immediately, returning 0 or -1. Load changes RAM only, leaving snapshots and
+ * undo untouched; it neither queues nor performs a working-project SAVE. */
+#define PERFORMANCE_PRESET_SLOTS 10
+#define PERFORMANCE_PRESET_NAME_BYTES 12
+int performance_presets_init(void);
+int performance_preset_used(int slot);
+int performance_preset_name(int slot, char out[PERFORMANCE_PRESET_NAME_BYTES + 1]);
+int performance_preset_load(int slot);
+int performance_preset_store(int slot, const char *name, int length);
+int performance_preset_rename(int slot, const char *name, int length);
 
 /* the panel (ui.c) and the screen (screen.c) */
 void ui_init(void);

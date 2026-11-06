@@ -13,12 +13,13 @@ enum {
     DEVICE_CLOCK_BOTH = DEVICE_CLOCK_USB | DEVICE_CLOCK_TRS
 };
 typedef struct {
-    uint8_t sync, ext_ports, theme;
+    uint8_t sync, ext_ports, theme, lights;
 } device_settings_t;
 
-/* Main-loop API. Clock edits apply to runtime; theme-only edits affect drawing.
- * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH/CLASSIC.
+/* Main-loop API. Clock edits apply to runtime; appearance-only edits affect drawing.
+ * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH/CLASSIC/LIGHTS ON.
  * Format 1 imports clock choices with CLASSIC; format 2 also stores theme.
+ * Format 3 adds global LIGHTS; older records import LIGHTS from the working project.
  * set rejects invalid values or a mode change during playback/pending Start
  * (-1); an accepted edit (0) is saved after settling. Port-only edits retain
  * the existing live input-routing behavior.
@@ -33,3 +34,9 @@ int device_settings_set(device_settings_t settings);
 int device_settings_status(void);
 int device_settings_poll(void);
 void device_settings_retry(void);
+
+/* Migration only: valid older working-project LIGHTS, unless already known globally.
+ * Before overwriting its source with format 8, persist global LIGHTS (0 or -1).
+ * May also save pending device edits; never writes a musical record. */
+void device_settings_import_lights(int lights);
+int device_settings_preserve_lights(void);
