@@ -108,7 +108,7 @@ enum { POT_BOOT, POT_REST, POT_MOVING };
 enum { PERF_LOAD, PERF_STORE, PERF_RENAME };
 enum { PERF_BROWSE, PERF_CONFIRM, PERF_EDIT, PERF_OVERWRITE };
 enum { PERF_NO_FEEDBACK, PERF_SAVED, PERF_LOADED, PERF_ERROR };
-static const char *const PERF_OP_NAME[] = {"LOAD", "STORE", "RENAME"};
+static const char *const PERF_OP_NAME[] = {"LOAD", "SAVE", "RENAME"};
 /* Backspace is a choice, never a rotary side effect. SEL applies one deletion. */
 static const char PERF_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ";
 #define PERF_BACKSPACE (sizeof PERF_CHARS - 1u)
@@ -716,7 +716,7 @@ static const char *performance_status(void)
     int used = performance_preset_used(ui.perf_slot + 1);
     if (used < 0 || ui.perf_feedback == PERF_ERROR) return "ERROR";
     if (rt_playing() && ui.perf_op == PERF_LOAD) return "STOP TO LOAD";
-    if (rt_playing() && ui.perf_op == PERF_STORE) return "STOP TO STORE";
+    if (rt_playing() && ui.perf_op == PERF_STORE) return "STOP TO SAVE";
     if (ui.perf_feedback == PERF_SAVED) return "SAVED";
     if (ui.perf_feedback == PERF_LOADED) return "LOADED";
     if (ui.perf_phase != PERF_BROWSE && !performance_ready())
@@ -725,7 +725,7 @@ static const char *performance_status(void)
     if (ui.perf_phase == PERF_EDIT)
         return ui.perf_char == PERF_BACKSPACE ? "SEL: BACKSPACE" : "SEL: SAVE NAME";
     if (ui.perf_phase == PERF_CONFIRM)
-        return ui.perf_op == PERF_LOAD ? "SEL: LOAD" : "SEL: STORE";
+        return ui.perf_op == PERF_LOAD ? "SEL: LOAD" : "SEL: SAVE";
     return !used ? "EMPTY" : "SEL: PREPARE";
 }
 
@@ -739,7 +739,7 @@ static void performance_prepare(void)
         return;
     }
     if (rt_playing() && ui.perf_op != PERF_RENAME) {
-        warn("PERFORMANCE", ui.perf_op == PERF_LOAD ? "STOP TO LOAD" : "STOP TO STORE");
+        warn("PERFORMANCE", ui.perf_op == PERF_LOAD ? "STOP TO LOAD" : "STOP TO SAVE");
         return;
     }
     if (!used && ui.perf_op != PERF_STORE) {
@@ -763,7 +763,8 @@ static void performance_confirm(void)
 {
     if (ui.perf_phase == PERF_BROWSE) {
         performance_prepare();
-        return;
+        if (ui.perf_op != PERF_LOAD || ui.perf_phase == PERF_BROWSE)
+            return;
     }
     if (ui.perf_phase == PERF_EDIT && ui.perf_char == PERF_BACKSPACE) {
         if (!ui.perf_pos) {
@@ -1237,7 +1238,12 @@ static void leds(void)
         b |= play;
     if (proj_save_pending() && blink)
         b |= 1u << B_SAVE;
-    int confirm = performance_page() && !ui.help && performance_ready();
+    int load_ready = ui.perf_op == PERF_LOAD &&
+        ui.perf_phase == PERF_BROWSE &&
+        !rt_playing() && rt_idle() && !proj_save_pending() &&
+        performance_preset_used(ui.perf_slot + 1) == 1;
+    int confirm = performance_page() && !ui.help &&
+        (performance_ready() || load_ready);
     if (confirm && ((plat_ms() >> (ui.perf_phase == PERF_OVERWRITE ? 6 : 8)) & 1u))
         b |= 1u << B_SEL;
     for (i = 0; lights && i < NVKEYS; i++) {
