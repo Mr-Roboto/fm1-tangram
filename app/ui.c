@@ -1240,6 +1240,7 @@ static void leds(void)
         b |= 1u << B_SAVE;
     int load_ready = ui.perf_op == PERF_LOAD &&
         ui.perf_phase == PERF_BROWSE &&
+        ui.perf_feedback != PERF_LOADED &&
         !rt_playing() && rt_idle() && !proj_save_pending() &&
         performance_preset_used(ui.perf_slot + 1) == 1;
     int confirm = performance_page() && !ui.help &&
