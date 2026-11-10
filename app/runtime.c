@@ -209,7 +209,8 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
 {
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
     uint8_t *k = &rt.snd[st & 15u][n];
-    plat_midi_out(pkt);
+    /* Mirror the exact timed MIDI stream to both USB and a connected BLE-MIDI host. */
+    plat_midi_send(pkt, TO_USB | TO_BLE);
     rt.sent_ms = plat_ms();
     if ((st & 0xF0u) == 0x90u)
         *k = 1;
