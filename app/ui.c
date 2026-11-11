@@ -25,7 +25,7 @@
 
 /* the pages, a button each */
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
-static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "GLO SETUP"};
+static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "LFO EDIT", "SEQ MOTION", "FX MIDI DELAY", "GLO SETUP"};
 static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 2, 4};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
 /* Page bindings: KN_ edits through the project interfaces; KNS_ remains shown
