@@ -41,6 +41,8 @@ int rt_has_voice_state(void);            /* materialized engine, rather than a f
 int rt_set_voice_config(int vid, const bl_vconfig_t *target);
 int rt_set_voice_config_field(int vid, int field, int32_t value);
 int rt_set_composer(const bl_compcfg_t *cfg);
+/* Stages a Composer form for the next section boundary during playback. */
+int rt_set_form(int form);
 int rt_select_composer_stage(int section);
 void rt_set_tempo(int32_t bpm);          /* playing: from the head's next bar line */
 void rt_load(const bl_project_t *p);     /* playing: Transport.loadProject; stopped: the next Play's project */
