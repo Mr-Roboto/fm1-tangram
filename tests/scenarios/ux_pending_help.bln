@@ -1,0 +1,25 @@
+# Tangram 1.0 UX pilot: help count is NOT a subpage count.
+# Only display and UI behavior. Music engine stays frozen.
+expect ux_global_pages 4
+expect ux_global_help_cards 7
+tap GLO
+expect ux_global_pages 4
+expect ux_global_help_cards 7
+
+# A Composer encoder edit has two visual positions during PLAY:
+# the still-active focus marker and the brighter staged target marker.
+tap HOME
+tap HOME
+turn K1 1
+tap PLAY
+wait 400
+expect playing 1
+expect ux_pending_cells 0
+turn K4 1
+expect ux_pending_cells >0
+shot composer_queued.png
+wait 4400
+expect ux_pending_cells 0
+shot composer_applied.png
+tap PLAY
+expect playing 0
