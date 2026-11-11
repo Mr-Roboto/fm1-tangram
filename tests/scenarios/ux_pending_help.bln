@@ -25,3 +25,19 @@ expect ux_pending_cells 0
 shot composer_applied.png
 tap PLAY
 expect playing 0
+
+# Second encoder comparison: K3 changes phrase bars at the NEXT BAR.
+# K3 AUTO -> 4 changes the Composer config, while its effect on
+# musical section lengths is intentionally deferred until the next section.
+tap PLAY
+wait 400
+expect playing 1
+expect ux_pending_cells 0
+turn K3 1
+expect ux_pending_cells >0
+shot bars_queued.png
+wait 4400
+expect ux_pending_cells 0
+shot bars_applied.png
+tap PLAY
+expect playing 0
