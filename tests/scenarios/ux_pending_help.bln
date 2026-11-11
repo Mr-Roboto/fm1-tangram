@@ -27,13 +27,17 @@ tap PLAY
 expect playing 0
 
 # RING comparison (not pips): K3 BARS changes phrase bars at the next
-# bar. AUTO -> 32 spreads the old and new radial ring ticks visibly apart.
+# bar. AUTO -> 16 spreads the old/new ticks visibly apart.
+# Each encoder input is one detent (not a signed multi-step value).
 # Actual musical section lengths update only on the next section entry.
 tap PLAY
 wait 400
 expect playing 1
 expect ux_pending_cells 0
-turn K3 8
+turn K3 1
+turn K3 1
+turn K3 1
+turn K3 1
 expect ux_pending_cells >0
 shot bars_queued.png
 wait 4400
