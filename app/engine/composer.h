@@ -44,8 +44,8 @@ void bl_comp_init(bl_composer_t *c, const bl_compcfg_t *cfg, const bl_arrcfg_t *
 void bl_comp_start(bl_composer_t *c, int section);
 /* One existing arranger bar/advance. Returns 1 only at a section transition. */
 int bl_comp_tick(bl_composer_t *c, const bl_arrcfg_t *form, int advance);
-/* Recalculate only the incoming section's phrase unit/dwell when a live form
- * changes at a section boundary. Never touch the departing section's time. */
+/* Recalculate only the newly entered section's phrase unit/dwell when a live
+ * form changes at a section boundary. Never touch the departing section. */
 void bl_comp_rephrase(bl_composer_t *c, const bl_arrcfg_t *form);
 /* Select an existing section without consuming RNG or changing cycle count. */
 void bl_comp_select(bl_composer_t *c, int section);
