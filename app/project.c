@@ -352,7 +352,9 @@ int proj_lfo_set(int voice, int target, int cycle, int depth, int center)
 
 int proj_mixer_value(int voice, int control)
 {
-    static const uint8_t initial[MIDI_MIX_N] = {100, 64, 64, 64};
+    /* Display-only starting positions; untouched controls send NO MIDI CC.
+     * No synthesizer readback exists. First knob movement sends the value. */
+    static const uint8_t initial[MIDI_MIX_N] = {100, 64, 70, 30};
     if (voice < 0 || voice >= BL_MAX_VOICES || control < 0 || control >= MIDI_MIX_N) return -1;
     return proj.mixer_mask[voice] & (1u << control) ?
         proj.mixer_value[voice][control] : initial[control];
