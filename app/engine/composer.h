@@ -24,6 +24,7 @@ typedef struct {
     bl_tick_t started_at;
     bl_tick_t pending_tick;
     uint8_t pending_stage;       /* chronological index + 1, zero: no manual selection */
+    uint8_t pending_form;        /* 1 classic, 2 slow, 3 ambient; latest wins at section boundary */
     uint8_t enter_pending;
     uint8_t start_pending;       /* fresh non-Intro entry, not a transition from Intro */
     uint8_t section, phase, unit, manual_harmony, manual_scene, legacy_enabled;
@@ -43,6 +44,9 @@ void bl_comp_init(bl_composer_t *c, const bl_compcfg_t *cfg, const bl_arrcfg_t *
 void bl_comp_start(bl_composer_t *c, int section);
 /* One existing arranger bar/advance. Returns 1 only at a section transition. */
 int bl_comp_tick(bl_composer_t *c, const bl_arrcfg_t *form, int advance);
+/* Recalculate only the incoming section's phrase unit/dwell when a live form
+ * changes at a section boundary. Never touch the departing section's time. */
+void bl_comp_rephrase(bl_composer_t *c, const bl_arrcfg_t *form);
 /* Select an existing section without consuming RNG or changing cycle count. */
 void bl_comp_select(bl_composer_t *c, int section);
 int bl_comp_phase(int section);
