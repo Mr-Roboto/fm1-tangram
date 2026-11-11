@@ -12,7 +12,7 @@ measurements were not part of these checks.
 | --- | --- | --- | --- | --- |
 | HOME QUICK | Track | Generator | Root | Scale |
 | HOME PLAY | Direction | Groove | Delay ON/OFF | Delay time |
-| HOME COMPOSE | Composer ON/OFF | Form (stopped: immediate; PLAY: next section) | Phrase bars | Evolution |
+| HOME COMPOSE | Composer ON/OFF (NEXT BAR) | Form (stopped: immediate; PLAY: next section) | Phrase bars (config NEXT BAR; section length on next section) | Evolution (NEXT BAR) |
 | ENV TIMING | Rate | Gate | Loop length | Pitch phase |
 | ENV ROUTING | MIDI channel | Register | Voice density | Composer tension |
 | ARP HARMONY | Generator | Root | Scale | Direction |
@@ -85,7 +85,10 @@ marker indicates a differently staged target. The textual value remains the
 requested value; the existing transient NEXT BAR/LOOP/SECTION messages remain.
 This is supported only for controls where actual versus staged values can be
 read reliably from existing state; MIDI-Delay echo generations and other
-per-event state are intentionally not approximated.
+per-event state are intentionally not approximated. Composer's implicit
+Classic Arc form is displayed as `DEFAULT` instead of `NONE` while enabled;
+`CYCLE` and `NEXT` have separate information columns without changing font
+sizes or the musical HOME screen.
 SEQ now shows the source grid; FX shows actual MIDI delay state/time per voice.
 Compact knob labels use K1–K4, with full generator/scale names in screen-reader
 announcements. Preview refresh includes the new project settings. Display and
