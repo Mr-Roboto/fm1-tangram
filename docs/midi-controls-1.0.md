@@ -49,6 +49,12 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 - CC74 from a mixer knob may be overridden by an active LFO on CC74
   or a template scene morph. Do not claim independent filtering.
 
+## Implementation checkpoint (not yet tested)
+
+The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3958-byte ten-slot bank v2, backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
+
+**NOT YET VERIFIED:** compilation, host test, actual device output, scene interactions, bank migration and hardware RAM/image limits. In particular, previously rendered CC events can remain queued briefly after an LFO target change. Do not flash this branch without the tests and review below.
+
 ## Release gate
 
 Do not flash until a verified host build + existing regression smoke
