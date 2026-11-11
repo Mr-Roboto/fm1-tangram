@@ -1950,24 +1950,36 @@ static void draw_parameter_cell(int i, const cell_t *c, int hot)
     caps(label, compact_knob_label(k, i), sizeof label);
     text_box(x + 4, 14, 14, 12, &FONT_T, number, K_FOCUS, 0);
     text_box(x + 21, 14, 36, 12, &FONT_T, label, k == KN_NONE ? K_DIM : hot ? K_FOCUS : K_TEXT2, 0);
+    if (c->queued) cv_round(x + 53, 27, 4, 4, 2, K_TEXT); /* requested, not yet sounding */
     if (c->kind == CELL_TEXT) {
         int has_sub = c->sub[0] != 0;
         text_box(x + 3, has_sub ? 30 : 46, 54, 20, &FONT_B, c->val,
-                 k == KN_NONE ? K_DIM : K_TEXT2, 1);
+                 k == KN_NONE ? K_DIM : c->queued ? K_TEXT : K_TEXT2, 1);
         if (has_sub) text_box(x + 3, 52, 54, 12, &FONT_T, c->sub, K_TEXT2, 1);
         return;
     }
     if (c->kind == CELL_PIPS) {
         int n = c->hi - c->lo + 1, pw = n > 4 ? 6 : 8, gap = 3;
         int width = n * (pw + gap) - gap;
-        for (int j = 0; j < n; j++)
-            cv_round(cx - width / 2 + j * (pw + gap), 33, pw, 6, 2,
-                     j == c->v - c->lo ? K_FOCUS : K_LINE);
+        for (int j = 0; j < n; j++) {
+            uint16_t color = j == (c->queued ? c->active_v : c->v) - c->lo ? K_FOCUS :
+                             c->queued && j == c->v - c->lo ? K_TEXT : K_LINE;
+            cv_round(cx - width / 2 + j * (pw + gap), 33, pw, 6, 2, color);
+        }
     } else {
-        int fraction = c->hi > c->lo ? (clamp(c->v, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo) : 0;
+        int active = c->queued ? c->active_v : c->v;
+        int fraction = c->hi > c->lo ? (clamp(active, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo) : 0;
         knob_ring(cx, 35, 8, fraction, K_LINE, K_FOCUS, bg);
+        if (c->queued && c->hi > c->lo) {
+            int target = (clamp(c->v, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo);
+            int angle = RING_A0 + target * RING_SWEEP / 1024;
+            /* The bright dot outside the ring is the requested position. */
+            disc16(cx * 16 + 8 + icos(angle) * 155 / 1024,
+                   35 * 16 + 8 + isin(angle) * 155 / 1024, 29, K_TEXT);
+        }
     }
-    text_box(x + 3, 46, 54, 20, &FONT_B, c->val, hot ? K_FOCUS : K_TEXT, 1);
+    text_box(x + 3, 46, 54, 20, &FONT_B, c->val,
+             c->queued ? K_TEXT : hot ? K_FOCUS : K_TEXT, 1);
 }
 
 /* the knob strip (AMB-1's): a rule with the page's name and seven page dots at its right end; under it a cell a
@@ -1982,7 +1994,11 @@ static void draw_knobs(void)
     h = hash(h, ui.page[ui.view]);
     for (i = 0; i < 4; i++) {
         cell(ui.view, i, &c[i]);
-        h = hash_s(hash_s(hash(h, (uint32_t)c[i].v), c[i].val), c[i].sub);
+        c[i].active_v = (int16_t)cell_active_value(view_knob(ui.view, i), &c[i]);
+        c[i].queued = c[i].active_v != c[i].v;
+        h = hash_s(hash_s(hash(hash(h, (uint32_t)c[i].v),
+                                    (uint32_t)c[i].active_v | (uint32_t)c[i].queued << 16),
+                           c[i].val), c[i].sub);
     }
     h = hash(h, device_settings_get().theme);
     if (h == ui.sig[2])
@@ -2025,21 +2041,34 @@ static void draw_knobs(void)
         caps(t, knob_label(ui.view, i), sizeof t);
         f = fit(&FONT_XS, t, 56);
         text_c(cx, f == &FONT_T ? 14 : 12, f, t, hot ? K_TEXT : K_DIM);
+        if (c[i].queued) cv_round(x + 51, 16, 4, 4, 2, K_TEXT);
         if (c[i].kind == CELL_TEXT) {    /* shown only */
             f = fit(&FONT_B, c[i].val, 56);
-            text_c(cx, f == &FONT_T ? 31 : 29, f, c[i].val, K_TEXT2);
+            text_c(cx, f == &FONT_T ? 31 : 29, f, c[i].val, c[i].queued ? K_TEXT : K_TEXT2);
             text_c(cx, 48, fit(&FONT_T, c[i].sub, 56), c[i].sub, K_DIM);
             continue;
         }
         if (c[i].kind == CELL_PIPS) {    /* a switch: its positions as pips */
             int n = c[i].hi - c[i].lo + 1, j, pw = n > 4 ? 6 : 9, gap = 3, w0 = n * (pw + gap) - gap;
-            for (j = 0; j < n; j++)
-                cv_round(cx - w0 / 2 + j * (pw + gap), 33, pw, 8, 2, j == c[i].v - c[i].lo ? K_FOCUS : K_LINE);
+            for (j = 0; j < n; j++) {
+                uint16_t color = j == (c[i].queued ? c[i].active_v : c[i].v) - c[i].lo ? K_FOCUS :
+                                 c[i].queued && j == c[i].v - c[i].lo ? K_TEXT : K_LINE;
+                cv_round(cx - w0 / 2 + j * (pw + gap), 33, pw, 8, 2, color);
+            }
         } else {
-            knob_ring(cx, 37, 12, c[i].v < c[i].lo ? 0 : (c[i].v - c[i].lo) * 1024 / (c[i].hi - c[i].lo), K_LINE, K_FOCUS, bg);
+            int active = c[i].queued ? c[i].active_v : c[i].v;
+            int fraction = c[i].hi > c[i].lo ?
+                (clamp(active, c[i].lo, c[i].hi) - c[i].lo) * 1024 / (c[i].hi - c[i].lo) : 0;
+            knob_ring(cx, 37, 12, fraction, K_LINE, K_FOCUS, bg);
+            if (c[i].queued && c[i].hi > c[i].lo) {
+                int target = (clamp(c[i].v, c[i].lo, c[i].hi) - c[i].lo) * 1024 / (c[i].hi - c[i].lo);
+                int angle = RING_A0 + target * RING_SWEEP / 1024;
+                disc16(cx * 16 + 8 + icos(angle) * 220 / 1024,
+                       37 * 16 + 8 + isin(angle) * 220 / 1024, 31, K_TEXT);
+            }
         }
         f = fit(&FONT_B, c[i].val, 56);
-        text_c(cx, f == &FONT_T ? 52 : 50, f, c[i].val, hot ? K_FOCUS : K_TEXT);
+        text_c(cx, f == &FONT_T ? 52 : 50, f, c[i].val, c[i].queued ? K_TEXT : hot ? K_FOCUS : K_TEXT);
     }
     cv_blit(0, KNB_Y);
 }
