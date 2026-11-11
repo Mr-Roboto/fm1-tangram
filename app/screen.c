@@ -528,7 +528,7 @@ static void cell(int view, int i, cell_t *c)
     case KN_MIX_VOLUME:
     case KN_MIX_PAN:
     case KN_MIX_CUTOFF:
-    case KN_MIX_DECAY: {
+    case KN_MIX_RESONANCE: {
         int control = k - KN_MIX_VOLUME;
         int value = proj_mixer_value(v, control);
         c->kind = CELL_RING;
@@ -540,7 +540,7 @@ static void cell(int view, int i, cell_t *c)
         }
         c->v = value;
         cat_u(c->val, value);
-        static const uint8_t numbers[MIDI_MIX_N] = {7, 10, 74, 75};
+        static const uint8_t numbers[MIDI_MIX_N] = {7, 10, 74, 71};
         cat(c->sub, "CC ");
         cat_u(c->sub, numbers[control]);
         break;
@@ -1810,7 +1810,7 @@ static void draw_mixer(void)
     cat_u(t, (uint32_t)(proj.channel[voice] + 1));
     row(4, 46, 63, "CHANNEL", t, K_TEXT);
     row(4, 67, 112, "CC7 / CC10", "LEVEL / PAN", K_TEXT2);
-    row(4, 85, 112, "CC74 / CC75", "FILTER / DECAY", K_TEXT2);
+    row(4, 85, 112, "CC74 / CC71", "FILTER / RESO", K_TEXT2);
     cv_rect(4, 110, 232, 1, K_LINE);
     text_box(4, 118, 232, 12, &FONT_T, "SHARED CHANNEL = SHARED CC", K_DIM, 0);
 }
@@ -2056,7 +2056,7 @@ static const char *compact_knob_label(int k, int i)
     case KN_MIX_VOLUME: return "VOL";
     case KN_MIX_PAN: return "PAN";
     case KN_MIX_CUTOFF: return "CUTOFF";
-    case KN_MIX_DECAY: return "DECAY";
+    case KN_MIX_RESONANCE: return "RESO";
     case KN_NONE: return "-";
     default: return knob_label(ui.view, i);
     }
