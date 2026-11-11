@@ -25,6 +25,14 @@ static const uint8_t performance_legacy_head[PERFORMANCE_BANK_HEAD] = {'T', 'G',
     PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
 static uint8_t performance_bank[PERFORMANCE_BANK_BYTES] PLAT_POOL;
 static int performance_bank_ready;
+/* v2 header byte 7 was reserved as zero. It now records the last explicitly
+ * saved slot (1..10). A zero header from older development builds stays valid.
+ * V1 migration starts with 0, and browsing alone never writes flash. */
+int performance_preset_last_slot(void)
+{
+    int slot = performance_bank_ready ? performance_bank[7] : 0;
+    return slot >= 1 && slot <= PERFORMANCE_PRESET_SLOTS ? slot : 1;
+}
 
 /* Pack 10 exact source bytes into 53 bits, split over seven bytes:
  * byte 0: cycle(3), target(3), override(1), reserved(1);
@@ -127,7 +135,8 @@ int performance_presets_init(void)
         return 0;
     }
     if (bytes != PERFORMANCE_BANK_BYTES ||
-        memcmp(proj_buf, performance_head, sizeof performance_head)) return -1;
+        memcmp(proj_buf, performance_head, PERFORMANCE_BANK_HEAD - 1) ||
+        proj_buf[7] > PERFORMANCE_PRESET_SLOTS) return -1;
     for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
         const uint8_t *entry = proj_buf + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_ENTRY_BYTES;
         if (!entry[0]) {
@@ -195,6 +204,7 @@ int performance_preset_store(int slot, const char *name, int length)
     performance_pack(full, proj_buf + at + 1 + PERFORMANCE_PRESET_NAME_BYTES);
     proj_buf[at] = 1;
     performance_write_name(at, name, length);
+    proj_buf[7] = (uint8_t)slot;  /* last successful STORE if commit succeeds */
     return performance_commit();
 }
 
