@@ -78,7 +78,7 @@ static int help_lines(int b, const char *l[HELP_LINES])
     switch (b) {
     case B_HOME:
         if (ui.page[V_PERFORM] == 2) {
-            L("COMPOSE: K1 ON / OFF"); L("K2 FORM WHEN STOPPED"); L("K3 PHRASE BARS; K4 EVOLVE"); L(proj.composer.enabled ? "ALGORITHM: SELECT STAGE" : "ALGORITHM: DISABLED");
+            L("COMPOSE: K1 ON / OFF"); L("K2 FORM: NEXT SECTION"); L("K3 PHRASE BARS; K4 EVOLVE"); L(proj.composer.enabled ? "ALGORITHM: SELECT STAGE" : "ALGORITHM: DISABLED");
         } else if (ui.page[V_PERFORM]) {
             L("PLAY: K1 DIRECTION"); L("K2 GROOVE (ARP / MOTIF)"); L("K3 MIDI DELAY ON / OFF"); L("K4 MIDI DELAY TIME");
         } else {
