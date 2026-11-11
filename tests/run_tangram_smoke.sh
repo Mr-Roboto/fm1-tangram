@@ -8,6 +8,9 @@ cd "$(dirname "$0")/.."
 printf '%s\n' '=== Global settings regression ==='
 sh tests/host/run_device_settings.sh
 
+printf '%s\n' '=== Composer live FORM regression ==='
+sh tests/host/run_composer_form.sh
+
 printf '%s\n' '=== FM-Tangram host simulator build ==='
 ./build.sh --host
 
