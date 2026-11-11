@@ -847,6 +847,62 @@ static void test_global_settings(void)
     CHECK(!device_settings_poll() && stub_writes==writes,"unchanged globals never rewrite flash");
 }
 
+/* MIDI/clock destination selection is independent of external MIDI-clock input.
+ * Preserve older on-device records; switching outputs is refused until idle. */
+static void test_ble_global_routing(void)
+{
+    store_clear();
+    device_settings_t s = device_settings_get();
+    CHECK(s.midi_out == DEVICE_MIDI_BOTH && s.clock_out == DEVICE_MIDI_BOTH,
+          "BLE rollout defaults both output streams to USB plus BLE");
+    s.ext_ports = DEVICE_CLOCK_ALL;
+    s.midi_out = DEVICE_MIDI_BLE;
+    s.clock_out = DEVICE_MIDI_USB;
+    CHECK(!device_settings_set(s) && stub_ports == DEVICE_CLOCK_ALL &&
+          stub_midi_out == DEVICE_MIDI_BLE && stub_clock_out == DEVICE_MIDI_USB,
+          "input USB+TRS+BLE and separate outputs are applied");
+    stub_ms += 300;
+    CHECK(!device_settings_poll() && stub_len[OBJ_DEVICE_SETTINGS] == 11 &&
+          stub_obj[OBJ_DEVICE_SETTINGS][4] == 4 &&
+          stub_obj[OBJ_DEVICE_SETTINGS][6] == DEVICE_CLOCK_ALL &&
+          stub_obj[OBJ_DEVICE_SETTINGS][9] == DEVICE_MIDI_BLE &&
+          stub_obj[OBJ_DEVICE_SETTINGS][10] == DEVICE_MIDI_USB,
+          "format 4 persists external input and independent destinations");
+    stub_midi_out = stub_clock_out = DEVICE_MIDI_BOTH;
+    CHECK(!device_settings_init() && !device_settings_apply() &&
+          stub_midi_out == DEVICE_MIDI_BLE && stub_clock_out == DEVICE_MIDI_USB &&
+          stub_ports == DEVICE_CLOCK_ALL,
+          "reboot restores both persisted output destinations and BLE input");
+    s = device_settings_get();
+    s.clock_out = DEVICE_MIDI_BLE;
+    stub_playing = 1;
+    CHECK(device_settings_set(s) == -1 && stub_clock_out == DEVICE_MIDI_USB,
+          "output routing cannot change while playing");
+    stub_playing = 0;
+    stub_busy = 1;
+    CHECK(device_settings_set(s) == -1 && stub_clock_out == DEVICE_MIDI_USB,
+          "output routing cannot change until Note-Offs have drained");
+    stub_busy = 0;
+    CHECK(!device_settings_set(s) && stub_clock_out == DEVICE_MIDI_BLE,
+          "output routing can change after drain");
+    s.midi_out = 0;
+    CHECK(device_settings_set(s) == -1, "no output target is rejected");
+
+    /* Prior BLE firmware used 9-byte format 3. Keep theme, lights, and
+     * external clock source; initialize the two new output choices safely. */
+    static const uint8_t legacy3[] = {
+        'T','G','D','S',3,DEVICE_SYNC_INTERNAL,DEVICE_CLOCK_TRS,DEVICE_THEME_AMBER,2
+    };
+    store_put(OBJ_DEVICE_SETTINGS, legacy3, sizeof legacy3);
+    CHECK(!device_settings_init() && !device_settings_apply() &&
+          device_settings_get().theme == DEVICE_THEME_AMBER &&
+          device_settings_get().lights == 2 &&
+          device_settings_get().ext_ports == DEVICE_CLOCK_TRS &&
+          device_settings_get().midi_out == DEVICE_MIDI_BOTH &&
+          device_settings_get().clock_out == DEVICE_MIDI_BOTH,
+          "format 3 migrates without losing other globals or BLE defaults");
+}
+
 int main(void)
 {
     test_store_bad_magic();
@@ -860,6 +916,7 @@ int main(void)
     test_runtime_interfaces();
     test_storage_failures();
     test_global_settings();
+    test_ble_global_routing();
     printf(fails ? "project: %d FAILED\n" : "project: ok\n", fails);
     return fails != 0;
 }
