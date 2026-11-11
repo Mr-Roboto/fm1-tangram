@@ -149,7 +149,7 @@ The project also contains a Python USB-MIDI firmware installation adapter at [`t
 
 **Firmware flashing is at your own risk.** Check the target hardware, installed firmware and update procedure before installing. Never assume the MIDI port name alone proves device identity.
 
-Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focused device-settings regression (`sh tests/host/run_device_settings.sh`) passed on WSL2 on 11 November 2026. The simulator compiles via `./build.sh --host`; the separate GLO BLE scenario is available but has not yet been executed. The old all-in-one `tests/run_tests.sh` still includes legacy project-format checks and must not be treated as an up-to-date green Tangram regression suite.
+Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focused device-settings regression (`sh tests/host/run_device_settings.sh`) passed on WSL2 on 11 November 2026. The simulator compiles via `./build.sh --host`. A focused two-scenario USB/BLE smoke gate is available via `sh tests/run_tangram_smoke.sh`; its execution has not yet been confirmed. The old all-in-one `tests/run_tests.sh` still includes legacy project-format checks and must not be treated as an up-to-date green Tangram regression suite.
 
 ## Development status and roadmap
 
