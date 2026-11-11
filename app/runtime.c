@@ -249,6 +249,10 @@ static void rt_mixer_queue(bl_tick_t at)
         const bl_vcfg_t *v = &rt_proj.voice[i];
         for (int c = 0; c < MIDI_MIX_N; c++) {
             if (!(v->mixer_mask & (1u << c))) continue;
+            if (rt.qn >= RT_QUEUE) {
+                rt.dropped++;
+                continue;
+            }
             rt_insert(at, rt_pkt(0xB0u | (v->channel & 15u), number[c],
                                  v->mixer_value[c]), (uint8_t)bl_vid(v->id));
         }
@@ -697,7 +701,9 @@ static void rt_take_over(void)
     rt_engine_new();
     rt_channels(&rt_proj);
     rt.muted = 0;
+    f = plat_lock();
     rt_mixer_queue(rt.head);
+    plat_unlock(f);
     if (!rt.ext && rt_proj.bpm != rt.bpm) {   /* the template's tempo, from its bar line (a pending one binds there
                                                * next, and wins: the Mac's wake has read it already) */
         f = plat_lock();
