@@ -61,7 +61,7 @@ The following are genuine overlapping editor controls in the current firmware; t
 | Groove | HOME PLAY and SEQ MOTION |
 | Loop length, Pitch phase | ENV TIMING and SEQ MOTION |
 | Delay on/off and Delay time | HOME PLAY and FX MIDI DELAY |
-| Composer Evolution/Tension | HOME COMPOSE versus ENV ROUTING (related controls split up) |
+| Composer Evolution/Tension | HOME COMPOSE versus ENV VOICE (related controls split up) |
 
 The reallocation must be reviewed as **one consistent four-encoder information architecture**, not an arbitrary swap. In particular: do not make ARP/SEQ buttons useless merely to remove duplication; do not strip time-critical HOME shortcuts; do not introduce hidden secondary modes. The user will supply additional hands-on findings before the final mapping and the UX freeze.
 
