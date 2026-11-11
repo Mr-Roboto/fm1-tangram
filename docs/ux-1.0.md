@@ -27,9 +27,9 @@
 ## UX pilot changes on this branch
 
 1. Label help overlay `<button> HELP x/y`; repair obsolete GLO navigation instructions and the inaccurate warning that Composer START is not saved.
-2. Compare **sounding active** versus **staged target** settings in the knob strip while playing, without changing the engine or data model. Normal theme focus marker = active value; bright marker/dot and target text = queued value. If equal, a single normal marker remains. Text-only controls receive a small bright pending dot. Unsupported (N/A) controls never show a phantom queued marker.
-3. Add simulator assertions for actual subpage/help counts and two active/queued Composer encoder changes: K4 Evolution and K3 Phrase Bars (both NEXT BAR).
-4. Label an enabled Composer's implicit Classic Arc form as `DEFAULT` instead of misleading `NONE`. The first K2 selection still explicitly chooses CLASSIC; no arranger setting is silently written.
+2. Compare **sounding active** versus **staged target** settings in the knob strip while playing, without changing the engine or data model. Normal theme focus marker = active value; bright target marker and target text = queued value. For circular knobs the queued position is a short radial tick ON the same ring (not an external dot); for pips the queued position is the brighter pip. If equal, only the active marker remains. Text-only controls receive a small bright pending dot. Unsupported (N/A) controls never show a phantom queued marker.
+3. Add simulator assertions for actual subpage/help counts and two active/queued Composer encoder changes: K4 Evolution and K3 Phrase Bars (a real circular ring, AUTO -> 32; both NEXT BAR).
+4. Label an enabled Composer's implicit Classic Arc form as `CLASSIC`, not `NONE` or `DEFAULT`. No arranger setting is silently written; this displays the actual fallback musical form.
 5. On HOME COMPOSE, split `CYCLE` and `NEXT` into distinct columns while preserving the existing font sizes, section strip, counters and musical HOME overview.
 
 **Not yet accepted:** this UX branch must pass the host smoke gate, simulator screenshots and hardware readability review before flashing. Frozen functional branch remains unchanged.
