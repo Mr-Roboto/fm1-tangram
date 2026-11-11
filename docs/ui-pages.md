@@ -86,7 +86,7 @@ requested value; the existing transient NEXT BAR/LOOP/SECTION messages remain.
 This is supported only for controls where actual versus staged values can be
 read reliably from existing state; MIDI-Delay echo generations and other
 per-event state are intentionally not approximated. Composer's implicit
-Classic Arc form is displayed as `DEFAULT` instead of `NONE` while enabled;
+Classic Arc form is displayed as `CLASSIC` instead of `NONE` while enabled;
 `CYCLE` and `NEXT` have separate information columns without changing font
 sizes or the musical HOME screen.
 SEQ now shows the source grid; FX shows actual MIDI delay state/time per voice.
