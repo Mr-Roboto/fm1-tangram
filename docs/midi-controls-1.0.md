@@ -52,7 +52,9 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 
 The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3748-byte losslessly packed ten-slot bank v2 (49-byte extension per preset), backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
 
-**NOT YET VERIFIED:** compilation, host test, actual device output, scene interactions, bank migration and hardware RAM/image limits. In particular, previously rendered CC events can remain queued briefly after an LFO target change. Do not flash this branch without the tests and review below.
+**Host acceptance (12 November 2026, user-confirmed):** `sh tests/run_tangram_midi_controls.sh` completed successfully on WSL2. Its focused regressions covered BLE MIDI routing, Composer FORM, UX staged markers and ENV VOICE, LFO edits, CC7/10/74/71 MIDI output, musical-project SAVE/reboot, GLASSFACE named-slot save/load, and a test-only legacy bank v1 migration into the 3,748-byte compact v2 bank. Project format 9 is 382 bytes. This acceptance is **host simulation only**, not an AC79 device build or a hardware test.
+
+**NOT YET VERIFIED:** full JieLi/AC79 firmware build, actual device output, long-term scene interactions, real on-device flash update/recovery and hardware RAM/image limits. Previously rendered CC events can remain queued briefly after an LFO target change. Do not flash this branch until the device build passes and the hardware acceptance is planned.
 
 ## Release gate
 
