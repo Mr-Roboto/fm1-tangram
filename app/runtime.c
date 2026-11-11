@@ -239,6 +239,33 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
 static rt_ev_t *rt_insert(bl_tick_t tick, uint32_t pkt, uint8_t vid);
 static void rt_echoes(const rt_ev_t *original, uint32_t ch);
 
+/* Initial per-channel controller settings are queued BEFORE the first notes
+ * of a new PLAY/takeover. Unedited controls are not sent, to preserve the
+ * external synthesizer's sound design and front-panel settings. */
+static void rt_mixer_queue(bl_tick_t at)
+{
+    static const uint8_t number[MIDI_MIX_N] = {7, 10, 74, 75};
+    for (int i = 0; i < rt_proj.nvoices; i++) {
+        const bl_vcfg_t *v = &rt_proj.voice[i];
+        for (int c = 0; c < MIDI_MIX_N; c++) {
+            if (!(v->mixer_mask & (1u << c))) continue;
+            rt_insert(at, rt_pkt(0xB0u | (v->channel & 15u), number[c],
+                                 v->mixer_value[c]), (uint8_t)bl_vid(v->id));
+        }
+    }
+}
+
+/* Send one new CC value now, through exactly the current MIDI output port
+ * mask. Unlike notes, a CC does not own a note-off or a voice release. */
+int rt_send_channel_cc(int channel, uint8_t controller, uint8_t value)
+{
+    if (channel < 0 || channel > 15 || controller > 119 || value > 127) return -1;
+    uint32_t f = plat_lock();
+    rt_send(rt.head, rt_pkt(0xB0u | (uint32_t)channel, controller, value));
+    plat_unlock(f);
+    return 0;
+}
+
 static int rt_dispatch(uint32_t *room)
 {
     /* Take a value copy: inserting the paired off/echoes may move ring entries.
@@ -670,6 +697,7 @@ static void rt_take_over(void)
     rt_engine_new();
     rt_channels(&rt_proj);
     rt.muted = 0;
+    rt_mixer_queue(rt.head);
     if (!rt.ext && rt_proj.bpm != rt.bpm) {   /* the template's tempo, from its bar line (a pending one binds there
                                                * next, and wins: the Mac's wake has read it already) */
         f = plat_lock();
@@ -779,6 +807,7 @@ static void rt_start(int fa)
     rt.playing = 1;
     if (rt.clock_out)
         rt_insert(0, rt_pkt(0xFAu, 0, 0), BL_VID_NONE);   /* Start, at tick 0 */
+    rt_mixer_queue(0);    /* before any notes rendered for the first window */
     plat_unlock(f);
     rt_render();
 }
@@ -952,6 +981,31 @@ int rt_set_voice_config(int vid, const bl_vconfig_t *target)
     rt_proj.voice[index].has_config = 1;
     rt_proj.voice[index].config = *target;
     if (!rt.playing) rt.fresh = 1;
+    return 0;
+}
+
+/* CC lanes have no persistent phase state: editing the one selected voice
+ * alters the descriptor used by the next CC render window. This must never
+ * reinitialize bl_live_t or affect an already scheduled note/off pair. */
+static void rt_lane_edit(bl_vcfg_t *dst, const bl_vcfg_t *src)
+{
+    dst->nlanes = src->nlanes;
+    if (src->nlanes) {
+        dst->ncc = 2;
+        dst->cc_name[1] = src->cc_name[1];
+        dst->cc_num[1] = src->cc_num[1];
+        dst->lane[0] = src->lane[0];
+    }
+}
+
+int rt_set_lfo(int voice, const bl_vcfg_t *settings)
+{
+    if (!settings || voice < 0 || voice >= rt_proj.nvoices || rt_loading()) return -1;
+    if (rt.playing) rt_take_over();
+    if (rt_loading() || (rt.playing && voice >= rt_eng.project.nvoices)) return -1;
+    rt_lane_edit(&rt_proj.voice[voice], settings);
+    if (rt.playing) rt_lane_edit(&rt_eng.project.voice[voice], settings);
+    else rt.fresh = 1;
     return 0;
 }
 
