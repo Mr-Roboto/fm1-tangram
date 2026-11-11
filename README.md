@@ -157,7 +157,7 @@ Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focuse
 
 **Current:** ten named Performance Presets and experimental BLE MIDI. Verified on FM-1 hardware on 11 November 2026: Bluetooth connection to an iPad, connected/disconnected UI status, four Global pages, visible routing settings, and wireless note playback of Korg iM1. The standalone global-settings host regression passed. Still to test on hardware: BLE clock input, MIDI clock output and destination combinations under load, persistence across power cycles, and longer sessions.
 
-**Deferred:** live Composer FORM replacement during playback, further Composer evolution and additional instrument-role templates. There are no plans to add an internal sound engine or audio processing.
+**Deferred:** further Composer evolution and additional instrument-role templates. Live Composer FORM replacement is implemented on the experimental branch and awaiting host/device validation. There are no plans to add an internal sound engine or audio processing.
 
 This is a **pre-release development branch**, not a declared stable release. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
 
