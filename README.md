@@ -101,9 +101,9 @@ The interface is organized into the FM-1's existing sections. Some sections have
 | **HOME** | QUICK voice controls, PLAY direction/delay controls, COMPOSE configuration and counters |
 | **ENV** | TIMING (rate, gate, loop, phase) and VOICE (channel, register, voice density, tension) |
 | **ARP** | Generator, harmony and direction controls |
-| **LFO** | CC lane and scene information |
+| **LFO** | Editable per-voice MIDI CC LFO (target, cycle, depth, center) and independent scene information |
 | **SEQ** | Musical motion, groove and loop-related controls |
-| **FX** | Per-voice MIDI delay settings |
+| **FX** | MIDI DELAY and second FX MIXER page (CC7 volume, CC10 pan, CC74 filter brightness, CC75 decay time) |
 | **GLO** | Global SETUP, MIDI routing, APPEARANCE and PERFORMANCE (experimental BLE branch) |
 
 The **MASTER** control adjusts global musical density rather than audio volume. Each voice also has its own density setting; when Composer is active, section activity contributes another factor. Musical transport and phases continue even when new notes are suppressed.
@@ -123,6 +123,8 @@ Tangram currently distinguishes between:
 3. **Global device settings:** MIDI/Clock routing, synchronization, lights and display theme are persisted independently of the musical project.
 
 ### Named Performance Presets
+
+The pre-1.0 MIDI-controls development branch uses a new 382-byte project record (format 9), including persisted per-voice LFO and mixer CC settings. It reads prior format-8 projects and migrates ten-slot performance banks from 3258-byte v1 records into a 3958-byte v2 bank **in RAM**. The old flash bank is not rewritten at boot; an explicit SAVE/RENAME writes the new bank format. This extension is not yet a tested firmware release.
 
 A dedicated bank of **10 named Performance Presets** stores complete *starting configurations* — including the selected Composer starting section — independently of the three built-in templates and the six snapshot slots. The bank is implemented on the Tangram development branches; presets are managed on **GLO PERFORMANCE**.
 
