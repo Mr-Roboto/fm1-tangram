@@ -133,7 +133,12 @@ before experimental firmware installation remains prudent.
 
 **Confirmed on FM-1 hardware (11 November 2026):** four GLO pages,
 correct routing controls and Bluetooth link status; connection to an
-iPad and successful BLE MIDI note playback into Korg iM1.
+iPad and successful BLE MIDI note playback into Korg iM1. The combined
+BLE-and-Composer host smoke gate passed, and the updated firmware was built
+successfully (351184-byte image; 89536/98304 bytes RAM, 335200/344064 bytes
+pool). On the FM-1, Composer FORM can now change during PLAY at the next
+section entry without restarting playback. A live section change does not
+replace the START section chosen while stopped: STOP restores that selection.
 
 **Not yet hardware-confirmed:** external BLE clock input, separately
 routed MIDI Clock output and clock timing, all USB+BLE combinations,
