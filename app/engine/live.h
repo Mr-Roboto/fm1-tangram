@@ -132,6 +132,9 @@ typedef struct bl_live {
 /* LiveEngine(project:) */
 void bl_live_init(bl_live_t *e, const bl_project_t *p);
 int bl_live_set_composer(bl_live_t *e, const bl_compcfg_t *cfg, bl_tick_t request);
+/* Change the Composer form at its next section boundary, without engine reset.
+ * IDs 1=classic, 2=slow, 3=ambient match app's FORM_* constants. */
+int bl_live_set_form(bl_live_t *e, int form);
 int bl_live_select_composer_stage(bl_live_t *e, int section, bl_tick_t request);
 /* Same product used by the renderer and suppression display. */
 f64 bl_live_voice_density(const bl_live_t *e, int voice);
