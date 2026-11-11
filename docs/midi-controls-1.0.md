@@ -13,14 +13,14 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
   LFO parameter. Use K1 target, K2 cycle, K3 depth and K4 center.
 - Put a second page behind FX MIDI DELAY:
   **FX MIXER**: K1 CC7 Volume, K2 CC10 Pan, K3 CC74 Brightness
-  (commonly filter cutoff), K4 CC75 Decay Time (not guaranteed
-  specifically *filter* envelope decay). Select the voice using SELECT.
+  (commonly filter cutoff), K4 CC71 Resonance (not guaranteed
+  specifically resonance). Select the voice using SELECT.
 - MIDI CCs are channel-scoped. Several Tangram voices mapped to a
   shared MIDI channel cannot have independent CC volumes/filters.
   A downstream synth may ignore or remap any optional sound CC.
 - Provide 0–127 parameter values; PAN center 64.
 - Keep working-project saving and ten Performance Presets, including
-  earlier saved bank migration, rather than adding transient-only
+  optional backward reading of old-format banks, rather than adding transient-only
   controls that disappear when powered off.
 - Do not automatically overwrite users' banks or flash new factory
   content. GLASSFACE is the agreed first candidate name (9 ASCII
@@ -51,7 +51,7 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 
 ## Implementation checkpoint (not yet tested)
 
-The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3958-byte ten-slot bank v2, backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
+The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3748-byte ten-slot bank v2, backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
 
 **NOT YET VERIFIED:** compilation, host test, actual device output, scene interactions, bank migration and hardware RAM/image limits. In particular, previously rendered CC events can remain queued briefly after an LFO target change. Do not flash this branch without the tests and review below.
 
