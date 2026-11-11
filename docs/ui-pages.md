@@ -16,9 +16,10 @@ measurements were not part of these checks.
 | ENV TIMING | Rate | Gate | Loop length | Pitch phase |
 | ENV VOICE | MIDI channel | Register | Voice density | Composer tension |
 | ARP HARMONY | Generator | Root | Scale | Direction |
-| LFO CC | Target (read-only) | Cycle (read-only) | Depth (read-only) | Scene (read-only) |
+| LFO EDIT | CC Target (OFF/1/11/10/71/74/75) | Cycle (0.5–64 bars) | Depth (0–100%) | Center (0–100%) |
 | SEQ MOTION | Groove | Loop length | Pitch phase | Direction |
 | FX MIDI DELAY | Delay ON/OFF | Time | Feedback | Decay |
+| FX MIXER | Volume CC7 | Pan CC10 | Cutoff CC74 | Decay CC75 |
 | GLO SETUP | Musical root | Sync | External clock input (USB/TRS/BLE and combinations) | Lights |
 | GLO MIDI | Clock output (USB/BLE/both) | Notes/CC output (USB/BLE/both) | Unused | Unused |
 | GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
@@ -94,7 +95,7 @@ Compact knob labels use K1–K4, with full generator/scale names in screen-reade
 announcements. Preview refresh includes the new project settings. Display and
 screen-reader behavior have not been verified.
 
-LFO retains its read-only page. GLO SETUP keeps ROOT / SYNC / EXT INPUT / LIGHTS.
+LFO is now editable per selected voice, including OFF/previously unmapped lanes. Scene morphs remain controlled by the existing black-key scene actions. FX now has MIDI DELAY and MIXER subpages, with distinct CC4 controls per selected channel. GLO SETUP keeps ROOT / SYNC / EXT INPUT / LIGHTS.
 EXT INPUT offers USB, TRS, BLE, USB+TRS, USB+BLE, TRS+BLE and USB+TRS+BLE.
 GLO MIDI follows immediately, with independent CLOCK OUT and MIDI OUT choices
 (USB, BLE or both); output changes require stopped transport and drained MIDI.
@@ -147,6 +148,6 @@ height, with dots for text that cannot fit. Section titles stay inside the
 display band, and HOME/ENV show their existing page position as 1/2 or 2/2.
 Voice titles reserve room for status badges, while routing/voice rows and MIDI
 delay table columns have explicit text bounds. Musical values are unchanged.
-LFO/GLO keep their original rendering path; all input/SHIFT/help handling remains
+LFO and GLO retain the same screen bands; GLO and all modifier behavior remains
 unchanged. Long text may still require a small font or truncation. Physical
 legibility, font metrics and final appearance remain unverified.
