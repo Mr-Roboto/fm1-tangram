@@ -140,11 +140,18 @@ pool). On the FM-1, Composer FORM can now change during PLAY at the next
 section entry without restarting playback. A live section change does not
 replace the START section chosen while stopped: STOP restores that selection.
 
-**Not yet hardware-confirmed:** external BLE clock input, separately
-routed MIDI Clock output and clock timing, all USB+BLE combinations,
-long-run stability, and save/reboot behavior for every configuration.
-The standalone regression validates persistence in a host stub, not
-real flash endurance or interrupted writes.
+**Additional FM-1/iPad hardware acceptance (11 November 2026,
+user-confirmed):** all six agreed practical checks passed: BLE discovery/
+connection, MIDI notes to Korg iM1, setting retention after reboot,
+internally generated MIDI Clock over BLE, reception of an external BLE
+Clock, and simultaneous USB+BLE operation with reconnection. This
+completes the agreed hardware checklist, not an exhaustive validation
+of every routing permutation.
+
+**Still not measured:** quantitative BLE MIDI clock jitter/latency,
+multi-hour soak stability, performance at extreme MIDI loads, and
+interrupted-flash recovery. Host persistence tests and a successful
+power-cycle check do not establish flash endurance.
 
 Emergency recovery is a distinct procedure: see the pinned
 `fm1-base`/BSP recovery documentation before attempting any
