@@ -66,3 +66,17 @@ expect_out USB B0 4A 41
 expect_out USB B0 4B 41
 tap PLAY
 expect playing 0
+
+# v1 bank upgrade: old flash must remain untouched at boot; an explicit
+# user edit migrates the occupied slot and writes the new 3958-byte bank.
+legacybank
+expect ux_bank_flash_bytes 3258
+reboot
+expect ux_bank_slot1 1
+expect ux_bank_flash_bytes 3258
+migratebank
+expect ux_bank_slot1 1
+expect ux_bank_flash_bytes 3958
+reboot
+expect ux_bank_slot1 1
+expect ux_bank_flash_bytes 3958
