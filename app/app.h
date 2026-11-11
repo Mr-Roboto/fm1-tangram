@@ -77,7 +77,7 @@ int proj_set_key(int root, int mode);    /* applyLiveMusicalChanges: playing, at
 void proj_set_bpm(int32_t bpm);          /* the same: playing, at the next bar */
 int proj_set_density(int pct);           /* setDensity: playing, at the next bar */
 int proj_set_arranger(int on);           /* setArrangerEnabled (AUTO): playing, at the next bar */
-int proj_set_form(int form);             /* setArrangerForm: a FORM_ preset, stopped only */
+int proj_set_form(int form);             /* stopped: apply now; Composer live: next section boundary */
 int proj_set_ambient(int on);            /* setAmbientMode: stopped only */
 int proj_set_ratchet(int pct);           /* the legitimization's ratchetProbability, 0-50 in 5s: no live action on
                                           * the Mac, so playing it waits for the next Play (1); 0; -1 out of range */
