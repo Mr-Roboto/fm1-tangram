@@ -95,7 +95,7 @@ screen at a time, with smaller fonts used only where required to fit.
 | ARP | Generator/root/scale/direction; ARP/MOTIF and rate/gate location; suppression and both cursor meanings |
 | LFO | Per-voice editable Target, Cycle, Depth and Center; OFF can be enabled; original black-key scene morphs remain separate |
 | SEQ | Groove, loop, pitch phase, direction; independent loops and ARP/MOTIF restrictions |
-| FX | Two subpages: MIDI DELAY with its original-note timing/echo behavior; MIDI CC MIXER with channel-scoped CC7/10/74/75 changes, shared MIDI channels and synth-dependent filter/decay responses |
+| FX | Two subpages: MIDI DELAY with its original-note timing/echo behavior; MIDI CC MIXER with channel-scoped CC7/10/74/71 changes, shared MIDI channels and synth-dependent filter/decay responses |
 | GLO | SETUP / MIDI / APPEARANCE / PERFORMANCE; global theme, lights and MIDI routes autosave when safe, stopped-only Sync and output-route edits; Root belongs to the musical project |
 | EDIT | Unlocked-voice re-roll and held-voice regeneration at local boundaries |
 | REC | B part at next bar; held-voice blank cycle |
