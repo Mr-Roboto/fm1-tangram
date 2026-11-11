@@ -905,9 +905,9 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
         v = proj_form() == FORM_OTHER ? (d > 0 ? FORM_CLASSIC : FORM_AMBIENT) : proj_form() + d;
         v = clamp(v, FORM_CLASSIC, FORM_AMBIENT);
         if (proj_set_form(v))
-            warn("FORM", "WHEN STOPPED");
+            warn("FORM", "NOT AVAILABLE");
         else
-            show("FORM", FORM_NAME[v]);
+            show("FORM", rt_playing() ? "NEXT SECTION" : FORM_NAME[v]);
         break;
     case KN_AMBIENT:
         if (proj_set_ambient(d > 0))
