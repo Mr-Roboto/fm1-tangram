@@ -58,4 +58,4 @@ void rt_set_ext_port(int mask);          /* bits 1 << PORT_USB, 1 << PORT_TRS */
 int rt_apply_clock_settings(int ext, int ports);
 /* Output routing is independent of external clock input. Changes are stopped-only
  * so that the target of every paired Note-Off stays consistent. */
-int rt_apply_output_settings(int output_mask);
+int rt_apply_output_settings(int midi_mask, int clock_mask);
