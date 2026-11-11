@@ -99,7 +99,7 @@ The interface is organized into the FM-1's existing sections. Some sections have
 | Section | Purpose |
 | --- | --- |
 | **HOME** | QUICK voice controls, PLAY direction/delay controls, COMPOSE configuration and counters |
-| **ENV** | TIMING (rate, gate, loop, phase) and ROUTING (channel, register, voice density, tension) |
+| **ENV** | TIMING (rate, gate, loop, phase) and VOICE (channel, register, voice density, tension) |
 | **ARP** | Generator, harmony and direction controls |
 | **LFO** | CC lane and scene information |
 | **SEQ** | Musical motion, groove and loop-related controls |
