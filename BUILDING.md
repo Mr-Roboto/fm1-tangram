@@ -1,76 +1,140 @@
-# Building Berlinan
+# Building and testing FM-Tangram
 
-Berlinan is an app on [fm1-base](https://github.com/charlesvestal/fm1-base) (`base/`, a git submodule, with
-felucca-bsp inside it). Clone with `--recursive`, or after cloning:
+Status: 11 November 2026. The working musical baseline is
+[`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram).
+The isolated BLE MIDI implementation is
+[`dev/tangram-ble-midi-spike`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram-ble-midi-spike).
+Do not merge experimental routing changes into the stable branch before
+appropriate validation.
 
+## Prerequisites
+
+The project uses [fm1-base](https://github.com/charlesvestal/fm1-base) as
+the `base/` git submodule, which includes Felucca BSP. Building the device
+firmware requires Python 3 with Pillow, the JieLi pi32v2 Linux toolchain,
+and the AC79 SDK files. On the existing WSL2 Ubuntu x86-64 environment the
+toolchain runs natively. Build defaults are `~/.jieli/toolchain` and
+`~/fw-AC79_AIoT_SDK`; use `JIELI_TOOLCHAIN`, `AC79_SDK`, and `PYTHON`
+to override them.
+
+The pinned `fm1-base` submodule needs the narrow flash compatibility patch
+provided as `tools/fm1-base-flash-compat.patch`. `build.sh` checks/applies
+that patch idempotently. **Do not reset, clean, or update the submodule just
+to make `git status` look clean**: a locally modified `base` is expected
+in this setup. Always review the current submodule state before a change.
+
+New clone:
+
+```sh
+git clone --recursive https://github.com/Mr-Roboto/fm1-tangram.git
+cd fm1-tangram
+git switch dev/tangram-ble-midi-spike
 ```
-git submodule update --init --recursive
+
+Existing local BLE checkout:
+
+```sh
+cd ~/fm1-tangram
+git status --short
+git branch --show-current
+git pull --ff-only
 ```
 
-`./build.sh` runs fm1-base's build (`base/tools/build.py`) on `app/`, whose settings are in `app/fm1.toml`. It
-makes, in `app/build/`:
+These commands only fetch changes; they do not flash the FM-1.
 
-| File | What |
+## Build and simulator
+
+```sh
+./build.sh                # device firmware
+./build.sh --host         # desktop/WSL2 simulator
+```
+
+Outputs:
+
+| Output | Location |
 | --- | --- |
-| `berlinan.bin` | the firmware app |
-| `loader/ota.bin` | the update loader (felucca-bsp's) |
-| `berlinan.fwsc` | the installable package (app + loader) |
+| Firmware app | `app/build/tangram.bin` |
+| Installable package | `app/build/tangram.fwsc` |
+| OTA loader | `app/build/loader/ota.bin` |
+| Host simulator | `app/build/host/tangram_host` |
 
-## Prerequisites (macOS)
+The BLE firmware target declares `ble = true` in `app/fm1.toml`.
+Build checks validate image, normal RAM and pool capacity as well as
+platform instruction and register restrictions. A successful build is
+**not** evidence that radio pairing or clock synchronization works.
 
-- Python 3 with Pillow: `pip3 install Pillow` (set `PYTHON` to the one that has it).
-- Docker Desktop, or podman with a `docker` script that runs `exec podman "$@"` first on your PATH. The JieLi
-  toolchain is Linux x86-64 only; the build runs it in a `linux/amd64` `debian:bookworm-slim` container
-  (Rosetta on Apple silicon). Keep the source tree in a folder the container can share, e.g. under `/Users`.
-- The JieLi Linux toolchain (clang 4.0.1 for pi32v2, from JieLi's package server): see fm1-base's README.
-- The JieLi AC79 SDK (Apache-2.0). The package uses three of its files (`cpu/wl82/tools/uboot.boot`,
-  `cfg_tool.bin`, `cfg/eq_cfg_hw.bin`); none of it is part of this tree or of git.
+The simulator reuses the application UI, runtime and persistence code.
+It simulates the BLE link and MIDI ports, not a physical radio, iPad or
+wireless timing environment.
 
-  ```
-  git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-      https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK
-  ```
+### Focused regression tests
 
-On Linux x86-64 the toolchain runs natively and no container is needed.
-
-## Build
-
-```
-./build.sh                    # app/build/berlinan.fwsc
-./build.sh --release X.Y      # app/build/berlinan-X.Y.fwsc, identity FM-1_23XXYYZZ
-./build.sh --host             # the simulator: app/build/host/berlinan_host
+```sh
+sh tests/host/run_device_settings.sh
 ```
 
-`JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations (`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`),
-`PYTHON` the Python that runs the build. The build also checks the image, RAM and pool sizes, that register access
-stays in felucca-bsp, that no double-precision code is linked, and that no 64-bit multiply runs beside a load
-(felucca-bsp `docs/CPU.md`: the engine's products are `bl_mul32`'s, `app/engine/f64.h`).
+The standalone device-settings regression passed (`device-settings: ok`)
+on WSL2 on 11 November 2026. It covers BLE/USB/TRS input selections,
+independent MIDI/clock output masks, rejected edits while busy,
+11-byte format-4 persistence, migration and retry behavior. The host
+simulator build also completed on that date.
 
-## Tests
+For the **new** Global MIDI simulator scenario (not yet executed at the
+time this document was written):
 
-```
-sh tests/run_tests.sh             # Berlinan's
-sh base/tests/run_tests.sh        # fm1-base's own
-```
-
-Berlinan's: the engine against Berlinan's (`tests/host/engine_test.c`, `tests/host/equiv_test.c` over
-`tests/equiv/`), the firmware's own libc (`tests/host/libc_test.c`), the update path against `app/build/berlinan.fwsc`
-(after `./build.sh`; skipped without it), and the whole app in the simulator (`tests/scenarios/*.bln`), with
-screenshots in `app/build/scenarios/`. Among the scenarios, `play_midi.bln` compares every MIDI message the app
-sends with what Berlinan's transport sends for the same script (`tests/equiv/midi_full.midiref`, RefTool's midi
-mode; tests/equiv/README.md, "The MIDI reference"); its log of them is `app/build/scenarios/play_midi/midi_dump.txt`.
-
-`app/build/host/berlinan_host SCRIPT OUTDIR` runs one script. The commands are listed at the top of
-`base/host/plat_host.c`, and Berlinan's own checks at the top of `app/host.c`.
-
-## Install
-
-From the command line (needs `pip3 install mido python-rtmidi`):
-
-```
-python3 base/tools/fm1_install.py app/build/berlinan.fwsc
+```sh
+./build.sh --host
+mkdir -p app/build/scenarios/ble_global
+./app/build/host/tangram_host tests/scenarios/ble_global.bln app/build/scenarios/ble_global
 ```
 
-Installing firmware is at your own risk. Hold OCT− and OCT+ for 5 seconds for the update mode. If the FM-1 no
-longer starts but reaches the chip's update mode (4C4A:8057 on USB), `base/bsp/tools/fm1_rescue.sh` puts stock
-firmware back from a Mac.
+Expected: exit code 0, no `FAIL` / `EXPECTATIONS FAILED` lines. Two
+PNG previews are placed under `app/build/scenarios/ble_global/`.
+This checks simulated GLO navigation and settings persistence only.
+
+**Legacy test-suite caveat:** `tests/run_tests.sh` and
+`tests/host/project_test.c` still contain historical Berlinan/
+Tangram project-format-6/slot-format-8 assumptions. Tangram currently
+uses project format 8 and slot format 9. The old suite is **not a
+reliable all-green gate** for the BLE branch until updated, and it
+also treats vendor SoftFloat's fallthrough warning as an error under
+modern host GCC. The new standalone device-settings test avoids these
+unrelated legacy checks. Do not silence failures or rewrite golden
+data merely to force the old suite to pass.
+
+Other simulator scenario scripts in `tests/scenarios/` are inherited
+from earlier development stages and have not all been revalidated
+against the four-page Global UI. Refer to `base/host/plat_host.c` and
+`app/host.c` for simulator command syntax.
+
+## Hardware installation and verification
+
+The project provides `tools/install_firmware.py`. For the tested
+Windows/WSL2 workflow, after a **successful firmware build** use Windows
+PowerShell with the project path set in that same PowerShell session:
+
+```powershell
+$repo = '\\wsl.localhost\Ubuntu\home\falke\fm1-tangram'
+py -3.12 "$repo\tools\install_firmware.py" "$repo\app\build\tangram.fwsc" --yes
+```
+
+The native Windows Python interpreter needs the previously configured
+MIDI dependencies. Choose the actual USB device/update mode carefully.
+The stable branch does not change when flashing a build of the BLE
+experiment; however, backing up important project and preset data
+before experimental firmware installation remains prudent.
+
+**Confirmed on FM-1 hardware (11 November 2026):** four GLO pages,
+correct routing controls and Bluetooth link status; connection to an
+iPad and successful BLE MIDI note playback into Korg iM1.
+
+**Not yet hardware-confirmed:** external BLE clock input, separately
+routed MIDI Clock output and clock timing, all USB+BLE combinations,
+long-run stability, and save/reboot behavior for every configuration.
+The standalone regression validates persistence in a host stub, not
+real flash endurance or interrupted writes.
+
+Emergency recovery is a distinct procedure: see the pinned
+`fm1-base`/BSP recovery documentation before attempting any
+chip-level rescue. Normal update and rescue procedures are not
+interchangeable.
