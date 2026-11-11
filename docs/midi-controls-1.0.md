@@ -1,0 +1,58 @@
+# Tangram 1.0 — LFO edit and FX controller extension (work in progress)
+
+**Branch:** `dev/tangram-1.0-midi-controls` from approved UX phase 2.
+The frozen musical/BLE baseline and completed UX branches must not be
+modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
+
+## Approved goal
+
+- Keep HOME, ARP HARMONY, SEQ MOTION and both ENV pages intact.
+- Make LFO controls editable for the selected voice even when its
+  original template has no LFO (NONE). The scenes shown on the page
+  remain the existing keyboard-controlled morphs, not a knob-selectable
+  LFO parameter. Use K1 target, K2 cycle, K3 depth and K4 center.
+- Put a second page behind FX MIDI DELAY:
+  **FX MIXER**: K1 CC7 Volume, K2 CC10 Pan, K3 CC74 Brightness
+  (commonly filter cutoff), K4 CC75 Decay Time (not guaranteed
+  specifically *filter* envelope decay). Select the voice using SELECT.
+- MIDI CCs are channel-scoped. Several Tangram voices mapped to a
+  shared MIDI channel cannot have independent CC volumes/filters.
+  A downstream synth may ignore or remap any optional sound CC.
+- Provide 0–127 parameter values; PAN center 64.
+- Keep working-project saving and ten Performance Presets, including
+  earlier saved bank migration, rather than adding transient-only
+  controls that disappear when powered off.
+- Do not automatically overwrite users' banks or flash new factory
+  content. GLASSFACE is the agreed first candidate name (9 ASCII
+  characters); the user authors the musical presets.
+- The user's optional INIT request means initializing a **working
+  performance configuration**, not necessarily erasing an individual
+  stored bank slot. It is not an approved slot-delete action and is
+  deliberately separate from this MIDI controller change.
+
+## Critical implementation constraints
+
+- CC lanes are currently template-specified and read-only, and a voice
+  may have no lane; introducing an editable LFO requires a per-voice
+  override and an ability to create a lane for NONE voices.
+- Existing template scenes use CC-map index 0, often CC74; editor
+  overrides must not destroy their source map or scene bindings.
+- The existing project record is 312 bytes (format 8); the ten-slot
+  `TGPB` bank format 1 embeds ten such records. Any persisted new
+  fields require both backward-compatible record decoding **and**
+  migration of stored banks without data loss. Respect the 4 KiB
+  flash-object limit and keep old banks readable.
+- A live controller change must not restart the music engine, force a
+  project takeover or end held notes. Route through the existing
+  notes/CC output port policy; never transmit to a different port
+  than normal MIDI output.
+- CC74 from a mixer knob may be overridden by an active LFO on CC74
+  or a template scene morph. Do not claim independent filtering.
+
+## Release gate
+
+Do not flash until a verified host build + existing regression smoke
+suite + new controller persistence/live-output tests have passed.
+Check actual AC79 firmware RAM and image budgets before hardware QA.
+Factory preset creation, optional INIT and the final 1.0 release
+remain separate acceptance steps.
