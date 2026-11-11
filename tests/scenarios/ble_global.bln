@@ -1,0 +1,40 @@
+# Experimental Tangram BLE routing regression in fm1-base's host simulator.
+# The simulator models MIDI routing/settings, but not a real iPad or radio.
+# This scenario must be run after ./build.sh --host; each invocation starts
+# with an empty simulated flash. Asserting reboot persistence requires wait.
+expect sync 0
+expect ext_ports 5
+expect midi_out 3
+expect clock_out 3
+
+# A three-port external clock input, independent of output destinations.
+rt port all
+rt midiout BLE
+rt clockout USB
+expect ext_ports 7
+expect midi_out 2
+expect clock_out 1
+wait 350
+reboot
+expect ext_ports 7
+expect midi_out 2
+expect clock_out 1
+
+# The UI reaches the new MIDI page directly after SETUP.
+tap GLO
+wait 100
+shot glo_setup_ble.png
+tap GLO
+wait 100
+shot glo_midi_ble.png
+
+# Reconfigure the two independent output routes and persist them again.
+rt midiout both
+rt clockout BLE
+expect midi_out 3
+expect clock_out 2
+wait 350
+reboot
+expect ext_ports 7
+expect midi_out 3
+expect clock_out 2
