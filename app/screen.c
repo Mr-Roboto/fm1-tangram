@@ -533,11 +533,14 @@ static void cell(int view, int i, cell_t *c)
         cat(c->val, proj.arr_on ? "ON" : "OFF");
         break;
     case KN_FORM:
-        c->lo = FORM_CLASSIC, c->hi = FORM_AMBIENT, c->v = (int16_t)proj_form();   /* (none or custom: no pip) */
-        /* Without an explicit form the live Composer uses Classic Arc, not
-         * silence. Keep its unselected pip (FORM_OTHER) until K2 sets a form. */
+        /* No explicit arranger form means the Composer uses Classic Arc.
+         * Display the actual musical form, not an opaque "DEFAULT" state.
+         * Composer OFF with no chosen arranger retains the original NONE. */
+        c->lo = FORM_CLASSIC, c->hi = FORM_AMBIENT;
+        c->v = (int16_t)(proj.arr_has ? proj_form() :
+                          proj.composer.enabled ? FORM_CLASSIC : FORM_OTHER);
         cat(c->val, proj.arr_has ? FORM_SHORT[proj_form()] :
-            proj.composer.enabled ? "DEFAULT" : "NONE");
+            proj.composer.enabled ? "CLASSIC" : "NONE");
         break;
     case KN_AMBIENT:
         c->v = proj.arr_ambient;
@@ -961,6 +964,17 @@ static void knob_ring(int32_t cx, int32_t cy, int32_t r, int32_t v, uint16_t tra
         disc16(c16x + icos(ev) * rm / 1024, c16y + isin(ev) * rm / 1024, 48, bg);
         disc16(c16x + icos(ev) * rm / 1024, c16y + isin(ev) * rm / 1024, 37, fill);
     }
+}
+
+/* Draw the upcoming value as a short, narrow radial line directly on
+ * the same 270-degree knob ring. No second outer dot or label marker is
+ * necessary: active = focus-colored thumb; queued = bright radial tick. */
+static void knob_queued_tick(int32_t cx, int32_t cy, int32_t radius, int32_t angle, uint16_t color)
+{
+    int32_t x0 = cx * 16 + 8, y0 = cy * 16 + 8;
+    for (int32_t distance = radius * 16 - 20; distance <= radius * 16 + 20; distance += 10)
+        disc16(x0 + icos(angle) * distance / 1024,
+               y0 + isin(angle) * distance / 1024, 13, color);
 }
 
 /* Status text on a black surface; state color belongs to the foreground. */
@@ -1968,7 +1982,8 @@ static void draw_parameter_cell(int i, const cell_t *c, int hot)
     caps(label, compact_knob_label(k, i), sizeof label);
     text_box(x + 4, 14, 14, 12, &FONT_T, number, K_FOCUS, 0);
     text_box(x + 21, 14, 36, 12, &FONT_T, label, k == KN_NONE ? K_DIM : hot ? K_FOCUS : K_TEXT2, 0);
-    if (c->queued) cv_round(x + 53, 27, 4, 4, 2, K_TEXT); /* requested, not yet sounding */
+    if (c->queued && c->kind == CELL_TEXT)
+        cv_round(x + 53, 27, 4, 4, 2, K_TEXT); /* text-only: no position to mark */
     if (c->kind == CELL_TEXT) {
         int has_sub = c->sub[0] != 0;
         text_box(x + 3, has_sub ? 30 : 46, 54, 20, &FONT_B, c->val,
@@ -1991,9 +2006,9 @@ static void draw_parameter_cell(int i, const cell_t *c, int hot)
         if (c->queued && c->hi > c->lo) {
             int target = (clamp(c->v, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo);
             int angle = RING_A0 + target * RING_SWEEP / 1024;
-            /* The bright dot outside the ring is the requested position. */
-            disc16(cx * 16 + 8 + icos(angle) * 155 / 1024,
-                   35 * 16 + 8 + isin(angle) * 155 / 1024, 29, K_TEXT);
+            /* The future position is a bright radial tick ON the ring.
+             * The normal focus-colored active handle remains in place. */
+            knob_queued_tick(cx, 35, 8, angle, K_TEXT);
         }
     }
     text_box(x + 3, 46, 54, 20, &FONT_B, c->val,
@@ -2059,7 +2074,8 @@ static void draw_knobs(void)
         caps(t, knob_label(ui.view, i), sizeof t);
         f = fit(&FONT_XS, t, 56);
         text_c(cx, f == &FONT_T ? 14 : 12, f, t, hot ? K_TEXT : K_DIM);
-        if (c[i].queued) cv_round(x + 51, 16, 4, 4, 2, K_TEXT);
+        if (c[i].queued && c[i].kind == CELL_TEXT)
+            cv_round(x + 51, 16, 4, 4, 2, K_TEXT);
         if (c[i].kind == CELL_TEXT) {    /* shown only */
             f = fit(&FONT_B, c[i].val, 56);
             text_c(cx, f == &FONT_T ? 31 : 29, f, c[i].val, c[i].queued ? K_TEXT : K_TEXT2);
@@ -2081,8 +2097,7 @@ static void draw_knobs(void)
             if (c[i].queued && c[i].hi > c[i].lo) {
                 int target = (clamp(c[i].v, c[i].lo, c[i].hi) - c[i].lo) * 1024 / (c[i].hi - c[i].lo);
                 int angle = RING_A0 + target * RING_SWEEP / 1024;
-                disc16(cx * 16 + 8 + icos(angle) * 220 / 1024,
-                       37 * 16 + 8 + isin(angle) * 220 / 1024, 31, K_TEXT);
+                knob_queued_tick(cx, 37, 12, angle, K_TEXT);
             }
         }
         f = fit(&FONT_B, c[i].val, 56);
