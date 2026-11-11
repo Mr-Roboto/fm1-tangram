@@ -1785,7 +1785,10 @@ static uint32_t main_sig(void)
     if (ui.help)
         return hash(hash(hash(0x48454C50u, ui.help), ui.help_part), device_settings_get().theme);
     h = hash(h, device_settings_get().theme);
-    if (ui.view == V_SETUP) h = hash(h, (uint32_t)device_settings_status());
+    if (ui.view == V_SETUP) {
+        h = hash(h, (uint32_t)device_settings_status());
+        if (ui.page[V_SETUP] == 1) h = hash(h, (uint32_t)plat_ble_connected());
+    }
     if (performance_page()) {
         char name[PERFORMANCE_PRESET_NAME_BYTES + 1];
         performance_name(name);
