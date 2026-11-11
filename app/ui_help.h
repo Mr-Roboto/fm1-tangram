@@ -78,7 +78,7 @@ static int help_lines(int b, const char *l[HELP_LINES])
     switch (b) {
     case B_HOME:
         if (ui.page[V_PERFORM] == 2) {
-            L("COMPOSE: K1 ON / OFF"); L("K2 FORM: NEXT SECTION"); L("K3 PHRASE BARS; K4 EVOLVE"); L(proj.composer.enabled ? "ALGORITHM: SELECT STAGE" : "ALGORITHM: DISABLED");
+            L("COMPOSE: K1 ON / OFF"); L(rt_playing() ? "K2 FORM: NEXT SECTION" : "K2 FORM: SET NOW"); L("K3 PHRASE BARS; K4 EVOLVE"); L(proj.composer.enabled ? "ALGORITHM: SELECT STAGE" : "ALGORITHM: DISABLED");
         } else if (ui.page[V_PERFORM]) {
             L("PLAY: K1 DIRECTION"); L("K2 GROOVE (ARP / MOTIF)"); L("K3 MIDI DELAY ON / OFF"); L("K4 MIDI DELAY TIME");
         } else {
@@ -104,7 +104,7 @@ static int help_lines(int b, const char *l[HELP_LINES])
         } else if (ui.page[V_SETUP] == 1) {
             L("GLO MIDI: K1 CLOCK OUT"); L("K2 MIDI OUT; K3/K4 NONE"); L("USB / BLE / USB + BLE"); L("STOP FIRST; SAVES WHEN IDLE");
         } else {
-            L("SETUP: K1 GLOBAL ROOT"); L("K2 SYNC; K3 EXT INPUT"); L("K4 PANEL LIGHTS"); L("TAP GLO: MIDI");
+            L("SETUP: K1 SONG ROOT"); L("K2 SYNC; K3 EXT INPUT"); L("K4 PANEL LIGHTS"); L("TAP GLO: MIDI");
         }
         break;
     case B_EDIT: L("RE-ROLL UNLOCKED VOICES"); L("WHEN PLAYING: LOCAL LOOP"); L("HOLD VOICE + EDIT: ONE"); L("HOME + OCT-: UNDO"); break;
