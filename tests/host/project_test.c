@@ -819,8 +819,8 @@ static void test_global_settings(void)
     applies=stub_clock_applies;
     settings.sync=2;
     CHECK(device_settings_set(settings)==-1,"invalid global sync rejected");
-    settings.sync=DEVICE_SYNC_EXTERNAL; settings.ext_ports=1u<<PORT_BLE;
-    CHECK(device_settings_set(settings)==-1 && stub_clock_applies==applies,"unsupported global input rejected before runtime");
+    settings.sync=DEVICE_SYNC_EXTERNAL; settings.ext_ports=1u<<7;
+    CHECK(device_settings_set(settings)==-1 && stub_clock_applies==applies,"unsupported external clock bit rejected before runtime");
     settings.ext_ports=DEVICE_CLOCK_TRS; settings.sync=DEVICE_SYNC_INTERNAL;
     stub_playing=1;
     CHECK(device_settings_set(settings)==-1 && device_settings_get().sync==DEVICE_SYNC_EXTERNAL,
