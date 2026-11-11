@@ -360,7 +360,7 @@ int proj_mixer_value(int voice, int control)
 
 int proj_mixer_set(int voice, int control, int value)
 {
-    static const uint8_t cc[MIDI_MIX_N] = {7, 10, 74, 75};
+    static const uint8_t cc[MIDI_MIX_N] = {7, 10, 74, 71};
     if (voice < 0 || voice >= BL_MAX_VOICES || control < 0 || control >= MIDI_MIX_N ||
         value < 0 || value > 127 || rt_loading()) return -1;
     /* Apply to the currently selected MIDI channel immediately, including
