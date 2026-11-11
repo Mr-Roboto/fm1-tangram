@@ -12,14 +12,22 @@ enum {
     DEVICE_CLOCK_TRS = 1u << PORT_TRS,
     DEVICE_CLOCK_BOTH = DEVICE_CLOCK_USB | DEVICE_CLOCK_TRS
 };
+/* Deliberately identical to plat_midi_send's routing bitmask: USB=1, BLE=2, both=3. */
+enum {
+    DEVICE_MIDI_USB = TO_USB,
+    DEVICE_MIDI_BLE = TO_BLE,
+    DEVICE_MIDI_BOTH = TO_USB | TO_BLE
+};
+extern const char *const DEVICE_MIDI_NAME[3]; /* USB, BLE, USB + BLE */
 typedef struct {
-    uint8_t sync, ext_ports, theme, lights;
+    uint8_t sync, ext_ports, theme, lights, midi_out;
 } device_settings_t;
 
 /* Main-loop API. Clock edits apply to runtime; appearance-only edits affect drawing.
  * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH/CLASSIC/LIGHTS ON.
  * Format 1 imports clock choices with CLASSIC; format 2 also stores theme.
  * Format 3 adds global LIGHTS; older records import LIGHTS from the working project.
+ * Format 4 adds MIDI output routing; older records default to USB + BLE.
  * set rejects invalid values or a mode change during playback/pending Start
  * (-1); an accepted edit (0) is saved after settling. Port-only edits retain
  * the existing live input-routing behavior.
