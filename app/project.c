@@ -167,10 +167,15 @@ static int proj_valid(const proj_t *p)
     if (p->arr_has ? p->arr_min < 1 || p->arr_min > p->arr_max || p->arr_max > 1024
                    : p->arr_on || p->arr_ambient || p->arr_reprise || p->arr_min || p->arr_max)
         return 0;
-    for (i = 0; i < BL_MAX_VOICES; i++)
+    for (i = 0; i < BL_MAX_VOICES; i++) {
         if (p->channel[i] > 15 || !bl_delay_valid(p->delay[i]) || p->voice_configured[i] > 1 ||
             (p->voice_configured[i] && !bl_config_valid(&p->voice_config[i])))
             return 0;
+        if (p->lfo_override[i] > 1 || p->lfo_target[i] >= LFO_NDEST ||
+            p->lfo_cycle[i] >= LFO_NCYCLES || p->lfo_depth[i] > 100 || p->lfo_center[i] > 100 ||
+            p->mixer_mask[i] > 15) return 0;
+        for (int k = 0; k < MIDI_MIX_N; k++) if (p->mixer_value[i][k] > 127) return 0;
+    }
     return 1;
 }
 
@@ -263,6 +268,101 @@ int proj_save(void)                      /* the project; the slots stored since 
 
 static f64 pct_of(int pct) { return f64_div(f64_from_i64(pct), HUNDRED); }   /* Double(pct) / 100 */
 
+/* Existing template lane defaults are preserved until a voice is edited.
+ * Present templates: DEMO/FULL bedPluck1 has filter 16 bars, 30% / 60%;
+ * FULL pad has filter 32 bars, 40% / 50%. Other voices have no lane. */
+int proj_lfo_get(int voice, int *target, int *cycle, int *depth, int *center)
+{
+    if (voice < 0 || voice >= BL_MAX_VOICES || !target || !cycle || !depth || !center) return -1;
+    if (proj.lfo_override[voice]) {
+        *target = proj.lfo_target[voice];
+        *cycle = proj.lfo_cycle[voice];
+        *depth = proj.lfo_depth[voice];
+        *center = proj.lfo_center[voice];
+    } else {
+        *target = LFO_DEST_OFF, *cycle = 3, *depth = 30, *center = 50;
+        if ((proj.tpl == BL_TPL_DEMO || proj.tpl == BL_TPL_FULL) && voice == 0) {
+            *target = LFO_DEST_CUTOFF, *cycle = 5, *depth = 30, *center = 60;
+        } else if (proj.tpl == BL_TPL_FULL && voice == 3) {
+            *target = LFO_DEST_CUTOFF, *cycle = 6, *depth = 40, *center = 50;
+        }
+    }
+    return 0;
+}
+
+/* CC map slot 0 belongs to template scenes. Editable sine LFOs use slot 1
+ * to preserve existing scene morph targets and their own CC74 mapping. */
+void proj_lfo_apply(bl_vcfg_t *cfg, int voice)
+{
+    if (!cfg || voice < 0 || voice >= BL_MAX_VOICES || !proj.lfo_override[voice]) return;
+    if (proj.lfo_target[voice] == LFO_DEST_OFF) {
+        cfg->nlanes = 0;
+        return;
+    }
+    static const uint8_t number[LFO_NDEST] = {0, 1, 11, 10, 71, 74, 75};
+    static const char *const name[LFO_NDEST] =
+        {"none", "mod", "expression", "pan", "resonance", "filter", "decay"};
+    int target = proj.lfo_target[voice], cycle = proj.lfo_cycle[voice];
+    cfg->ncc = 2;
+    cfg->cc_num[1] = number[target];
+    cfg->cc_name[1] = name[target];
+    cfg->nlanes = 1;
+    cfg->lane[0] = (bl_cclane_t){
+        BL_LFO_SINE, 1,
+        cycle ? f64_from_i64((int64_t)1 << (cycle - 1)) : F64(0x3FE0000000000000),
+        pct_of(proj.lfo_depth[voice]), pct_of(proj.lfo_center[voice]),
+        F64(0x0000000000000000)
+    };
+}
+
+int proj_lfo_set(int voice, int target, int cycle, int depth, int center)
+{
+    if (voice < 0 || voice >= BL_MAX_VOICES || target < 0 || target >= LFO_NDEST ||
+        cycle < 0 || cycle >= LFO_NCYCLES || depth < 0 || depth > 100 || center < 0 || center > 100 ||
+        rt_loading()) return -1;
+    uint8_t original[5] = {proj.lfo_override[voice], proj.lfo_target[voice],
+        proj.lfo_cycle[voice], proj.lfo_depth[voice], proj.lfo_center[voice]};
+    proj.lfo_override[voice] = 1;
+    proj.lfo_target[voice] = (uint8_t)target;
+    proj.lfo_cycle[voice] = (uint8_t)cycle;
+    proj.lfo_depth[voice] = (uint8_t)depth;
+    proj.lfo_center[voice] = (uint8_t)center;
+    /* Runtime edits the existing live CC descriptor, never the song engine.
+     * It affects the next CC window, while existing scheduled CCs drain. */
+    bl_vcfg_t cfg = {0};
+    proj_lfo_apply(&cfg, voice);
+    if (rt_set_lfo(voice, &cfg)) {
+        proj.lfo_override[voice] = original[0], proj.lfo_target[voice] = original[1];
+        proj.lfo_cycle[voice] = original[2], proj.lfo_depth[voice] = original[3];
+        proj.lfo_center[voice] = original[4];
+        return -1;
+    }
+    proj_stale = 1;
+    return 0;
+}
+
+int proj_mixer_value(int voice, int control)
+{
+    static const uint8_t initial[MIDI_MIX_N] = {100, 64, 64, 64};
+    if (voice < 0 || voice >= BL_MAX_VOICES || control < 0 || control >= MIDI_MIX_N) return -1;
+    return proj.mixer_mask[voice] & (1u << control) ?
+        proj.mixer_value[voice][control] : initial[control];
+}
+
+int proj_mixer_set(int voice, int control, int value)
+{
+    static const uint8_t cc[MIDI_MIX_N] = {7, 10, 74, 75};
+    if (voice < 0 || voice >= BL_MAX_VOICES || control < 0 || control >= MIDI_MIX_N ||
+        value < 0 || value > 127 || rt_loading()) return -1;
+    /* Apply to the currently selected MIDI channel immediately, including
+     * while STOPPED. With shared channels this controls every stacked part. */
+    if (rt_send_channel_cc(proj.channel[voice], cc[control], (uint8_t)value)) return -1;
+    proj.mixer_mask[voice] |= (uint8_t)(1u << control);
+    proj.mixer_value[voice][control] = (uint8_t)value;
+    proj_stale = 1;
+    return 0;
+}
+
 /* the template in A minor, then the project's own values; the legitimization Legitimizer.Config(repeats: 4,
  * ratchetProbability: Double(pct) / 100): the FM-1's project always has one (0: no ratchets) */
 void proj_to_engine(bl_project_t *out)
@@ -284,6 +384,9 @@ void proj_to_engine(bl_project_t *out)
     for (i = 0; i < out->nvoices; i++) {
         out->voice[i].channel = proj.channel[i];
         out->voice[i].delay = bl_delay_config(proj.delay[i]);
+        out->voice[i].mixer_mask = proj.mixer_mask[i];
+        memcpy(out->voice[i].mixer_value, proj.mixer_value[i], MIDI_MIX_N);
+        proj_lfo_apply(&out->voice[i], i);
         out->voice[i].has_config = proj.voice_configured[i];
         if (proj.voice_configured[i]) out->voice[i].config = proj.voice_config[i];
     }
