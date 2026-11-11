@@ -1,7 +1,7 @@
 # FM-1 pages and K1–K4
 
-**NOT TESTED.** No tests, scripts, sanitizers, builds, flashing or hardware
-verification were performed.
+**BLE routing extension (11 November 2026):** source changes committed; new
+routing/persistence behavior still requires a build and hardware verification.
 
 | Section/page | K1 | K2 | K3 | K4 |
 | --- | --- | --- | --- | --- |
@@ -14,8 +14,10 @@ verification were performed.
 | LFO CC | Target (read-only) | Cycle (read-only) | Depth (read-only) | Scene (read-only) |
 | SEQ MOTION | Groove | Loop length | Pitch phase | Direction |
 | FX MIDI DELAY | Delay ON/OFF | Time | Feedback | Decay |
-| GLO SETUP | Global root | Sync | External clock input | Lights |
+| GLO SETUP | Global root | Sync | External clock input (USB/TRS/BLE and combinations) | Lights |
+| GLO MIDI | Clock output (USB/BLE/both) | Notes/CC output (USB/BLE/both) | Unused | Unused |
 | GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
+| GLO PERFORMANCE | Preset slot | Load/Save/Rename | Position | Character |
 
 HOME COMPOSE also shows read-only TIME (`MM:SS`), PART (played bars in the heard
 section) and TOTAL (played bars this performance). They replace its CONTROL/MASTER
@@ -34,7 +36,8 @@ voices retain the mappings above. See [Heartbeat drums](heartbeat.md).
 PRESETS clamps in the existing Demo / Full / Ambient order. Turning beyond an
 endpoint leaves the selected preset and seed intact.
 
-Short-pressing the active section cycles its pages; HOME has three, ENV/GLO two.
+Short-pressing the active section cycles its pages; HOME has three, ENV two,
+GLO four (SETUP → MIDI → APPEARANCE → PERFORMANCE).
 Switching away and returning restores that section's last page. Page memory is
 runtime-only and starts at QUICK/TIMING after initialization. Other sections
 have one page. Holding a section for about 1000 ms opens context-sensitive help;
@@ -74,12 +77,13 @@ Compact knob labels use K1–K4, with full generator/scale names in screen-reade
 announcements. Preview refresh includes the new project settings. Display and
 screen-reader behavior have not been verified.
 
-LFO retains its read-only page. GLO SETUP retains its existing bindings;
-GLO APPEARANCE adds theme and failed-save retry. GLO SYNC and EXT INPUT
-read/edit persistent global device settings through the dedicated settings API;
-they are independent of projects. SYNC edits require stopped transport, while
-port selection retains live routing behavior. Persistence is deferred until
-settled and safely idle; no UI handler writes flash. See
+LFO retains its read-only page. GLO SETUP keeps ROOT / SYNC / EXT INPUT / LIGHTS.
+EXT INPUT offers USB, TRS, BLE, USB+TRS, USB+BLE, TRS+BLE and USB+TRS+BLE.
+GLO MIDI follows immediately, with independent CLOCK OUT and MIDI OUT choices
+(USB, BLE or both); output changes require stopped transport and drained MIDI.
+GLO APPEARANCE keeps theme and failed-save retry; GLO PERFORMANCE remains the
+last page. All routing is device-wide, independent of projects. Changes persist
+once settled and safely idle; no UI handler writes flash. See
 [device-settings.md](device-settings.md) for host aliases and reboot limitations.
 GLO ROOT and ALGORITHM outside HOME
 retain global key-control behavior, except ALGORITHM on Heartbeat's ARP page.
