@@ -1,59 +1,72 @@
-# Musical project format 7
+# Tangram musical project record — format 9 (development)
 
-**NOT TESTED.** Projects now use explicit little-endian field serialization in
-`app/project_record.c`, rather than writing the bytes of `proj_t`. The in-memory
-structure no longer has `sync` or `ext_ports`; no replacement bytes are reserved.
-New saves write format 7 only. Device clock settings live in their own object.
+**Status:** the new MIDI-controls branch has source-level format-9 support, but
+its build, WSL2 regression, upgrade path and hardware behavior still require
+verification. The frozen functional Tangram release candidate used **format 8**.
 
-For seven voices, the format-7 record is exactly 312 bytes by its explicit layout:
+## Current format 9
 
-| Fields in serialized order | Bytes |
+The serializer in `app/project_record.c` writes an explicit, byte-packed
+little-endian record with no native C padding. For seven voices:
+
+| Region | Bytes |
 | --- | ---: |
-| Magic, format (u32 each) | 8 |
-| Template, root, scale, lights (u8 each) | 4 |
-| Seed (u64), internal BPM (i32) | 12 |
-| Arrangement present/enabled/ambient/reprise (u8 each), min/max (i16 each) | 8 |
-| Density percent, density present (u8 each) | 2 |
-| Seven channels, ratchet percent (u8 each) | 8 |
-| Seven delay settings: enabled/time/feedback/decay (u8 each) | 28 |
-| Seven explicit-configuration flags (u8 each) | 7 |
-| Seven voice configurations (33 bytes each) | 231 |
-| Composer enabled, phrase bars, Evolution, Tension (u8 each) | 4 |
+| Original project-format 8 record | 312 |
+| LFO and MIDI CC mixer extension (7 voices × 10 bytes) | 70 |
+| **Total project-format 9** | **382** |
 
-Each voice configuration stores root i32; scale mode/count u8 and 12 signed
-offsets; generator u8, a/b i16, direction/groove u8; length u32; register low/high
-and pitch PHASE u8, then density reduction u8 (0: full, 100: silent).
-Even unconfigured entries retain their defined field values.
-No C padding is written. Active patterns, pending lifecycle and traversal state
-continue to use the existing snapshot/undo mechanism, not this project record.
+The first 312 bytes retain the format-8 layout. Only the format version
+at header byte 4 changes from 8 to 9. Version 8 had already repurposed the
+historical LIGHTS byte to persist the **Composer start section**; global
+device settings and output routes are not project fields.
 
-The format-5 reader recognizes the historical 336-byte, little-endian native
-layout with seven voices. Clock bytes 11/12 are consumed and ignored; lights is
-byte 13, seed byte 16. It skips historical alignment bytes 14/15 and 81..83.
-The configuration array begins at byte 84 with seven 36-byte entries: root at
-entry+0, scale at +4, generator at +20, a/b at +22/+24, direction/groove at
-+26/+27, length at +28, registers/PHASE at +32..34. Padding +18/+19, +21 and +35
-is ignored. These offsets do not depend on the current compiler's layout.
+The appended data is **ten bytes per voice**, repeated in template voice
+order (up to seven slots): LFO override flag, LFO CC target selector, LFO
+cycle selector, LFO depth percent, LFO center percent, mixer active mask,
+then the four CC values (Volume CC7, Pan CC10, Cutoff CC74, Decay CC75).
+Each is a u8. The LFO cycle index maps to 0.5/1/2/4/8/16/32/64 bars.
+The mixer mask makes an untouched controller *unset*; displaying a
+default value must not send a MIDI message until it is touched or an
+explicitly stored mixer value is applied on PLAY.
 
-The format-6 reader consumes the unchanged 301-byte layout: 32-byte voice
-frames, no Composer trailer. Formats 5/6 import full voice density and Composer
-OFF, with Evolution/Tension defaults at level 1.
+Readers remain compatible with the previous formats 5 (336 bytes),
+6 (301 bytes), 7 and 8 (both 312 bytes). Older accepted records initialize
+the ten new bytes per voice to zero. After validation, the in-memory
+project is upgraded to format 9; no automatic flash write occurs on load.
+Explicit SAVE writes format 9. The record decoder rejects truncation,
+extra trailing bytes, unsupported versions and invalid field ranges.
+Older firmware is not assumed capable of reading newer saved records.
 
-Readers reject truncation, trailing bytes, unknown formats/magic and invalid
-musical settings. Accepted format-5/6 data becomes format 7 in memory and on the
-next explicit SAVE; loading does not rewrite flash or import old clock choices.
-Other historical project versions are unsupported. A hypothetical format-5
-record from a different ABI/byte order is not inferred or guessed.
+## Named Performance Preset bank (TGPB)
 
-Removing the two clock bytes and all 33 historical padding bytes accounts for
-the reduction from 336 to 301. Object IDs/flash allocation are unchanged from
-GLOBAL1. Format 7 adds seven density bytes and four Composer bytes.
+The bank remains a separate CRC-protected persistent flash object with
+**ten independently named slots** of at most twelve ASCII bytes each.
 
-New snapshot slots use wrapper format 9. Each active/pending frame adds its
-density reduction byte. The format-8 reader supplies zero reduction (full
-density). Existing slots remain usable and retain their header until stored
-again. The in-memory undo stack uses the new encoding. Reading older slots
-does not rewrite flash.
+| Bank version | Embedded project | Entry (occupied+name+record) | Entire bank |
+| --- | --- | --- | --- |
+| TGPB 1 | Project format 8, 312 B | 325 B | 3258 B |
+| TGPB 2 | Project format 9, 382 B | 395 B | 3958 B |
 
-Older firmware cannot read newly saved format-7 projects or format-9 slots.
-The compatibility readers are forward migrations, not a downgrade writer.
+Both bank sizes include the 8-byte header. The format-2 bank fits the
+platform's 4 KiB per-object storage allocation (subject to verified
+platform headers/CRC overhead in the actual firmware build).
+
+An older TGPB-1 bank is decoded and migrated **in RAM** at boot, preserving
+occupied names and projects. Loading existing banks performs **no flash
+write**; a subsequent explicit user SAVE or RENAME commits the complete
+TGPB-2 bank. Corrupt banks are not overwritten silently.
+
+Six snapshot slots and the undo-stack state format are **independent** of
+the musical project record and named Performance Preset bank. Their
+snapshot wrapper format remains 9.
+
+## Upgrade acceptance still required
+
+Run `sh tests/run_tangram_midi_controls.sh` on WSL2. The targeted host
+scenario includes project SAVE/reboot, MIDI CC output routing and a host-only
+TGPB-1 fixture migrated with no boot-time rewrite. Before installation
+verify actual firmware RAM/flash capacity, compatibility with existing
+saved projects and slot banks, and an on-device real-MIDI smoke test.
+
+**Do not publish/flash on the basis of this document or the present source
+commits alone.**
