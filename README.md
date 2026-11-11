@@ -149,7 +149,7 @@ The project also contains a Python USB-MIDI firmware installation adapter at [`t
 
 **Firmware flashing is at your own risk.** Check the target hardware, installed firmware and update procedure before installing. Never assume the MIDI port name alone proves device identity.
 
-Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focused device-settings regression (`sh tests/host/run_device_settings.sh`) passed on WSL2 on 11 November 2026. The simulator compiles via `./build.sh --host`. A focused two-scenario USB/BLE smoke gate is available via `sh tests/run_tangram_smoke.sh`; its execution has not yet been confirmed. The old all-in-one `tests/run_tests.sh` still includes legacy project-format checks and must not be treated as an up-to-date green Tangram regression suite.
+Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focused device-settings regression and the combined three-scenario Tangram smoke gate (`sh tests/run_tangram_smoke.sh`, including the Composer live-FORM host regression) passed on WSL2 on 11 November 2026. The simulator compiles via `./build.sh --host`. The old all-in-one `tests/run_tests.sh` still includes legacy project-format checks and must not be treated as an up-to-date green Tangram regression suite.
 
 ## Development status and roadmap
 
@@ -157,7 +157,7 @@ Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focuse
 
 **Current:** ten named Performance Presets and experimental BLE MIDI. Verified on FM-1 hardware on 11 November 2026: Bluetooth connection to an iPad, connected/disconnected UI status, four Global pages, visible routing settings, and wireless note playback of Korg iM1. The standalone global-settings host regression passed. Still to test on hardware: BLE clock input, MIDI clock output and destination combinations under load, persistence across power cycles, and longer sessions.
 
-**Deferred:** further Composer evolution and additional instrument-role templates. Live Composer FORM replacement is implemented on the experimental branch and awaiting host/device validation. There are no plans to add an internal sound engine or audio processing.
+**Verified additional function (11 November 2026):** Composer FORM switching during PLAY on the FM-1. The new form takes effect at the next section entry without restarting playback. Manual in-play section navigation does not replace the START section selected while stopped; after STOP the earlier START choice remains in place. Further Composer evolution and additional instrument-role templates are deferred. There are no plans to add an internal sound engine or audio processing.
 
 This is a **pre-release development branch**, not a declared stable release. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
 
