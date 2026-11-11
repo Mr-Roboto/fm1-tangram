@@ -12,7 +12,7 @@
  *   PLAY           play / stop             REC   the B part          EDIT   re-roll every unlocked voice
  *   SEL            lock (on ENV) SAVE saves     OCT- mutate (existing re-roll), OCT+ Dice
  *   HOME + OCT-    undo, momentary: both button releases are consumed
- *   HOME ENV ARP LFO SEQ FX GLO   QUICK/PLAY, TIMING/ROUTING, HARMONY, CC, MOTION, MIDI DELAY, SETUP
+ *   HOME ENV ARP LFO SEQ FX GLO   QUICK/PLAY, TIMING/VOICE, HARMONY, CC, MOTION, MIDI DELAY, SETUP
  *   MASTER         density                 SELECT the voice (HOME held: tempo)
  *   ALGORITHM      COMPOSE stage; mode outside HOME   PRESETS the template
  *   K1-K4          the current page's values; LFO/GLO retain their existing bindings
@@ -62,7 +62,7 @@ static const char *const KNOB_LABEL[NVIEWS][4] = {
     {"Root", "Sync", "EXT input", "Lights"},
 };
 static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME};
-static const uint8_t ROUTING_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
+static const uint8_t VOICE_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
 static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
 static const uint8_t MIDI_KNOB[4] = {KN_CLOCK_OUT, KN_MIDI_OUT, KN_NONE, KN_NONE};
 static const char *const MIDI_LABEL[4] = {"Clock out", "MIDI out", "Unused", "Unused"};
@@ -70,7 +70,7 @@ static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, K
 static const uint8_t PERFORMANCE_KNOB[4] = {KN_PERF_SLOT, KN_PERF_OP, KN_PERF_POS, KN_PERF_CHAR};
 static const char *const PERFORMANCE_LABEL[4] = {"Slot", "Operation", "Position", "Character"};
 static const char *const PLAY_LABEL[4] = {"Direction", "Groove", "Delay", "Delay time"};
-static const char *const ROUTING_LABEL[4] = {"MIDI channel", "Register", "Voice density", "Comp tension"};
+static const char *const VOICE_LABEL[4] = {"MIDI channel", "Register", "Voice density", "Comp tension"};
 static const char *const COMPOSER_LABEL[4] = {"Composer", "Form", "Phrase bars", "Evolution"};
 static const char *const APPEARANCE_LABEL[4] = {"Theme", "Save status", "Unused", "Unused"};
 static const uint8_t GLO_EXT_PORTS[7] = {
@@ -163,7 +163,7 @@ static const char *view_name(int v)
            ui.page[v] == 1 && v == V_SETUP ? "GLO MIDI" :
            ui.page[v] == 2 && v == V_PERFORM ? "HOME COMPOSE" :
            ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
-           ui.page[v] && v == V_VOICE ? "ENV ROUTING" :
+           ui.page[v] && v == V_VOICE ? "ENV VOICE" :
            VIEW_NAME[v];
 }
 static int heartbeat_selected(void);
@@ -174,7 +174,7 @@ static int view_knob(int v, int i)
            ui.page[v] == 1 && v == V_SETUP ? MIDI_KNOB[i] :
            ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
-           ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] :
+           ui.page[v] && v == V_VOICE ? VOICE_KNOB[i] :
            VIEW_KNOB[v][i];
     int pitch = ((v == V_PERFORM && !ui.page[v]) || v == V_PATTERN) && (k == KN_VROOT || k == KN_SCALE);
     if ((pitch || (v == V_VOICE && k == KN_REGISTER)) && heartbeat_selected()) {
@@ -195,7 +195,7 @@ static const char *knob_label(int v, int i)
            ui.page[v] == 1 && v == V_SETUP ? MIDI_LABEL[i] :
            ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
-           ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] :
+           ui.page[v] && v == V_VOICE ? VOICE_LABEL[i] :
            KNOB_LABEL[v][i];
 }
 static bl_project_t ui_p PLAT_POOL;      /* the app project's template: its voices' roles and ids, its scenes */
