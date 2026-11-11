@@ -46,7 +46,7 @@ int device_settings_init(void)
     if (n == 7 || n == 8 || n == 9 || n == (int)DEVICE_SETTINGS_BYTES) {
         uint32_t magic = (uint32_t)record[0] | (uint32_t)record[1] << 8 |
             (uint32_t)record[2] << 16 | (uint32_t)record[3] << 24;
-        int supported = record[4] == (n == (int)DEVICE_SETTINGS_BYTES ? DEVICE_SETTINGS_FORMAT : n - 6);
+        int supported = record[4] == (n == (int)DEVICE_SETTINGS_BYTES ? (int)DEVICE_SETTINGS_FORMAT : n - 6);
         device_settings_t loaded = {record[5], record[6], n >= 8 ? record[7] : DEVICE_THEME_CLASSIC,
             n >= 9 ? record[8] : 1,
             n == (int)DEVICE_SETTINGS_BYTES ? record[9] : DEVICE_MIDI_BOTH,
