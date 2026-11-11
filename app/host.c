@@ -807,6 +807,16 @@ static int proj_expect(const char *what, int *got)
         *got = VIEW_PAGES[V_SETUP];
     else if (!strcmp(what, "ux_global_help_cards"))
         *got = help_count(B_GLO);
+    else if (!strcmp(what, "ux_env_pages"))
+        *got = VIEW_PAGES[V_VOICE];
+    else if (!strcmp(what, "ux_env_is_voice"))
+        *got = ui.view == V_VOICE && !strcmp(view_name(V_VOICE), "ENV VOICE");
+    else if (!strcmp(what, "ux_env_timing_unchanged"))
+        *got = VIEW_KNOB[V_VOICE][0] == KN_RATE && VIEW_KNOB[V_VOICE][1] == KN_GATE &&
+               VIEW_KNOB[V_VOICE][2] == KN_LOOP && VIEW_KNOB[V_VOICE][3] == KN_PHASE;
+    else if (!strcmp(what, "ux_env_voice_unchanged"))
+        *got = VOICE_KNOB[0] == KN_CHANNEL && VOICE_KNOB[1] == KN_REGISTER &&
+               VOICE_KNOB[2] == KN_VDENSITY && VOICE_KNOB[3] == KN_COMP_TENSION;
     else if (!strcmp(what, "ux_pending_cells")) {
         *got = 0;
         for (int i = 0; i < 4; i++) {
