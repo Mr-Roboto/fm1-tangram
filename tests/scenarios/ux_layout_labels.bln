@@ -1,0 +1,11 @@
+# Tangram 1.0 UX layout phase 2: a pure display-name change.
+# ENV keeps TWO subpages and the original four encoder bindings on each.
+expect ux_env_pages 2
+expect ux_env_timing_unchanged 1
+expect ux_env_voice_unchanged 1
+tap ENV
+expect ux_env_is_voice 0
+tap ENV
+expect ux_env_is_voice 1
+tap ENV
+expect ux_env_is_voice 0
