@@ -534,7 +534,10 @@ static void cell(int view, int i, cell_t *c)
         break;
     case KN_FORM:
         c->lo = FORM_CLASSIC, c->hi = FORM_AMBIENT, c->v = (int16_t)proj_form();   /* (none or custom: no pip) */
-        cat(c->val, proj.arr_has ? FORM_SHORT[proj_form()] : "NONE");
+        /* Without an explicit form the live Composer uses Classic Arc, not
+         * silence. Keep its unselected pip (FORM_OTHER) until K2 sets a form. */
+        cat(c->val, proj.arr_has ? FORM_SHORT[proj_form()] :
+            proj.composer.enabled ? "DEFAULT" : "NONE");
         break;
     case KN_AMBIENT:
         c->v = proj.arr_ambient;
@@ -1631,12 +1634,22 @@ static void draw_composer(void)
     if (pending) {
         cat(t, BL_COMP_NAME[bl_comp_phase(pending - 1)]);
         cat(t, " / NEXT BAR");
+        row(4, 43, 64, "PENDING", t, K_PENDING);
     } else if (on) {
+        /* Give the two independent facts their own screen columns, not one
+         * compressed "CYCLE 1 NEXT IN 11 BARS" text run. */
+        text_box(4, 43, 43, 14, &FONT_T, "CYCLE", K_TEXT2, 0);
         cat_u(t, ui_st.composition_cycle + 1u);
-        cat_u(cat(t, "  NEXT IN "), (uint32_t)(ui_st.bars_until_change > 0 ? ui_st.bars_until_change : 0));
+        text_box(49, 43, 40, 14, &FONT_XS, t, K_TEXT, 0);
+        text_box(103, 43, 40, 14, &FONT_T, "NEXT", K_TEXT2, 0);
+        t[0] = 0;
+        cat_u(t, (uint32_t)(ui_st.bars_until_change > 0 ? ui_st.bars_until_change : 0));
         cat(t, ui_st.has_arr ? " BARS" : " PAUSED");
-    } else cat(t, proj.composer.enabled ? "ARMED FOR PLAY" : "COMPOSER OFF");
-    row(4, 43, 64, pending ? "PENDING" : on ? "CYCLE" : "STATE", t, pending ? K_PENDING : K_TEXT2);
+        text_box(146, 43, 90, 14, &FONT_XS, t, K_TEXT, 0);
+    } else {
+        cat(t, proj.composer.enabled ? "ARMED FOR PLAY" : "COMPOSER OFF");
+        row(4, 43, 64, "STATE", t, K_TEXT2);
+    }
     static const uint8_t phase[] = {BL_PH_BUILD, BL_PH_BED, BL_PH_VARIATION, BL_PH_BPART, BL_PH_SUBTRACT, BL_PH_PAYOFF, BL_PH_ENDING};
     static const char *const label[] = {"IN", "A", "DEV", "B", "BRK", "A'", "OUT"};
     for (int i = 0; i < 7; i++) {
