@@ -491,6 +491,60 @@ static void cell(int view, int i, cell_t *c)
             c->val[0] = PERF_CHARS[ui.perf_char]; c->val[1] = 0;
         }
         break;
+    case KN_LFO_TARGET:
+    case KN_LFO_CYCLE:
+    case KN_LFO_DEPTH:
+    case KN_LFO_CENTER: {
+        static const char *const names[LFO_NDEST] =
+            {"NONE", "MOD", "EXP", "PAN", "RES", "FILTER", "DECAY"};
+        static const char *const cycles[LFO_NCYCLES] =
+            {"0.5", "1", "2", "4", "8", "16", "32", "64"};
+        int target, cycle, depth, center;
+        c->kind = CELL_RING;
+        if (proj_lfo_get(v, &target, &cycle, &depth, &center)) {
+            c->kind = CELL_TEXT;
+            cat(c->val, "NO VOICE");
+            break;
+        }
+        if (k == KN_LFO_TARGET) {
+            c->hi = LFO_NDEST - 1, c->v = target;
+            cat(c->val, names[target]);
+            if (target != LFO_DEST_OFF) {
+                static const uint8_t numbers[LFO_NDEST] = {0, 1, 11, 10, 71, 74, 75};
+                cat(c->sub, "CC ");
+                cat_u(c->sub, numbers[target]);
+            }
+        } else if (k == KN_LFO_CYCLE) {
+            c->hi = LFO_NCYCLES - 1, c->v = cycle;
+            cat(c->val, cycles[cycle]);
+            cat(c->sub, "BARS");
+        } else {
+            c->hi = 100; c->v = k == KN_LFO_DEPTH ? depth : center;
+            cat_u(c->val, c->v);
+            cat(c->val, "%");
+        }
+        break;
+    }
+    case KN_MIX_VOLUME:
+    case KN_MIX_PAN:
+    case KN_MIX_CUTOFF:
+    case KN_MIX_DECAY: {
+        int control = k - KN_MIX_VOLUME;
+        int value = proj_mixer_value(v, control);
+        c->kind = CELL_RING;
+        c->hi = 127;
+        if (value < 0) {
+            c->kind = CELL_TEXT;
+            cat(c->val, "-");
+            break;
+        }
+        c->v = value;
+        cat_u(c->val, value);
+        static const uint8_t numbers[MIDI_MIX_N] = {7, 10, 74, 75};
+        cat(c->sub, "CC ");
+        cat_u(c->sub, numbers[control]);
+        break;
+    }
     case KN_THEME:
         c->kind = CELL_TEXT;
         cat(c->val, DEVICE_THEME_NAME[device_settings_get().theme]);
@@ -1573,7 +1627,15 @@ static int scene_value(int j)
  * template's scenes (the one the morphs head for lit, the voice's value in each) */
 static void draw_cc(void)
 {
+    /* The template is read-only; apply the persisted per-voice LFO override
+     * to a local snapshot for display. Its scenes still use original CC map 0. */
     const bl_vcfg_t *vc = sel_cfg();
+    bl_vcfg_t edited;
+    if (vc) {
+        edited = *vc;
+        proj_lfo_apply(&edited, key_voice(ui.sel));
+        vc = &edited;
+    }
     const bl_project_t *p = tpl_now();
     char t[40];
     int i, j, sc = scene_now();
@@ -1730,6 +1792,27 @@ static void draw_delay(void)
         text_box(96, y, 44, rh, f, d.enabled ? "ON" : "OFF", d.enabled ? K_INFO : K_TEXT2, 0);
         text_box(152, y, 84, rh, f, TIME_LABEL[d.time - 1], K_TEXT, 2);
     }
+}
+
+/* FX MIXER: all values are actual channel CC, never audio-amplitude gain.
+ * Multiple selected voices sharing a MIDI channel share their CC response. */
+static void draw_mixer(void)
+{
+    int voice = key_voice(ui.sel), vid = key_vid(ui.sel);
+    char t[40];
+    text_box(4, 0, 232, 22, &FONT_B, "MIDI CC MIXER", K_FOCUS, 0);
+    if (voice < 0) {
+        text_box(4, 34, 232, 18, &FONT_XS, "SELECT A VOICE", K_TEXT2, 0);
+        return;
+    }
+    row(4, 27, 63, "VOICE", vid_name(vid), vid_color(vid));
+    t[0] = 0;
+    cat_u(t, (uint32_t)(proj.channel[voice] + 1));
+    row(4, 46, 63, "CHANNEL", t, K_TEXT);
+    row(4, 67, 112, "CC7 / CC10", "LEVEL / PAN", K_TEXT2);
+    row(4, 85, 112, "CC74 / CC75", "FILTER / DECAY", K_TEXT2);
+    cv_rect(4, 110, 232, 1, K_LINE);
+    text_box(4, 118, 232, 12, &FONT_T, "SHARED CHANNEL = SHARED CC", K_DIM, 0);
 }
 
 static void seed_hex(char *t, int groups)   /* the seed as 16 hex digits (groups: in fours, spaced) */
@@ -1937,7 +2020,7 @@ static void draw_main(void)
         case V_PATTERN: draw_pattern(); break;
         case V_CC: draw_cc(); break;
         case V_ARRANGER: draw_arranger(); break;
-        case V_DELAY: draw_delay(); break;
+        case V_DELAY: if (ui.page[V_DELAY]) draw_mixer(); else draw_delay(); break;
         default: draw_setup(); break;
         }
     cv_blit(0, MAIN_Y);
@@ -1966,6 +2049,14 @@ static const char *compact_knob_label(int k, int i)
     case KN_CHANNEL: return "CH";
     case KN_FEEDBACK: return "FDBK";
     case KN_DELAY_TIME: return "TIME";
+    case KN_LFO_TARGET: return "TARGET";
+    case KN_LFO_CYCLE: return "CYCLE";
+    case KN_LFO_DEPTH: return "DEPTH";
+    case KN_LFO_CENTER: return "CENTER";
+    case KN_MIX_VOLUME: return "VOL";
+    case KN_MIX_PAN: return "PAN";
+    case KN_MIX_CUTOFF: return "CUTOFF";
+    case KN_MIX_DECAY: return "DECAY";
     case KN_NONE: return "-";
     default: return knob_label(ui.view, i);
     }
