@@ -28,7 +28,9 @@
 
 1. Label help overlay `<button> HELP x/y`; repair obsolete GLO navigation instructions and the inaccurate warning that Composer START is not saved.
 2. Compare **sounding active** versus **staged target** settings in the knob strip while playing, without changing the engine or data model. Normal theme focus marker = active value; bright marker/dot and target text = queued value. If equal, a single normal marker remains. Text-only controls receive a small bright pending dot. Unsupported (N/A) controls never show a phantom queued marker.
-3. Add simulator assertions for actual subpage/help counts and the active/queued Composer encoder state.
+3. Add simulator assertions for actual subpage/help counts and two active/queued Composer encoder changes: K4 Evolution and K3 Phrase Bars (both NEXT BAR).
+4. Label an enabled Composer's implicit Classic Arc form as `DEFAULT` instead of misleading `NONE`. The first K2 selection still explicitly chooses CLASSIC; no arranger setting is silently written.
+5. On HOME COMPOSE, split `CYCLE` and `NEXT` into distinct columns while preserving the existing font sizes, section strip, counters and musical HOME overview.
 
 **Not yet accepted:** this UX branch must pass the host smoke gate, simulator screenshots and hardware readability review before flashing. Frozen functional branch remains unchanged.
 
@@ -56,7 +58,8 @@ sh tests/run_tangram_ux.sh
 ```
 
 This includes the unchanged functional smoke gate, the UX simulator scenario
-`tests/scenarios/ux_pending_help.bln`, and two visual PNGs under
-`app/build/scenarios/ux_pending_help/` for inspection.
+`tests/scenarios/ux_pending_help.bln`, and four visual PNGs under
+`app/build/scenarios/ux_pending_help/` for inspection: `composer_queued.png`,
+`composer_applied.png`, `bars_queued.png`, and `bars_applied.png`.
 
 **No reflash or hardware changes are needed to run these host tests.**
