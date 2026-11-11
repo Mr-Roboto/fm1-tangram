@@ -14,7 +14,7 @@ sh tests/host/run_composer_form.sh
 printf '%s\n' '=== FM-Tangram host simulator build ==='
 ./build.sh --host
 
-for test_name in ble_global ble_routing; do
+for test_name in ble_global ble_routing composer_form_live; do
     output_dir="app/build/scenarios/$test_name"
     mkdir -p "$output_dir"
     log_file="$output_dir/run.log"
