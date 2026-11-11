@@ -32,8 +32,15 @@
  * - The slots and the undo points are kept packed (a bl_state_t is 16.8 KB), the undo points in 32 KB: 20 of the
  *   templates' states fit with room to spare, a larger state takes the room of more than one. */
 #include <stddef.h>
-#include <string.h> /* strcmp, memmove: provided by the BLE shim when FM1B_BLE */
 #include "state.h"
+
+/* The BLE shim provides these symbols in a separate translation unit.
+ * Use the platform ABI (32-bit unsigned length), not the app engine\'s
+ * freestanding string.h, whose size_t declarations conflict with the BSP. */
+#if FM1B_BLE && !defined(PLAT_HOST)
+int strcmp(const char *a, const char *b);
+void *memmove(void *d, const void *s, unsigned n);
+#endif
 
 #define SLOT_MAGIC 0x31534C42u           /* "BLS1" */
 #define SLOT_FORMAT 9u                  /* per-voice active/pending density, reads format 8 */
