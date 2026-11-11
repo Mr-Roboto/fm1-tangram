@@ -10,7 +10,9 @@ extern const char *const DEVICE_THEME_NAME[DEVICE_NTHEMES];
 enum {
     DEVICE_CLOCK_USB = 1u << PORT_USB,
     DEVICE_CLOCK_TRS = 1u << PORT_TRS,
-    DEVICE_CLOCK_BOTH = DEVICE_CLOCK_USB | DEVICE_CLOCK_TRS
+    DEVICE_CLOCK_BOTH = DEVICE_CLOCK_USB | DEVICE_CLOCK_TRS,
+    DEVICE_CLOCK_BLE = 1u << PORT_BLE,
+    DEVICE_CLOCK_ALL = DEVICE_CLOCK_USB | DEVICE_CLOCK_TRS | DEVICE_CLOCK_BLE
 };
 /* Deliberately identical to plat_midi_send's routing bitmask: USB=1, BLE=2, both=3. */
 enum {
@@ -20,14 +22,16 @@ enum {
 };
 extern const char *const DEVICE_MIDI_NAME[3]; /* USB, BLE, USB + BLE */
 typedef struct {
-    uint8_t sync, ext_ports, theme, lights, midi_out;
+    uint8_t sync, ext_ports, theme, lights, midi_out, clock_out;
 } device_settings_t;
 
 /* Main-loop API. Clock edits apply to runtime; appearance-only edits affect drawing.
- * init resets RAM and loads the record: 0 valid, 1 missing/invalid -> INT/BOTH/CLASSIC/LIGHTS ON.
+ * init resets RAM and loads the record: 0 valid, 1 missing/invalid ->
+ * INT/USB+TRS/CLASSIC/LIGHTS ON, MIDI+clock on USB+BLE.
  * Format 1 imports clock choices with CLASSIC; format 2 also stores theme.
  * Format 3 adds global LIGHTS; older records import LIGHTS from the working project.
- * Format 4 adds MIDI output routing; older records default to USB + BLE.
+ * Format 4 adds independent MIDI and internal-clock output routing; older records
+ * default to USB + BLE, as the first Tangram BLE build did.
  * set rejects invalid values or a mode change during playback/pending Start
  * (-1); an accepted edit (0) is saved after settling. Port-only edits retain
  * the existing live input-routing behavior.
