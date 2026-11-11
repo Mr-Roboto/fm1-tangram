@@ -84,7 +84,7 @@ static rt_ev_t rt_nq[RT_NOW] PLAT_POOL;  /* to send at once, before the queue */
 static struct {
     /* the main loop's */
     bl_tick_t head, origin;              /* the render head; where the running engine's tick 0 sits */
-    uint8_t has_next, stop_queued, ext, clock_out, out_ports;
+    uint8_t has_next, stop_queued, ext, clock_out, out_ports, clock_ports;
     uint8_t fresh;                       /* the engine is not rt_proj's yet (none since it came stopped): its preview */
     uint8_t muted;                       /* mutedVoices: a bit per BL_VID_ */
     uint8_t chan[BL_NVIDS];              /* channelMap by BL_VID_, RT_NONE: none */
@@ -210,8 +210,10 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
 {
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
     uint8_t *k = &rt.snd[st & 15u][n];
-    /* Notes, CC and internally generated Clock/Start/Stop share one output route. */
-    plat_midi_send(pkt, rt.out_ports);
+    /* Route realtime transport/clock separately from notes and CC; same scheduler. */
+    uint32_t to = st == 0xF8u || st == 0xFAu || st == 0xFBu || st == 0xFCu ?
+        rt.clock_ports : rt.out_ports;
+    plat_midi_send(pkt, to);
     rt.sent_ms = plat_ms();
     if ((st & 0xF0u) == 0x90u)
         *k = 1;
@@ -732,6 +734,7 @@ void rt_init(void)                       /* the Full ensemble until the saved pr
     rt.swap_tick = rt.tempo_tick = rt.stop_at = -1;
     rt.ext_ports = 1u << PORT_USB | 1u << PORT_TRS;
     rt.out_ports = TO_USB | TO_BLE;
+    rt.clock_ports = TO_USB | TO_BLE;
     bl_template(BL_TPL_FULL, &rt_proj);
     rt_channels(&rt_proj);
     rt.bpm = rt_proj.bpm;
@@ -1084,7 +1087,7 @@ void rt_set_channel(int vid, uint8_t ch)
 
 int rt_apply_clock_settings(int ext, int ports)
 {
-    if ((ext != 0 && ext != 1) || !ports || (ports & ~(1 << PORT_USB | 1 << PORT_TRS))) return -1;
+    if ((ext != 0 && ext != 1) || !ports || (ports & ~(1 << PORT_USB | 1 << PORT_TRS | 1 << PORT_BLE))) return -1;
     uint32_t f = plat_lock();
     if (rt.ext != ext) {
         if (rt.playing || rt.start_req) {
@@ -1103,15 +1106,18 @@ int rt_apply_clock_settings(int ext, int ports)
     return 0;
 }
 
-int rt_apply_output_settings(int output_mask)
+int rt_apply_output_settings(int midi_mask, int clock_mask)
 {
-    if (!output_mask || (output_mask & ~(TO_USB | TO_BLE))) return -1;
+    if (!midi_mask || (midi_mask & ~(TO_USB | TO_BLE)) ||
+        !clock_mask || (clock_mask & ~(TO_USB | TO_BLE))) return -1;
     uint32_t f = plat_lock();
-    if (rt.out_ports != output_mask && (rt.playing || rt.start_req)) {
+    if ((rt.out_ports != midi_mask || rt.clock_ports != clock_mask) &&
+        (rt.playing || rt.start_req || rt.nn || rt.nrelease || rt.qn)) {
         plat_unlock(f);
-        return -1;
+        return -1; /* drain queued Note-Offs/transport before changing destination */
     }
-    rt.out_ports = (uint8_t)output_mask;
+    rt.out_ports = (uint8_t)midi_mask;
+    rt.clock_ports = (uint8_t)clock_mask;
     plat_unlock(f);
     return 0;
 }
@@ -1126,7 +1132,7 @@ void rt_set_sync(int ext)                /* existing callers now edit the author
 void rt_set_ext_port(int mask)           /* EXT's input: bits 1 << PORT_USB, 1 << PORT_TRS */
 {
     device_settings_t settings = device_settings_get();
-    settings.ext_ports = (uint8_t)(mask & (1 << PORT_USB | 1 << PORT_TRS));
+    settings.ext_ports = (uint8_t)(mask & (1 << PORT_USB | 1 << PORT_TRS | 1 << PORT_BLE));
     device_settings_set(settings);
 }
 
