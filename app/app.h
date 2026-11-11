@@ -146,6 +146,9 @@ int undo_depth(void);                    /* the undo points held (UIState.canUnd
 #define PERFORMANCE_PRESET_SLOTS 10
 #define PERFORMANCE_PRESET_NAME_BYTES 12
 int performance_presets_init(void);
+/* Last successfully saved named slot (1..10), or 1 when no save exists.
+ * Selection memory only: never loads a preset or writes on navigation. */
+int performance_preset_last_slot(void);
 int performance_preset_used(int slot);
 int performance_preset_name(int slot, char out[PERFORMANCE_PRESET_NAME_BYTES + 1]);
 int performance_preset_load(int slot);
