@@ -24,6 +24,7 @@ static bl_live_t stub_engine;
 static bl_project_t stub_next;
 static int stub_fresh = 1, stub_next_pending, stub_start_req, stub_action_error;
 static int stub_sync, stub_ports = DEVICE_CLOCK_BOTH, stub_clock_bpm = 96, stub_clock_applies;
+static int stub_midi_out = DEVICE_MIDI_BOTH, stub_clock_out = DEVICE_MIDI_BOTH;
 static int stub_fail_save = -1, stub_bad_readback = -1, stub_logs;
 
 static void stub_materialize(void)
@@ -147,12 +148,22 @@ void rt_set_channel(int vid, uint8_t ch)
 }
 int rt_apply_clock_settings(int ext, int ports)
 {
-    if ((ext != 0 && ext != 1) || !ports || (ports & ~DEVICE_CLOCK_BOTH) ||
+    if ((ext != 0 && ext != 1) || !ports || (ports & ~DEVICE_CLOCK_ALL) ||
         (ext != stub_sync && (stub_playing || stub_start_req))) return -1;
     if (ext != stub_sync && !ext) stub_clock_bpm = stub_proj.bpm;
     stub_sync = ext;
     stub_ports = ports;
     stub_clock_applies++;
+    return 0;
+}
+int rt_apply_output_settings(int midi_mask, int clock_mask)
+{
+    if (!midi_mask || (midi_mask & ~DEVICE_MIDI_BOTH) ||
+        !clock_mask || (clock_mask & ~DEVICE_MIDI_BOTH) ||
+        ((midi_mask != stub_midi_out || clock_mask != stub_clock_out) &&
+          (stub_playing || stub_start_req || stub_busy))) return -1;
+    stub_midi_out = midi_mask;
+    stub_clock_out = clock_mask;
     return 0;
 }
 void rt_set_sync(int ext)
@@ -189,6 +200,7 @@ static void store_clear(void)
     bl_template(BL_TPL_FULL, &stub_proj);
     stub_sync = DEVICE_SYNC_INTERNAL;
     stub_ports = DEVICE_CLOCK_BOTH;
+    stub_midi_out = stub_clock_out = DEVICE_MIDI_BOTH;
     stub_clock_bpm = stub_proj.bpm;
     device_settings_init();
     CHECK(!device_settings_apply(), "fixture initializes the real global settings module");
@@ -403,7 +415,8 @@ static void test_store_formats(void)
     c->length = 3600; c->reg_low = 48; c->reg_high = 84; c->phase = 3;
     good.delay[0] = (bl_delay_t){1,7,100,50};
     good.ratchet_pct = 35;
-    device_settings_t clock = {DEVICE_SYNC_EXTERNAL,DEVICE_CLOCK_USB};
+    device_settings_t clock = {DEVICE_SYNC_EXTERNAL,DEVICE_CLOCK_USB,DEVICE_THEME_CLASSIC,1,
+        DEVICE_MIDI_BOTH,DEVICE_MIDI_BOTH};
     CHECK(!device_settings_set(clock), "independent global clock setup");
     stub_clock_bpm = 125;
     int applies = stub_clock_applies;
@@ -782,7 +795,8 @@ static void test_global_settings(void)
     store_clear(); proj_load(); proj_apply();
     CHECK(device_settings_get().sync==DEVICE_SYNC_INTERNAL && device_settings_get().ext_ports==DEVICE_CLOCK_BOTH,
           "missing global record uses documented defaults");
-    device_settings_t settings={DEVICE_SYNC_EXTERNAL,DEVICE_CLOCK_TRS};
+    device_settings_t settings={DEVICE_SYNC_EXTERNAL,DEVICE_CLOCK_TRS,DEVICE_THEME_CLASSIC,1,
+        DEVICE_MIDI_BOTH,DEVICE_MIDI_BOTH};
     CHECK(!device_settings_set(settings) && device_settings_status()==1,"global edit pending");
     stub_clock_bpm=125;
     int applies=stub_clock_applies;
@@ -795,9 +809,10 @@ static void test_global_settings(void)
     stub_busy=0; stub_playing=1;
     CHECK(device_settings_poll()==1 && stub_len[OBJ_DEVICE_SETTINGS]==-1,"playing defers global write");
     stub_playing=0;
-    static const uint8_t expected[]={ 'T','G','D','S',1,DEVICE_SYNC_EXTERNAL,DEVICE_CLOCK_TRS };
-    CHECK(!device_settings_poll() && stub_len[OBJ_DEVICE_SETTINGS]==7 &&
-          !memcmp(stub_obj[OBJ_DEVICE_SETTINGS],expected,sizeof expected),"real module writes independent seven-byte record");
+    static const uint8_t expected[]={ 'T','G','D','S',4,DEVICE_SYNC_EXTERNAL,DEVICE_CLOCK_TRS,
+        DEVICE_THEME_CLASSIC,1,DEVICE_MIDI_BOTH,DEVICE_MIDI_BOTH };
+    CHECK(!device_settings_poll() && stub_len[OBJ_DEVICE_SETTINGS]==11 &&
+          !memcmp(stub_obj[OBJ_DEVICE_SETTINGS],expected,sizeof expected),"real module writes independent eleven-byte record");
     stub_sync=DEVICE_SYNC_INTERNAL; stub_ports=DEVICE_CLOCK_USB; stub_clock_bpm=96;
     CHECK(!device_settings_init() && !device_settings_apply() && stub_sync==DEVICE_SYNC_EXTERNAL &&
           stub_ports==DEVICE_CLOCK_TRS,"reboot reloads persisted global settings instead of retaining RAM");
