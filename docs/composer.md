@@ -1,7 +1,11 @@
 # Tangram Composer
 
-Status: static source inspection only. No build, tests, timing/memory measurements
-or hardware verification have been performed for this milestone.
+Status (11 November 2026): the focused Composer live-FORM regression and the
+combined Tangram simulator smoke gate passed on WSL2. The FM-1 firmware build
+passed its platform and memory checks. Live FORM changes and manual Composer
+section selection were then verified on real FM-1 hardware, including ongoing
+BLE-MIDI playback to an iPad. Long-term performance and detailed timing
+measurements were not conducted.
 
 Composer is opt-in and owns the existing AUTO/arranger bar callback. It replaces
 legacy arranger decisions while enabled, without another sequencer or clock.
@@ -42,8 +46,12 @@ Advance actions remain queued for the next running bar. AUTO-off keeps the
 clock paused but still permits an explicit stage selection at a bar boundary.
 
 While stopped, ALGORITHM selects START for the next Play (Composer must be
-enabled to change or use it). This session-local choice resets to Intro on project load
-or template change and is not saved in projects or snapshots. OCT- retains its
+enabled to change or use it). The chosen start section is separate from the
+current *playing* section: changing sections during PLAY affects the active
+performance, not the stored START choice. After STOP, the selected start section
+still appears; the next PLAY begins there again. The start choice is a musical
+project field in project format 8, and is retained when that project is saved;
+loading a different project or template restores its own choice. OCT- retains its
 re-roll action, HOME + OCT- retains undo, and OCT+ retains Dice; stage selection
 does not add an undo point. Starting/jumping to
 Return before A has been captured retains the existing material: no theme is
@@ -56,7 +64,9 @@ subject to LOCK/manual harmony protection. This does not advance section age,
 shorten its countdown or fast-forward Phase II evolution. Intro retains its
 normal sparse buildup. Live section changes retain their transition ramps.
 The STOP/PLAY starting choice and AUTO pause/resume paths remain unchanged;
-resuming AUTO does not reinitialize the current section.
+resuming AUTO does not reinitialize the current section. This separation of
+START and live section was explicitly confirmed on FM-1 hardware on
+11 November 2026.
 
 COMPOSE shows section, cycle, bars remaining and manually owned/locked voices.
 The existing horizon uses Composer section names; pending controls appear as
@@ -231,8 +241,8 @@ nor test execution was performed for this change.
 Timing evolution for legacy, multi-bar and short/irregular foundations,
 automatic pitch PHASE changes, a separate register macro, arbitrary ARP/MOTIF
 pitch mutation and resumable Composer checkpoints are deferred. Live FORM
-replacement is implemented on the experimental BLE development branch but
-requires compilation, focused regression execution and device validation.
+replacement is implemented and confirmed in the focused simulator/engine
+regressions and on the FM-1 hardware (11 November 2026).
 Existing TIMING/MOTION controls, including 15/16 phasing, retain local-boundary
 semantics and take manual ownership. No new rates, LCM calculations or MIDI event queues
 were added. Original Note-Ons carry an extra display grid identity through the
