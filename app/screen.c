@@ -1762,7 +1762,7 @@ static void draw_help(void)
     int n = help_lines(ui.help - 1, l), k;
     char title[24];
     title[0] = 0;
-    cat(cat(title, BTN_LABEL[ui.help - 1]), " ");
+    cat(cat(title, BTN_LABEL[ui.help - 1]), " HELP ");
     cat_u(title, (uint32_t)ui.help_part + 1u);
     cat_u(cat(title, "/"), (uint32_t)help_count(ui.help - 1));
     cv_round(16, 12, 208, 124, 6, K_PANEL);   /* (four lines at most) */
