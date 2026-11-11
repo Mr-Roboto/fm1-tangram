@@ -3,10 +3,11 @@
  * independent of the current compiler's struct alignment. Format 5 was the
  * historical little-endian native record: 336 bytes, seven 36-byte configs.
  * Its padding and clock bytes are consumed only by this read compatibility path. */
-enum { PROJECT_RECORD_BYTES = 46 + 38 * BL_MAX_VOICES,
+enum { PROJECT_RECORD8_BYTES = 46 + 38 * BL_MAX_VOICES,
+       PROJECT_RECORD_BYTES = PROJECT_RECORD8_BYTES + 10 * BL_MAX_VOICES,
        PROJECT_RECORD6_BYTES = 42 + 37 * BL_MAX_VOICES, PROJECT_RECORD5_BYTES = 336 };
 
-typedef char project_record_must_be_312_bytes[PROJECT_RECORD_BYTES == 312 ? 1 : -1];
+typedef char project_record_must_be_382_bytes[PROJECT_RECORD_BYTES == 382 ? 1 : -1];
 
 typedef struct {
     const uint8_t *read;
@@ -64,7 +65,7 @@ static void project_record_fields(project_io_t *io, proj_t *p, int *legacy_light
     p->magic = project_bits(io, p->magic, 4);
     p->format = project_bits(io, p->format, 4);
     int legacy = !io->write && p->format == 5;
-    if (p->magic != PROJ_MAGIC || (!legacy && p->format != 6 && p->format != 7 && p->format != PROJ_FORMAT) ||
+    if (p->magic != PROJ_MAGIC || (!legacy && p->format != 6 && p->format != 7 && p->format != 8 && p->format != PROJ_FORMAT) ||
         (legacy && BL_MAX_VOICES != 7)) { io->bad = 1; return; }
     p->tpl = (uint8_t)project_bits(io, p->tpl, 1);
     p->key_root = (uint8_t)project_bits(io, p->key_root, 1);
@@ -110,6 +111,17 @@ static void project_record_fields(project_io_t *io, proj_t *p, int *legacy_light
     } else {
         p->composer = (bl_compcfg_t){0, 0, 1, 1}; /* opt-in, no change to old projects' playback */
     }
+    if (p->format >= 9)
+        for (int i = 0; i < BL_MAX_VOICES; i++) {
+            p->lfo_override[i] = (uint8_t)project_bits(io, p->lfo_override[i], 1);
+            p->lfo_target[i] = (uint8_t)project_bits(io, p->lfo_target[i], 1);
+            p->lfo_cycle[i] = (uint8_t)project_bits(io, p->lfo_cycle[i], 1);
+            p->lfo_depth[i] = (uint8_t)project_bits(io, p->lfo_depth[i], 1);
+            p->lfo_center[i] = (uint8_t)project_bits(io, p->lfo_center[i], 1);
+            p->mixer_mask[i] = (uint8_t)project_bits(io, p->mixer_mask[i], 1);
+            for (int k = 0; k < MIDI_MIX_N; k++)
+                p->mixer_value[i][k] = (uint8_t)project_bits(io, p->mixer_value[i][k], 1);
+        }
 }
 
 static int project_record_read(const uint8_t *record, int bytes, proj_t *out, int *legacy_lights)
@@ -119,7 +131,8 @@ static int project_record_read(const uint8_t *record, int bytes, proj_t *out, in
     project_io_t io = {record, NULL, bytes, 0, 0};
     project_record_fields(&io, out, legacy_lights);
     int expected = out->format == 5 ? PROJECT_RECORD5_BYTES :
-        out->format == 6 ? PROJECT_RECORD6_BYTES : PROJECT_RECORD_BYTES;
+        out->format == 6 ? PROJECT_RECORD6_BYTES :
+        out->format == 9 ? PROJECT_RECORD_BYTES : PROJECT_RECORD8_BYTES;
     if (io.bad || io.at != bytes || bytes != expected) return -1;
     out->format = PROJ_FORMAT;
     return proj_valid(out) ? 0 : -1;
