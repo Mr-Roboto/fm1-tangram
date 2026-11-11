@@ -79,7 +79,7 @@ static const uint8_t GLO_EXT_PORTS[7] = {
     DEVICE_CLOCK_TRS | DEVICE_CLOCK_BLE, DEVICE_CLOCK_ALL
 };
 static const char *const GLO_EXT_NAMES[7] = {
-    "USB", "TRS", "BLE", "USB + TRS", "USB + BLE", "TRS + BLE", "ALL"
+    "USB", "TRS", "BLE", "USB + TRS", "USB + BLE", "TRS + BLE", "USB+TRS+BLE"
 };
 static const char *const DIR_LABEL[BL_NDIRS] = {"UP", "DOWN", "M-DWN", "PEND", "M-PEND"};
 static const char *const GROOVE_LABEL[BL_NGROOVES] = {"STRAIGHT", "PULSE 8", "DRIVE 16", "BROKEN 8"};
