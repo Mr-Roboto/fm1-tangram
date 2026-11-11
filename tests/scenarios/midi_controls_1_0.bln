@@ -67,6 +67,26 @@ expect_out USB B0 47 41
 tap PLAY
 expect playing 0
 
+# The NAMED 10-slot bank must round-trip the complete LFO/mixer edits too.
+# Simulated only: there are NO finished user factory presets in 1.0.
+perfstore 1
+expect ux_bank_slot1 1
+expect ux_bank_flash_bytes 3748
+proj template full 0xABCDEF12
+expect ux_mixer_volume 100
+perfload 1
+expect ux_lfo_target 6
+expect ux_lfo_cycle 4
+expect ux_lfo_depth 31
+expect ux_lfo_center 61
+expect ux_mixer_volume 101
+expect ux_mixer_pan 65
+expect ux_mixer_cutoff 65
+expect ux_mixer_resonance 65
+reboot
+expect ux_bank_slot1 1
+expect ux_bank_flash_bytes 3748
+
 # v1 bank upgrade: old flash must remain untouched at boot; an explicit
 # user edit migrates the occupied slot and writes the new 3748-byte bank.
 legacybank
