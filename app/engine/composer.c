@@ -31,6 +31,14 @@ static void phrase_unit(bl_composer_t *c, const bl_arrcfg_t *form)
     c->unit = (uint8_t)((bars + 3) / 4 * 4);
 }
 
+void bl_comp_rephrase(bl_composer_t *c, const bl_arrcfg_t *form)
+{
+    phrase_unit(c, form);
+    /* Only call immediately after selecting a fresh section, or immediately
+     * before bl_comp_tick crosses to the next one. Section age is unchanged. */
+    c->bars_left = (c->cfg.bars ? c->cfg.bars : c->unit) * DWELL[c->section];
+}
+
 static void enter(bl_composer_t *c)
 {
     c->start_pending = 0;
