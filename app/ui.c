@@ -68,6 +68,18 @@ static const uint8_t VOICE_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_C
 static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
 static const uint8_t MIXER_KNOB[4] = {KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_RESONANCE};
 static const char *const MIXER_LABEL[4] = {"Volume CC7", "Pan CC10", "Cutoff CC74", "Resonance CC71"};
+/* Reorder the LFO TARGET selector in the UI without rewriting persisted
+ * format-9 target IDs: prior FILTER=5 and RES=4 records stay compatible. */
+static const uint8_t LFO_TARGET_ORDER[LFO_NDEST] = {
+    LFO_DEST_OFF, LFO_DEST_MOD, LFO_DEST_EXPRESSION, LFO_DEST_PAN,
+    LFO_DEST_CUTOFF, LFO_DEST_RESONANCE, LFO_DEST_DECAY
+};
+static int lfo_target_index(int target)
+{
+    for (int i = 0; i < LFO_NDEST; i++)
+        if (LFO_TARGET_ORDER[i] == target) return i;
+    return 0;
+}
 static const uint8_t MIDI_KNOB[4] = {KN_CLOCK_OUT, KN_MIDI_OUT, KN_NONE, KN_NONE};
 static const char *const MIDI_LABEL[4] = {"Clock out", "MIDI out", "Unused", "Unused"};
 static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, KN_NONE};
@@ -876,7 +888,10 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
             warn("LFO", "NO VOICE");
             break;
         }
-        if (k == KN_LFO_TARGET) target = clamp(target + d, 0, LFO_NDEST - 1);
+        if (k == KN_LFO_TARGET) {
+            int index = clamp(lfo_target_index(target) + d, 0, LFO_NDEST - 1);
+            target = LFO_TARGET_ORDER[index];
+        }
         if (k == KN_LFO_CYCLE) cycle = clamp(cycle + d, 0, LFO_NCYCLES - 1);
         if (k == KN_LFO_DEPTH) depth = clamp(depth + accel(role, e, 100), 0, 100);
         if (k == KN_LFO_CENTER) center = clamp(center + accel(role, e, 100), 0, 100);
@@ -1359,6 +1374,9 @@ static void speak(void);
 void ui_init(void)
 {
     memset(&ui, 0, sizeof ui);
+    /* Last successfully SAVED named slot, if present; never auto-load it. */
+    int last = performance_preset_last_slot();
+    ui.perf_slot = (uint8_t)(last >= 1 && last <= PERFORMANCE_PRESET_SLOTS ? last - 1 : 0);
     ui.touched = -1;
     performance_cancel();
     ui.pot_state = POT_BOOT;             /* (pot() takes its place once the reading holds) */
