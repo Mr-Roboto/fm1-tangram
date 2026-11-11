@@ -989,7 +989,7 @@ static void strip(int32_t x, int32_t y, int32_t w, int32_t h, const lane_t *l, u
     /* Every lane uses a 16-step window, including shorter loops. Longer
      * material pages by its selected source, or by local time during silence. */
     int32_t at = ui.st_ok ? timing_position(p) : 0;
-    int32_t focus = l->source_onset ? l->source_onset - 1 : at;
+    int32_t focus = l->source_onset ? (int32_t)(l->source_onset - 1u) : at;
     int32_t page = focus / BL_TICKS_PER_BAR * BL_TICKS_PER_BAR;
     int32_t pitch[BL_MAX_NOTES];
     uint8_t audible[BL_MAX_NOTES];
