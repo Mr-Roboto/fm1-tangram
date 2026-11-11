@@ -56,3 +56,6 @@ void rt_set_ext_port(int mask);          /* bits 1 << PORT_USB, 1 << PORT_TRS */
 /* Device-settings backend only; projects never call this. Mode edits are
  * stopped-only; unchanged mode/port application does not reset the clock. */
 int rt_apply_clock_settings(int ext, int ports);
+/* Output routing is independent of external clock input. Changes are stopped-only
+ * so that the target of every paired Note-Off stays consistent. */
+int rt_apply_output_settings(int output_mask);
