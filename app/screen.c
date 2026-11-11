@@ -331,7 +331,6 @@ typedef struct {
     char val[24], sub[24];
 } cell_t;
 static const char *const FORM_SHORT[] = {"CUSTOM", "CLASSIC", "SLOW", "PLATEAU"};
-static const char *const PORT_SHORT[3] = {"USB", "TRS", "USB + TRS"};
 static const char *const LIGHT_NAME[3] = {"OFF", "ON", "KEYS"};
 
 /* Host vocabulary enumeration supplies a local display-only preview. */
@@ -340,7 +339,11 @@ static device_settings_t screen_clock(void)
 {
     return screen_clock_preview ? *screen_clock_preview : device_settings_get();
 }
-static int port_index(void) { return screen_clock().ext_ports == 1u << PORT_TRS ? 1 : screen_clock().ext_ports == 1u << PORT_USB ? 0 : 2; }
+static int port_index(void)
+{
+    for (int i = 0; i < 7; i++) if (screen_clock().ext_ports == GLO_EXT_PORTS[i]) return i;
+    return 0;
+}
 
 static void cycle_text(f64 bars, char *t)   /* a lane's cycle in bars (0.5-64): whole, or to a tenth */
 {
@@ -554,9 +557,16 @@ static void cell(int view, int i, cell_t *c)
         cat(c->val, screen_clock().sync ? "EXT" : "INT");
         break;
     case KN_PORT:
-        c->hi = 2, c->v = (int16_t)port_index();
-        cat(c->val, PORT_SHORT[c->v]);
+        c->hi = 6, c->v = (int16_t)port_index();
+        cat(c->val, GLO_EXT_NAMES[c->v]);
         break;
+    case KN_MIDI_OUT:
+    case KN_CLOCK_OUT: {
+        uint8_t mask = k == KN_MIDI_OUT ? screen_clock().midi_out : screen_clock().clock_out;
+        c->hi = 2, c->v = (int16_t)(mask - DEVICE_MIDI_USB);
+        cat(c->val, DEVICE_MIDI_NAME[c->v]);
+        break;
+    }
     case KN_LIGHTS:
         c->hi = 2, c->v = screen_clock().lights;
         cat(c->val, LIGHT_NAME[screen_clock().lights % 3u]);
@@ -1687,11 +1697,23 @@ static void draw_setup(void)
 {
     char t[40];
     int32_t x, i;
-    if (ui.page[V_SETUP] == 2) {
+    if (ui.page[V_SETUP] == 3) {
         draw_performance_presets();
         return;
     }
     if (ui.page[V_SETUP] == 1) {
+        device_settings_t settings = screen_clock();
+        int status = device_settings_status();
+        text_box(4, 3, 232, 22, &FONT_B, "GLOBAL MIDI", K_FOCUS, 0);
+        row(4, 31, 92, "CLOCK OUT", DEVICE_MIDI_NAME[settings.clock_out - DEVICE_MIDI_USB], K_TEXT);
+        row(4, 52, 92, "MIDI OUT", DEVICE_MIDI_NAME[settings.midi_out - DEVICE_MIDI_USB], K_TEXT);
+        row(4, 73, 92, "BLE LINK", plat_ble_connected() ? "CONNECTED" : "NOT CONNECTED", K_TEXT2);
+        row(4, 94, 92, "GLOBAL SAVE", status < 0 ? "ERROR" : status ? "PENDING" : "SAVED", K_TEXT2);
+        cv_text(6, 125, &FONT_T, "K1 CLOCK OUT; K2 MIDI OUT", K_DIM);
+        cv_text(6, 139, &FONT_T, "USB / BLE / USB + BLE", K_DIM);
+        return;
+    }
+    if (ui.page[V_SETUP] == 2) {
         int status = device_settings_status();
         text_box(4, 3, 232, 22, &FONT_B, "GLOBAL APPEARANCE", K_FOCUS, 0);
         row(4, 28, 64, "THEME", DEVICE_THEME_NAME[device_settings_get().theme], K_FOCUS);
@@ -1715,11 +1737,11 @@ static void draw_setup(void)
     row(4, 20, 76, "KEY", t, K_TEXT);
     t[0] = 0;
     if (screen_clock().sync)
-        cat(cat(t, "EXT from "), PORT_SHORT[port_index()]);
+        cat(cat(t, "EXT from "), GLO_EXT_NAMES[port_index()]);
     else
-        cat(t, "INT, sent on USB");
+        cat(cat(t, "INT via "), DEVICE_MIDI_NAME[screen_clock().clock_out - DEVICE_MIDI_USB]);
     row(4, 36, 76, "CLOCK", t, K_TEXT);
-    row(4, 52, 76, "MIDI OUT", "USB", K_TEXT);
+    row(4, 52, 76, "MIDI OUT", DEVICE_MIDI_NAME[screen_clock().midi_out - DEVICE_MIDI_USB], K_TEXT);
     row(4, 68, 76, "VERSION", BL_VERSION, K_TEXT2);
     cv_rect(4, 88, 232, 1, K_LINE);
     cv_text(4, 94, &FONT_T, "SEED", K_DIM);
@@ -1783,6 +1805,7 @@ static uint32_t main_sig(void)
     }
     h = hash(hash(h, ui.pre_sig), (uint32_t)proj.arr_has | proj.arr_on << 1 | proj.arr_ambient << 2 |
                                       proj.arr_reprise << 3 | (uint32_t)proj.arr_min << 8 | (uint32_t)proj.arr_max << 20);
+    h = hash(h, (uint32_t)screen_clock().midi_out | (uint32_t)screen_clock().clock_out << 8);
     h = hash(hash(h, screen_clock().sync | screen_clock().ext_ports << 1 | (uint32_t)proj.density_pct << 8 | (uint32_t)proj_seeded() << 16 |
                          (uint32_t)rt_loading() << 17),
              (uint32_t)proj.seed ^ (uint32_t)(proj.seed >> 32));
@@ -2292,7 +2315,7 @@ static void sp_main(void)
         break;
     }
     default:
-        if (ui.page[V_SETUP] == 2) {
+        if (ui.page[V_SETUP] == 3) {
             char name[PERFORMANCE_PRESET_NAME_BYTES + 1];
             performance_name(name);
             sp_cat("Performance slot "); sp_int(ui.perf_slot + 1u);
@@ -2303,6 +2326,13 @@ static void sp_main(void)
             break;
         }
         if (ui.page[V_SETUP] == 1) {
+            sp_cat("Global MIDI. Clock output ");
+            sp_cat(DEVICE_MIDI_NAME[screen_clock().clock_out - DEVICE_MIDI_USB]);
+            sp_cat(". MIDI output ");
+            sp_cat(DEVICE_MIDI_NAME[screen_clock().midi_out - DEVICE_MIDI_USB]);
+            break;
+        }
+        if (ui.page[V_SETUP] == 2) {
             int status = device_settings_status();
             sp_cat("Global theme ");
             sp_cat(DEVICE_THEME_NAME[device_settings_get().theme]);
@@ -2317,6 +2347,10 @@ static void sp_main(void)
             sp_cat(", a new one at the first Play");
         sp_cat(". Clock ");
         sp_cat(screen_clock().sync ? "EXT" : "INT");
+        sp_cat(". External input ");
+        sp_cat(GLO_EXT_NAMES[port_index()]);
+        sp_cat(". MIDI out ");
+        sp_cat(DEVICE_MIDI_NAME[screen_clock().midi_out - DEVICE_MIDI_USB]);
         sp_cat(". Version ");
         sp_cat(BL_VERSION);
         break;
@@ -2512,7 +2546,9 @@ static void speak_dump(void)
     for (x = 0; x < 12; x++) {
         proj.key_root = (uint8_t)x;
         preview_clock.sync = (uint8_t)(x & 1);
-        preview_clock.ext_ports = (uint8_t)(x % 3 == 0 ? 1u << PORT_USB : x % 3 == 1 ? 1u << PORT_TRS : 3u);
+        preview_clock.ext_ports = GLO_EXT_PORTS[x % 7];
+        preview_clock.midi_out = (uint8_t)(DEVICE_MIDI_USB + x % 3);
+        preview_clock.clock_out = (uint8_t)(DEVICE_MIDI_USB + (x + 1) % 3);
         preview_clock.lights = (uint8_t)(x % 3);
         sp_page(0);
         sp_print("KNOB", sp_buf);
