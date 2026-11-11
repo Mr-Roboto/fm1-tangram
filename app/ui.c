@@ -26,7 +26,7 @@
 /* the pages, a button each */
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
 static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "GLO SETUP"};
-static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 1, 4};
+static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 2, 4};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
 /* Page bindings: KN_ edits through the project interfaces; KNS_ remains shown
  * only. Legacy AUTO/FORM/AMBIENT/RATCHET handlers remain for later placement. */
@@ -38,6 +38,8 @@ enum {
     KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_VDENSITY, KN_DECAY,
     KN_COMPOSER, KN_COMP_BARS, KN_COMP_EVOLUTION, KN_COMP_TENSION,
     KN_THEME, KN_DEVICE_RETRY,
+    KN_LFO_TARGET, KN_LFO_CYCLE, KN_LFO_DEPTH, KN_LFO_CENTER,
+    KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_DECAY,
     KN_PERF_SLOT, KN_PERF_OP, KN_PERF_POS, KN_PERF_CHAR,
     KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
     KNS_REPRISE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
@@ -47,7 +49,7 @@ static const uint8_t VIEW_KNOB[NVIEWS][4] = {
     {KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE},
     {KN_RATE, KN_GATE, KN_LOOP, KN_PHASE},
     {KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DIRECTION},
-    {KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE},
+    {KN_LFO_TARGET, KN_LFO_CYCLE, KN_LFO_DEPTH, KN_LFO_CENTER},
     {KN_GROOVE, KN_LOOP, KN_PHASE, KN_DIRECTION},
     {KN_DELAY_ON, KN_DELAY_TIME, KN_FEEDBACK, KN_DECAY},
     {KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS},
@@ -56,7 +58,7 @@ static const char *const KNOB_LABEL[NVIEWS][4] = {
     {"Track", "Generator", "Root", "Scale"},
     {"Rate", "Gate", "Loop length", "Phase"},
     {"Generator", "Root", "Scale", "Direction"},
-    {"Target", "Cycle", "Depth", "Scene"},
+    {"Target", "Cycle", "Depth", "Center"},
     {"Groove", "Loop length", "Phase", "Direction"},
     {"Delay", "Time", "Feedback", "Decay"},
     {"Root", "Sync", "EXT input", "Lights"},
@@ -64,6 +66,8 @@ static const char *const KNOB_LABEL[NVIEWS][4] = {
 static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME};
 static const uint8_t VOICE_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
 static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
+static const uint8_t MIXER_KNOB[4] = {KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_DECAY};
+static const char *const MIXER_LABEL[4] = {"Volume CC7", "Pan CC10", "Cutoff CC74", "Decay CC75"};
 static const uint8_t MIDI_KNOB[4] = {KN_CLOCK_OUT, KN_MIDI_OUT, KN_NONE, KN_NONE};
 static const char *const MIDI_LABEL[4] = {"Clock out", "MIDI out", "Unused", "Unused"};
 static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, KN_NONE};
@@ -164,6 +168,7 @@ static const char *view_name(int v)
            ui.page[v] == 2 && v == V_PERFORM ? "HOME COMPOSE" :
            ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
            ui.page[v] && v == V_VOICE ? "ENV VOICE" :
+           ui.page[v] && v == V_DELAY ? "FX MIXER" :
            VIEW_NAME[v];
 }
 static int heartbeat_selected(void);
@@ -175,6 +180,7 @@ static int view_knob(int v, int i)
            ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
            ui.page[v] && v == V_VOICE ? VOICE_KNOB[i] :
+           ui.page[v] && v == V_DELAY ? MIXER_KNOB[i] :
            VIEW_KNOB[v][i];
     int pitch = ((v == V_PERFORM && !ui.page[v]) || v == V_PATTERN) && (k == KN_VROOT || k == KN_SCALE);
     if ((pitch || (v == V_VOICE && k == KN_REGISTER)) && heartbeat_selected()) {
@@ -196,6 +202,7 @@ static const char *knob_label(int v, int i)
            ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
            ui.page[v] && v == V_VOICE ? VOICE_LABEL[i] :
+           ui.page[v] && v == V_DELAY ? MIXER_LABEL[i] :
            KNOB_LABEL[v][i];
 }
 static bl_project_t ui_p PLAT_POOL;      /* the app project's template: its voices' roles and ids, its scenes */
@@ -860,6 +867,41 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     case KN_PERF_CHAR:
         performance_knob(k, e);
         break;
+    case KN_LFO_TARGET:
+    case KN_LFO_CYCLE:
+    case KN_LFO_DEPTH:
+    case KN_LFO_CENTER: {
+        int voice = key_voice(ui.sel), target, cycle, depth, center;
+        if (proj_lfo_get(voice, &target, &cycle, &depth, &center)) {
+            warn("LFO", "NO VOICE");
+            break;
+        }
+        if (k == KN_LFO_TARGET) target = clamp(target + d, 0, LFO_NDEST - 1);
+        if (k == KN_LFO_CYCLE) cycle = clamp(cycle + d, 0, LFO_NCYCLES - 1);
+        if (k == KN_LFO_DEPTH) depth = clamp(depth + accel(role, e, 100), 0, 100);
+        if (k == KN_LFO_CENTER) center = clamp(center + accel(role, e, 100), 0, 100);
+        if (proj_lfo_set(voice, target, cycle, depth, center))
+            warn("LFO", "NOT AVAILABLE");
+        else show("LFO", rt_playing() ? "NEXT CC WINDOW" : "SET");
+        break;
+    }
+    case KN_MIX_VOLUME:
+    case KN_MIX_PAN:
+    case KN_MIX_CUTOFF:
+    case KN_MIX_DECAY: {
+        int voice = key_voice(ui.sel);
+        int control = k - KN_MIX_VOLUME;
+        int old = proj_mixer_value(voice, control);
+        if (old < 0) {
+            warn("MIXER", "NO VOICE");
+            break;
+        }
+        int value = clamp(old + accel(role, e, 127), 0, 127);
+        if (value != old && proj_mixer_set(voice, control, value))
+            warn("MIXER", "MIDI SEND FAILED");
+        else if (value != old) show("MIXER", "CC SENT");
+        break;
+    }
     case KN_THEME: {
         /* Display order is independent of persistent IDs (MONO=4, FIRE=5). */
         static const uint8_t order[DEVICE_NTHEMES] = {
