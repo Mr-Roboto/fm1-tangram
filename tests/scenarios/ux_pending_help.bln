@@ -8,6 +8,8 @@ expect ux_global_help_cards 7
 
 # A Composer encoder edit has two visual positions during PLAY:
 # the still-active focus marker and the brighter staged target marker.
+# First HOME selects QUICK from GLO; two further taps reach COMPOSE.
+tap HOME
 tap HOME
 tap HOME
 turn K1 1
