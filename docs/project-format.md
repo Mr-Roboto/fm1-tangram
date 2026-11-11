@@ -23,7 +23,7 @@ device settings and output routes are not project fields.
 The appended data is **ten bytes per voice**, repeated in template voice
 order (up to seven slots): LFO override flag, LFO CC target selector, LFO
 cycle selector, LFO depth percent, LFO center percent, mixer active mask,
-then the four CC values (Volume CC7, Pan CC10, Cutoff CC74, Decay CC75).
+then the four CC values (Volume CC7, Pan CC10, Cutoff CC74, Resonance CC71).
 Each is a u8. The LFO cycle index maps to 0.5/1/2/4/8/16/32/64 bars.
 The mixer mask makes an untouched controller *unset*; displaying a
 default value must not send a MIDI message until it is touched or an
@@ -45,7 +45,12 @@ The bank remains a separate CRC-protected persistent flash object with
 | Bank version | Embedded project | Entry (occupied+name+record) | Entire bank |
 | --- | --- | --- | --- |
 | TGPB 1 | Project format 8, 312 B | 325 B | 3258 B |
-| TGPB 2 | Project format 9, 382 B | 374 B | 3748 B |
+| TGPB 2 | Project format 9 compressed losslessly to 361 B | 374 B | 3748 B |
+
+The v2 bank bit-packs each voice's 10-byte LFO/mixer extension into 7 bytes
+without losing its 0–127 values or four-bit active mask. The bank holds
+the same 312-byte project prefix plus 49 encoded bytes for seven voices.
+Full project saves continue to use the uncompressed 382-byte format.
 
 Both bank sizes include the 8-byte header. The format-2 bank fits the
 platform's 3840-byte per-object storage allocation (subject to verified
