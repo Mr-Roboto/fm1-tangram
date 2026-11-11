@@ -1,17 +1,18 @@
 # FM-1 pages and K1–K4
 
-**BLE routing extension (11 November 2026):** the host and device builds
-succeeded and the standalone device-settings test passed. On actual FM-1
-hardware, all four GLO menus, routing display, BLE connection status and
-MIDI note output into Korg iM1 on iPad were confirmed. Independent MIDI-clock
-transmission, external BLE clock reception, long-run stability and persistence
-after a power cycle remain unverified on hardware.
+**BLE routing extension (11 November 2026):** the host/device builds,
+focused device-settings regression and combined simulator smoke gate passed.
+On the FM-1/iPad, the user confirmed all six practical BLE hardware checks:
+connection, MIDI note output into Korg iM1, persistence across reboot,
+MIDI Clock output and input over BLE, simultaneous USB+BLE routing and
+reconnection. Long-duration stability and quantitative clock-jitter/latency
+measurements were not part of these checks.
 
 | Section/page | K1 | K2 | K3 | K4 |
 | --- | --- | --- | --- | --- |
 | HOME QUICK | Track | Generator | Root | Scale |
 | HOME PLAY | Direction | Groove | Delay ON/OFF | Delay time |
-| HOME COMPOSE | Composer ON/OFF | Form (stopped) | Phrase bars | Evolution |
+| HOME COMPOSE | Composer ON/OFF | Form (stopped: immediate; PLAY: next section) | Phrase bars | Evolution |
 | ENV TIMING | Rate | Gate | Loop length | Pitch phase |
 | ENV ROUTING | MIDI channel | Register | Voice density | Composer tension |
 | ARP HARMONY | Generator | Root | Scale | Direction |
