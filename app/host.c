@@ -817,6 +817,33 @@ static int proj_expect(const char *what, int *got)
     else if (!strcmp(what, "ux_env_voice_unchanged"))
         *got = VOICE_KNOB[0] == KN_CHANNEL && VOICE_KNOB[1] == KN_REGISTER &&
                VOICE_KNOB[2] == KN_VDENSITY && VOICE_KNOB[3] == KN_COMP_TENSION;
+    else if (!strcmp(what, "ux_fx_pages"))
+        *got = VIEW_PAGES[V_DELAY];
+    else if (!strcmp(what, "ux_fx_is_mixer"))
+        *got = ui.view == V_DELAY && !strcmp(view_name(V_DELAY), "FX MIXER");
+    else if (!strcmp(what, "ux_lfo_target") ||
+             !strcmp(what, "ux_lfo_cycle") ||
+             !strcmp(what, "ux_lfo_depth") ||
+             !strcmp(what, "ux_lfo_center")) {
+        int target, cycle, depth, center;
+        if (proj_lfo_get(key_voice(ui.sel), &target, &cycle, &depth, &center)) return 0;
+        *got = !strcmp(what, "ux_lfo_target") ? target :
+               !strcmp(what, "ux_lfo_cycle") ? cycle :
+               !strcmp(what, "ux_lfo_depth") ? depth : center;
+    }
+    else if (!strcmp(what, "ux_mixer_volume") ||
+             !strcmp(what, "ux_mixer_pan") ||
+             !strcmp(what, "ux_mixer_cutoff") ||
+             !strcmp(what, "ux_mixer_decay")) {
+        int control = !strcmp(what, "ux_mixer_volume") ? MIDI_MIX_VOLUME :
+                      !strcmp(what, "ux_mixer_pan") ? MIDI_MIX_PAN :
+                      !strcmp(what, "ux_mixer_cutoff") ? MIDI_MIX_CUTOFF : MIDI_MIX_DECAY;
+        *got = proj_mixer_value(key_voice(ui.sel), control);
+    }
+    else if (!strcmp(what, "ux_project_record_bytes"))
+        *got = PROJECT_RECORD_BYTES;
+    else if (!strcmp(what, "ux_bank_bytes"))
+        *got = PERFORMANCE_BANK_BYTES;
     else if (!strcmp(what, "ux_pending_cells")) {
         *got = 0;
         for (int i = 0; i < 4; i++) {
