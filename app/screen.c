@@ -330,6 +330,21 @@ typedef struct {
     int16_t lo, hi, v, active_v; /* v: selected target; active_v: sounding value */
     char val[24], sub[24];
 } cell_t;
+/* A 7-bit PAN CC has 128 steps, while an exactly symmetric -64..+64
+ * presentation has 129 integer labels. Keep the wire value untouched and
+ * round the positive half to show both requested endpoints. The single
+ * missing intermediate display integer is unavoidable. */
+static void midi_pan_text(int raw, char out[24])
+{
+    out[0] = 0;
+    if (raw < 64) {
+        cat(out, "-"); cat_u(out, (uint32_t)(64 - raw));
+    } else if (raw > 64) {
+        cat(out, "+"); cat_u(out, (uint32_t)((raw - 64) * 64 + 31) / 63);
+    } else {
+        cat(out, "0");
+    }
+}
 static const char *const FORM_SHORT[] = {"CUSTOM", "CLASSIC", "SLOW", "PLATEAU"};
 static const char *const LIGHT_NAME[3] = {"OFF", "ON", "KEYS"};
 
@@ -496,7 +511,7 @@ static void cell(int view, int i, cell_t *c)
     case KN_LFO_DEPTH:
     case KN_LFO_CENTER: {
         static const char *const names[LFO_NDEST] =
-            {"NONE", "MOD", "EXP", "PAN", "RES", "FILTER", "DECAY"};
+            {"NONE", "MOD", "EXP", "PAN", "FILTER", "RES", "DECAY"};
         static const char *const cycles[LFO_NCYCLES] =
             {"0.5", "1", "2", "4", "8", "16", "32", "64"};
         int target, cycle, depth, center;
@@ -507,12 +522,13 @@ static void cell(int view, int i, cell_t *c)
             break;
         }
         if (k == KN_LFO_TARGET) {
-            c->hi = LFO_NDEST - 1, c->v = target;
-            cat(c->val, names[target]);
+            int visible = lfo_target_index(target);
+            c->hi = LFO_NDEST - 1, c->v = visible;
+            cat(c->val, names[visible]);
             if (target != LFO_DEST_OFF) {
-                static const uint8_t numbers[LFO_NDEST] = {0, 1, 11, 10, 71, 74, 75};
+                static const uint8_t numbers[LFO_NDEST] = {0, 1, 11, 10, 74, 71, 75};
                 cat(c->sub, "CC ");
-                cat_u(c->sub, numbers[target]);
+                cat_u(c->sub, numbers[visible]);
             }
         } else if (k == KN_LFO_CYCLE) {
             c->hi = LFO_NCYCLES - 1, c->v = cycle;
@@ -539,7 +555,8 @@ static void cell(int view, int i, cell_t *c)
             break;
         }
         c->v = value;
-        cat_u(c->val, value);
+        if (control == MIDI_MIX_PAN) midi_pan_text(value, c->val);
+        else cat_u(c->val, value);
         static const uint8_t numbers[MIDI_MIX_N] = {7, 10, 74, 71};
         cat(c->sub, "CC ");
         cat_u(c->sub, numbers[control]);
@@ -1018,6 +1035,41 @@ static void knob_ring(int32_t cx, int32_t cy, int32_t r, int32_t v, uint16_t tra
         disc16(c16x + icos(ev) * rm / 1024, c16y + isin(ev) * rm / 1024, 48, bg);
         disc16(c16x + icos(ev) * rm / 1024, c16y + isin(ev) * rm / 1024, 37, fill);
     }
+}
+
+/* Bipolar MIDI pan: the track fills FROM center (CC64) toward either
+ * side, rather than from the minimum. The thumb remains on the same 270
+ * degree arc, and CC64 is centered visually at 12 o'clock. */
+static void knob_ring_bipolar(int32_t cx, int32_t cy, int32_t r, int32_t v,
+                             uint16_t track, uint16_t fill, uint16_t bg)
+{
+    int32_t ro = r * 16, ri = ro - 54, rm = ro - 27;
+    int32_t c16x = cx * 16 + 8, c16y = cy * 16 + 8;
+    int32_t lim = (v < 0 ? 0 : v > 1024 ? 1024 : v) * RING_SWEEP / 1024;
+    const int32_t mid = (64 * RING_SWEEP) / 127;
+    int32_t low = lim < mid ? lim : mid, high = lim > mid ? lim : mid;
+    for (int32_t y = -r - 1; y <= r + 1; y++)
+        for (int32_t x = -r - 1; x <= r + 1; x++) {
+            int32_t d = (int32_t)isqrt((uint32_t)(x*x + y*y) * 256u), a, b, t;
+            a = ro + 8 - d;
+            b = d - ri + 8;
+            a = (a < 0 ? 0 : a > 16 ? 16 : a) *
+                (b < 0 ? 0 : b > 16 ? 16 : b) / 16;
+            if (a <= 0) continue;
+            t = (iangle(y, x) - RING_A0) & 4095;
+            if (t > RING_SWEEP) continue;
+            px_blend(cx + x, cy + y, lim != mid && t >= low && t <= high ?
+                     fill : track, (uint32_t)a);
+        }
+    int32_t ev = RING_A0 + lim, center = RING_A0 + mid;
+    disc16(c16x + icos(RING_A0) * rm / 1024,
+           c16y + isin(RING_A0) * rm / 1024, 27, track);
+    disc16(c16x + icos(RING_A0 + RING_SWEEP) * rm / 1024,
+           c16y + isin(RING_A0 + RING_SWEEP) * rm / 1024, 27, track);
+    disc16(c16x + icos(center) * rm / 1024,
+           c16y + isin(center) * rm / 1024, 27, track);
+    disc16(c16x + icos(ev) * rm / 1024, c16y + isin(ev) * rm / 1024, 48, bg);
+    disc16(c16x + icos(ev) * rm / 1024, c16y + isin(ev) * rm / 1024, 37, fill);
 }
 
 /* Draw the upcoming value as a short, narrow radial line directly on
@@ -2093,7 +2145,10 @@ static void draw_parameter_cell(int i, const cell_t *c, int hot)
     } else {
         int active = c->queued ? c->active_v : c->v;
         int fraction = c->hi > c->lo ? (clamp(active, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo) : 0;
-        knob_ring(cx, 35, 8, fraction, K_LINE, K_FOCUS, bg);
+        if (k == KN_MIX_PAN)
+            knob_ring_bipolar(cx, 35, 8, fraction, K_LINE, K_FOCUS, bg);
+        else
+            knob_ring(cx, 35, 8, fraction, K_LINE, K_FOCUS, bg);
         if (c->queued && c->hi > c->lo) {
             int target = (clamp(c->v, c->lo, c->hi) - c->lo) * 1024 / (c->hi - c->lo);
             int angle = RING_A0 + target * RING_SWEEP / 1024;
@@ -2184,7 +2239,10 @@ static void draw_knobs(void)
             int active = c[i].queued ? c[i].active_v : c[i].v;
             int fraction = c[i].hi > c[i].lo ?
                 (clamp(active, c[i].lo, c[i].hi) - c[i].lo) * 1024 / (c[i].hi - c[i].lo) : 0;
-            knob_ring(cx, 37, 12, fraction, K_LINE, K_FOCUS, bg);
+            if (k == KN_MIX_PAN)
+                knob_ring_bipolar(cx, 37, 12, fraction, K_LINE, K_FOCUS, bg);
+            else
+                knob_ring(cx, 37, 12, fraction, K_LINE, K_FOCUS, bg);
             if (c[i].queued && c[i].hi > c[i].lo) {
                 int target = (clamp(c[i].v, c[i].lo, c[i].hi) - c[i].lo) * 1024 / (c[i].hi - c[i].lo);
                 int angle = RING_A0 + target * RING_SWEEP / 1024;
