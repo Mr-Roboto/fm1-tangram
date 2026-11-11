@@ -86,11 +86,13 @@ To run the **focused Tangram BLE simulator smoke gate** (added 11 November
 sh tests/run_tangram_smoke.sh
 ```
 
-It runs the standalone device-settings regression, builds the host simulator,
-then executes `ble_global.bln` (GLO page, persisted outputs) and
-`ble_routing.bln` (simulated USB/BLE note/clock output and external BLE
-Start/Stop). It exits nonzero on a failing check, prints the scenario log,
-and leaves the logs at `app/build/scenarios/{ble_global,ble_routing}/run.log`.
+It runs the standalone device-settings regression and the dedicated
+Composer live-form engine regression (`tests/host/run_composer_form.sh`),
+builds the host simulator, and executes `ble_global.bln` (GLO page and
+persistence), `ble_routing.bln` (simulated USB/BLE note/clock routing) and
+`composer_form_live.bln` (HOME COMPOSE K2, deferred form adoption at the
+next section and cancellation). It exits nonzero on a failing check, prints
+scenario logs and leaves them under `app/build/scenarios/<scenario>/run.log`.
 The Global scenario also writes two PNG previews. **Do not confuse a
 simulator pass with a measured physical BLE clock test.**
 
