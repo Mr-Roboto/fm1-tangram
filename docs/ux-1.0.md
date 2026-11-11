@@ -32,7 +32,23 @@
 4. Label an enabled Composer's implicit Classic Arc form as `CLASSIC`, not `NONE` or `DEFAULT`. No arranger setting is silently written; this displays the actual fallback musical form.
 5. On HOME COMPOSE, split `CYCLE` and `NEXT` into distinct columns while preserving the existing font sizes, section strip, counters and musical HOME overview.
 
-**Not yet accepted:** this UX branch must pass the host smoke gate, simulator screenshots and hardware readability review before flashing. Frozen functional branch remains unchanged.
+**UX phase 1 checkpoint — accepted for layout/design (11 November 2026):**
+The user ran the full `sh tests/run_tangram_ux.sh` host smoke gate,
+which passed, and reviewed the generated `composer_queued.png`,
+`composer_applied.png`, `bars_queued.png` and `bars_applied.png` views.
+The dual active-versus-queued positions on both pips and circular knobs
+were accepted, as were the CLASSIC fallback label and separate
+CYCLE/NEXT layout; the existing font sizes are retained. Help-card counts
+are clarified. This completes the **UX phase 1 design/simulator checkpoint**,
+not the full hardware UX acceptance or a release. No subsequent
+layout/encoder reorganization is permitted on this phase-1 branch.
+
+**Functional code freeze:** the original BLE/Composer acceptance branch
+is unchanged. **UX phase 2** (reallocating duplicate knob assignments)
+must proceed on a separate child branch, only after the accepted
+phase-1 checkpoint is committed. The UX pilot has not been reflashed
+and visually validated on the actual FM-1; this is intentionally
+tracked as an outstanding integration step rather than called done.
 
 ## Layout duplication audit — next coherent revision
 
