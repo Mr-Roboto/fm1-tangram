@@ -1,0 +1,68 @@
+# Tangram 1.0 MIDI controls: host-only focused LFO and FX MIXER.
+# Check editable CC lane on demo voice 0, initial value mapping and persistence.
+expect ux_project_record_bytes 382
+expect ux_bank_bytes 3958
+expect ux_fx_pages 2
+expect ux_lfo_target 5
+expect ux_lfo_cycle 5
+expect ux_lfo_depth 30
+expect ux_lfo_center 60
+
+tap LFO
+turn K1 1
+expect ux_lfo_target 6
+turn K2 -1
+expect ux_lfo_cycle 4
+turn K3 1
+expect ux_lfo_depth 31
+turn K4 1
+expect ux_lfo_center 61
+shot lfo_edit.png
+
+# FX has two subpages: DELAY, then MIXER. CCs go out while stopped.
+tap FX
+expect ux_fx_is_mixer 0
+tap FX
+expect ux_fx_is_mixer 1
+expect ux_mixer_volume 100
+expect ux_mixer_pan 64
+expect ux_mixer_cutoff 64
+expect ux_mixer_decay 64
+out
+turn K1 1
+expect ux_mixer_volume 101
+expect_out USB B0 07 65
+turn K2 1
+expect ux_mixer_pan 65
+expect_out USB B0 0A 41
+turn K3 1
+expect ux_mixer_cutoff 65
+expect_out USB B0 4A 41
+turn K4 1
+expect ux_mixer_decay 65
+expect_out USB B0 4B 41
+shot mixer_edit.png
+
+# Musical project/save roundtrip must include the new 70-byte extension.
+tap SAVE
+reboot
+expect ux_lfo_target 6
+expect ux_lfo_cycle 4
+expect ux_lfo_depth 31
+expect ux_lfo_center 61
+expect ux_mixer_volume 101
+expect ux_mixer_pan 65
+expect ux_mixer_cutoff 65
+expect ux_mixer_decay 65
+
+# PLAY must initialize edited CCs before generating normal notes.
+out
+tap PLAY
+wait 300
+expect playing 1
+expect_out USB B0 07 65
+expect_out USB B0 0A 41
+expect_out USB B0 4A 41
+expect_out USB B0 4B 41
+tap PLAY
+expect playing 0
