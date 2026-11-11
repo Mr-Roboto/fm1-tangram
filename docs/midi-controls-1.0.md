@@ -13,8 +13,7 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
   LFO parameter. Use K1 target, K2 cycle, K3 depth and K4 center.
 - Put a second page behind FX MIDI DELAY:
   **FX MIXER**: K1 CC7 Volume, K2 CC10 Pan, K3 CC74 Brightness
-  (commonly filter cutoff), K4 CC71 Resonance (not guaranteed
-  specifically resonance). Select the voice using SELECT.
+  (commonly filter cutoff), K4 CC71 Resonance. Actual synth response to CC71 depends on its MIDI implementation. Select the voice using SELECT.
 - MIDI CCs are channel-scoped. Several Tangram voices mapped to a
   shared MIDI channel cannot have independent CC volumes/filters.
   A downstream synth may ignore or remap any optional sound CC.
@@ -40,7 +39,7 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 - The existing project record is 312 bytes (format 8); the ten-slot
   `TGPB` bank format 1 embeds ten such records. Any persisted new
   fields require both backward-compatible record decoding **and**
-  migration of stored banks without data loss. Respect the 4 KiB
+  migration of stored banks without data loss. Respect the 3840-byte
   flash-object limit and keep old banks readable.
 - A live controller change must not restart the music engine, force a
   project takeover or end held notes. Route through the existing
@@ -51,7 +50,7 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 
 ## Implementation checkpoint (not yet tested)
 
-The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3748-byte ten-slot bank v2, backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
+The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3748-byte losslessly packed ten-slot bank v2 (49-byte extension per preset), backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
 
 **NOT YET VERIFIED:** compilation, host test, actual device output, scene interactions, bank migration and hardware RAM/image limits. In particular, previously rendered CC events can remain queued briefly after an LFO target change. Do not flash this branch without the tests and review below.
 
