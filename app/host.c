@@ -1144,6 +1144,15 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
             dump_bad++;
         }
     }
+    else if (!strcmp(cmd, "perfstore")) {
+        if (performance_preset_store(atoi(a), "GLASSFACE", 9))
+            printf("FAIL perfstore %s: unable to store working project\n", a);
+        else printf("  ok perfstore slot %s as GLASSFACE\n", a);
+    } else if (!strcmp(cmd, "perfload")) {
+        if (performance_preset_load(atoi(a)))
+            printf("FAIL perfload %s: unable to load working project\n", a);
+        else printf("  ok perfload slot %s\n", a);
+    }
     else if (!strcmp(cmd, "legacybank")) {
         /* Host-only fixture: genuine v1 bank bytes and format-8 project
          * without CC mixer/LFO extension. No device firmware path can run it. */
