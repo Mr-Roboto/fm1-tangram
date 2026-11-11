@@ -1,0 +1,50 @@
+# Simulated, routed USB/BLE MIDI transport and external BLE Clock smoke test.
+# Runs on the host simulator, not a physical FM-1 or radio.
+# A connected BLE MIDI listener is simulated after the boot's 1000 ms init.
+wait 1200
+expect ble 2
+ble connect
+
+# Notes/CC only on BLE; internal Start/Clock only on USB.
+rt midiout BLE
+rt clockout USB
+expect midi_out 2
+expect clock_out 1
+out
+tap PLAY
+wait 1600
+expect playing 1
+expect midi_sent_ble >0
+expect midi_sent_usb 0
+expect_out USB FA 00 00
+expect_out USB F8 00 00
+tap PLAY
+wait 200
+expect playing 0
+
+# Reverse the routes. Realtime Start/Clock now travels over BLE.
+rt midiout USB
+rt clockout BLE
+expect midi_out 1
+expect clock_out 2
+out
+tap PLAY
+wait 1600
+expect playing 1
+expect midi_sent_usb >0
+expect_out BLE FA 00 00
+expect_out BLE F8 00 00
+tap PLAY
+wait 200
+expect playing 0
+
+# The FM-1 can follow the BLE input port independently of its output.
+rt sync ext
+rt port BLE
+expect sync 1
+expect ext_ports 2
+midi BLE FA
+expect playing 1
+midi BLE F8
+midi BLE FC
+expect playing 0
