@@ -1,14 +1,20 @@
 # Global themes and on-device help
 
-Implemented by source inspection only. No build, tests, device preview, timing
-measurements or hardware verification were performed.
+The themes/help notes originated before the BLE routing extension. On
+11 November 2026, Tangram's four GLO pages and wireless BLE-MIDI output to
+Korg iM1 on iPad were confirmed on FM-1 hardware. The BLE clock paths and
+long-term runtime behavior have not been hardware-verified.
 
 ## Appearance
 
-Tap GLO again when already on GLO to cycle SETUP / APPEARANCE. Existing SETUP
-controls remain global Root, Sync, External input and Lights. APPEARANCE K1
-selects a theme without wrapping; K2 retries a failed global settings save.
-K3/K4 are unused. No SHIFT combination or new physical page was introduced.
+Tap GLO again when already on GLO to cycle
+**SETUP → MIDI → APPEARANCE → PERFORMANCE**. SETUP keeps global Root, Sync,
+external input (USB/TRS/BLE and combinations), and Lights.
+MIDI adds independently selectable Clock Out and MIDI Out routes
+(USB, BLE, USB+BLE). APPEARANCE K1 selects a theme without wrapping;
+K2 retries a failed global settings save, while K3/K4 remain unused.
+PERFORMANCE contains the named performance preset controls.
+No additional physical buttons were introduced.
 
 | Theme | Palette |
 | --- | --- |
@@ -87,7 +93,7 @@ screen at a time, with smaller fonts used only where required to fit.
 | LFO | Read-only lane/status controls; available template scenes via black keys; eight-bar CC morphs |
 | SEQ | Groove, loop, pitch phase, direction; independent loops and ARP/MOTIF restrictions |
 | FX | Per-voice MIDI delay on/time/feedback/velocity decay; original-note application and retained echo settings |
-| GLO | Current SETUP/APPEARANCE controls; global theme autosave/retry; clock source/input, stopped-only Sync; project-owned Root/Lights |
+| GLO | SETUP / MIDI / APPEARANCE / PERFORMANCE; global theme, lights and MIDI routes autosave when safe, stopped-only Sync and output-route edits; Root belongs to the musical project |
 | EDIT | Unlocked-voice re-roll and held-voice regeneration at local boundaries |
 | REC | B part at next bar; held-voice blank cycle |
 | SEL | ENV selected-voice lock and held-voice lock; automatic versus manual edits |
