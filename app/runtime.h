@@ -39,6 +39,10 @@ int rt_action(const bl_action_t *a);     /* Transport.enqueue: 0, or -1 when the
 int rt_get_voice_config(int vid, bl_vconfig_t *active, bl_vconfig_t *target);
 int rt_has_voice_state(void);            /* materialized engine, rather than a freshly loaded project preview */
 int rt_set_voice_config(int vid, const bl_vconfig_t *target);
+/* CC lane-only edits (voice by project index), no note/generator reset. */
+int rt_set_lfo(int voice, const bl_vcfg_t *settings);
+/* Immediate, channel-scoped MIDI CC through the normal notes/CC output route. */
+int rt_send_channel_cc(int channel, uint8_t controller, uint8_t value);
 int rt_set_voice_config_field(int vid, int field, int32_t value);
 int rt_set_composer(const bl_compcfg_t *cfg);
 /* Stages a Composer form for the next section boundary during playback. */
