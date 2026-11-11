@@ -26,12 +26,13 @@
 /* the pages, a button each */
 enum { V_PERFORM, V_VOICE, V_PATTERN, V_CC, V_ARRANGER, V_DELAY, V_SETUP, NVIEWS };
 static const char *const VIEW_NAME[NVIEWS] = {"HOME QUICK", "ENV TIMING", "ARP HARMONY", "CC", "SEQ MOTION", "FX MIDI DELAY", "GLO SETUP"};
-static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 1, 3};
+static const uint8_t VIEW_PAGES[NVIEWS] = {3, 2, 1, 1, 1, 1, 4};
 static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_ENV, B_ARP, B_LFO, B_SEQ, B_FX, B_GLO};
 /* Page bindings: KN_ edits through the project interfaces; KNS_ remains shown
  * only. Legacy AUTO/FORM/AMBIENT/RATCHET handlers remain for later placement. */
 enum {
     KN_NONE, KN_TEMPO, KN_AUTO, KN_FORM, KN_AMBIENT, KN_CHANNEL, KN_ROOT, KN_SYNC, KN_PORT, KN_LIGHTS, KN_RATCHET,
+    KN_MIDI_OUT, KN_CLOCK_OUT,
     KN_TRACK, KN_GENERATOR, KN_VROOT, KN_SCALE, KN_DRUM_PARTS, KN_DRUM_GROOVE,
     KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME,
     KN_RATE, KN_GATE, KN_LOOP, KN_PHASE, KN_REGISTER, KN_FEEDBACK, KN_VDENSITY, KN_DECAY,
@@ -63,6 +64,8 @@ static const char *const KNOB_LABEL[NVIEWS][4] = {
 static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME};
 static const uint8_t ROUTING_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
 static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
+static const uint8_t MIDI_KNOB[4] = {KN_CLOCK_OUT, KN_MIDI_OUT, KN_NONE, KN_NONE};
+static const char *const MIDI_LABEL[4] = {"Clock out", "MIDI out", "Unused", "Unused"};
 static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, KN_NONE};
 static const uint8_t PERFORMANCE_KNOB[4] = {KN_PERF_SLOT, KN_PERF_OP, KN_PERF_POS, KN_PERF_CHAR};
 static const char *const PERFORMANCE_LABEL[4] = {"Slot", "Operation", "Position", "Character"};
@@ -70,6 +73,14 @@ static const char *const PLAY_LABEL[4] = {"Direction", "Groove", "Delay", "Delay
 static const char *const ROUTING_LABEL[4] = {"MIDI channel", "Register", "Voice density", "Comp tension"};
 static const char *const COMPOSER_LABEL[4] = {"Composer", "Form", "Phrase bars", "Evolution"};
 static const char *const APPEARANCE_LABEL[4] = {"Theme", "Save status", "Unused", "Unused"};
+static const uint8_t GLO_EXT_PORTS[7] = {
+    DEVICE_CLOCK_USB, DEVICE_CLOCK_TRS, DEVICE_CLOCK_BLE,
+    DEVICE_CLOCK_BOTH, DEVICE_CLOCK_USB | DEVICE_CLOCK_BLE,
+    DEVICE_CLOCK_TRS | DEVICE_CLOCK_BLE, DEVICE_CLOCK_ALL
+};
+static const char *const GLO_EXT_NAMES[7] = {
+    "USB", "TRS", "BLE", "USB + TRS", "USB + BLE", "TRS + BLE", "ALL"
+};
 static const char *const DIR_LABEL[BL_NDIRS] = {"UP", "DOWN", "M-DWN", "PEND", "M-PEND"};
 static const char *const GROOVE_LABEL[BL_NGROOVES] = {"STRAIGHT", "PULSE 8", "DRIVE 16", "BROKEN 8"};
 static const char *const TIME_LABEL[7] = {"1/16", "1/8", "1/8D", "1/4", "5/16", "1/4D", "7/16"};
@@ -147,20 +158,24 @@ static struct {
 
 static const char *view_name(int v)
 {
-    return ui.page[v] == 2 && v == V_SETUP ? "GLO PERFORMANCE" :
+    return ui.page[v] == 3 && v == V_SETUP ? "GLO PERFORMANCE" :
+           ui.page[v] == 2 && v == V_SETUP ? "GLO APPEARANCE" :
+           ui.page[v] == 1 && v == V_SETUP ? "GLO MIDI" :
            ui.page[v] == 2 && v == V_PERFORM ? "HOME COMPOSE" :
            ui.page[v] && v == V_PERFORM ? "HOME PLAY" :
            ui.page[v] && v == V_VOICE ? "ENV ROUTING" :
-           ui.page[v] && v == V_SETUP ? "GLO APPEARANCE" : VIEW_NAME[v];
+           VIEW_NAME[v];
 }
 static int heartbeat_selected(void);
 static int view_knob(int v, int i)
 {
-    int k = ui.page[v] == 2 && v == V_SETUP ? PERFORMANCE_KNOB[i] :
+    int k = ui.page[v] == 3 && v == V_SETUP ? PERFORMANCE_KNOB[i] :
+           ui.page[v] == 2 && v == V_SETUP ? APPEARANCE_KNOB[i] :
+           ui.page[v] == 1 && v == V_SETUP ? MIDI_KNOB[i] :
            ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_KNOB[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_KNOB[i] :
            ui.page[v] && v == V_VOICE ? ROUTING_KNOB[i] :
-           ui.page[v] && v == V_SETUP ? APPEARANCE_KNOB[i] : VIEW_KNOB[v][i];
+           VIEW_KNOB[v][i];
     int pitch = ((v == V_PERFORM && !ui.page[v]) || v == V_PATTERN) && (k == KN_VROOT || k == KN_SCALE);
     if ((pitch || (v == V_VOICE && k == KN_REGISTER)) && heartbeat_selected()) {
         if (v == V_PERFORM && k == KN_VROOT) return KN_DRUM_PARTS;
@@ -175,11 +190,13 @@ static const char *knob_label(int v, int i)
     if (k == KN_NONE) return "Unused";
     if (k == KN_DRUM_PARTS) return "Parts";
     if (k == KN_DRUM_GROOVE) return "Groove";
-    return ui.page[v] == 2 && v == V_SETUP ? PERFORMANCE_LABEL[i] :
+    return ui.page[v] == 3 && v == V_SETUP ? PERFORMANCE_LABEL[i] :
+           ui.page[v] == 2 && v == V_SETUP ? APPEARANCE_LABEL[i] :
+           ui.page[v] == 1 && v == V_SETUP ? MIDI_LABEL[i] :
            ui.page[v] == 2 && v == V_PERFORM ? COMPOSER_LABEL[i] :
            ui.page[v] && v == V_PERFORM ? PLAY_LABEL[i] :
            ui.page[v] && v == V_VOICE ? ROUTING_LABEL[i] :
-           ui.page[v] && v == V_SETUP ? APPEARANCE_LABEL[i] : KNOB_LABEL[v][i];
+           KNOB_LABEL[v][i];
 }
 static bl_project_t ui_p PLAT_POOL;      /* the app project's template: its voices' roles and ids, its scenes */
 static bl_status_t ui_st PLAT_POOL;      /* the mirror (UIState.refresh): the running engine's snapshot */
@@ -534,7 +551,7 @@ static int held_voice(void)              /* the voice key held (the lowest), -1 
 }
 
 /* ----------------------------------------------------------- the values --- */
-static int performance_page(void) { return ui.view == V_SETUP && ui.page[V_SETUP] == 2; }
+static int performance_page(void) { return ui.view == V_SETUP && ui.page[V_SETUP] == 3; }
 static void performance_cancel(void)
 {
     ui.perf_phase = PERF_BROWSE;
@@ -832,8 +849,6 @@ static void performance_knob(int k, int32_t e)
 static void knob(int role, int k, int32_t e)   /* a page's knob: the values the Mac can change (shown in the
                                                 * header; a reader hears the strip's value as it settles) */
 {
-    static const uint8_t PORTS[3] = {1u << PORT_USB, 1u << PORT_TRS, 1u << PORT_USB | 1u << PORT_TRS};
-    static const char *const PORT_NAME[3] = {"USB", "TRS", "USB + TRS"};
     static const char *const LIGHTS[3] = {"OFF", "ON", "KEYS"};
     int d = e > 0 ? 1 : -1, v, i;
     char t[8];
@@ -938,14 +953,21 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     }
     case KN_PORT: {
         device_settings_t settings = device_settings_get();
-        for (i = 0; i < 2 && PORTS[i] != settings.ext_ports; i++)
-            ;
-        i = clamp(i + d, 0, 2);
-        settings.ext_ports = PORTS[i];
-        if (device_settings_set(settings))
-            warn("EXT INPUT", "REFUSED");
-        else
-            show("EXT INPUT", PORT_NAME[i]);
+        for (i = 0; i < 7 && GLO_EXT_PORTS[i] != settings.ext_ports; i++);
+        i = clamp(i + d, 0, 6);
+        settings.ext_ports = GLO_EXT_PORTS[i];
+        if (device_settings_set(settings)) warn("EXT INPUT", "REFUSED");
+        else show("EXT INPUT", GLO_EXT_NAMES[i]);
+        break;
+    }
+    case KN_MIDI_OUT:
+    case KN_CLOCK_OUT: {
+        device_settings_t settings = device_settings_get();
+        uint8_t *destination = k == KN_MIDI_OUT ? &settings.midi_out : &settings.clock_out;
+        int index = clamp((int)*destination - DEVICE_MIDI_USB + d, 0, 2);
+        *destination = (uint8_t)(index + DEVICE_MIDI_USB);
+        if (device_settings_set(settings)) warn(k == KN_MIDI_OUT ? "MIDI OUT" : "CLOCK OUT", "STOP FIRST");
+        else show(k == KN_MIDI_OUT ? "MIDI OUT" : "CLOCK OUT", DEVICE_MIDI_NAME[index]);
         break;
     }
     case KN_LIGHTS: {
