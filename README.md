@@ -124,7 +124,7 @@ Tangram currently distinguishes between:
 
 ### Named Performance Presets
 
-The pre-1.0 MIDI-controls development branch uses a new 382-byte project record (format 9), including persisted per-voice LFO and mixer CC settings. It reads prior format-8 projects and migrates ten-slot performance banks from 3258-byte v1 records into a 3958-byte v2 bank **in RAM**. The old flash bank is not rewritten at boot; an explicit SAVE/RENAME writes the new bank format. This extension is not yet a tested firmware release.
+The pre-1.0 MIDI-controls development branch uses a new 382-byte project record (format 9), including persisted per-voice LFO and mixer CC settings. It reads prior format-8 projects and supports optional migration of ten-slot banks from 3258-byte v1 records into a losslessly packed 3748-byte v2 bank **in RAM**. The old flash bank is not rewritten at boot; an explicit SAVE/RENAME writes the new bank format. This extension is not yet a tested firmware release.
 
 A dedicated bank of **10 named Performance Presets** stores complete *starting configurations* — including the selected Composer starting section — independently of the three built-in templates and the six snapshot slots. The bank is implemented on the Tangram development branches; presets are managed on **GLO PERFORMANCE**.
 
