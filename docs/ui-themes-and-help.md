@@ -91,7 +91,7 @@ screen at a time, with smaller fonts used only where required to fit.
 | Hold | Guidance |
 | --- | --- |
 | HOME | Current QUICK/PLAY/COMPOSE knobs; SELECT, HOME+SELECT tempo, ALGORITHM, PRESETS; MASTER/voice/Composer density; voice taps/holds; harmony, scene, Advance and Tension keys; transport, slots; stage pending/start and ownership |
-| ENV | Current TIMING/ROUTING knobs; MIDI channel/register/density/tension; rate, gate, loop, pitch phase; local boundaries and LOCK |
+| ENV | Current TIMING/VOICE knobs; MIDI channel/register/density/tension; rate, gate, loop, pitch phase; local boundaries and LOCK |
 | ARP | Generator/root/scale/direction; ARP/MOTIF and rate/gate location; suppression and both cursor meanings |
 | LFO | Read-only lane/status controls; available template scenes via black keys; eight-bar CC morphs |
 | SEQ | Groove, loop, pitch phase, direction; independent loops and ARP/MOTIF restrictions |
