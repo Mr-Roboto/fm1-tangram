@@ -39,7 +39,7 @@ enum {
     KN_COMPOSER, KN_COMP_BARS, KN_COMP_EVOLUTION, KN_COMP_TENSION,
     KN_THEME, KN_DEVICE_RETRY,
     KN_LFO_TARGET, KN_LFO_CYCLE, KN_LFO_DEPTH, KN_LFO_CENTER,
-    KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_DECAY,
+    KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_RESONANCE,
     KN_PERF_SLOT, KN_PERF_OP, KN_PERF_POS, KN_PERF_CHAR,
     KNS_LOOP, KNS_REGISTER, KNS_GEN, KNS_TARGET, KNS_CYCLE, KNS_DEPTH, KNS_SCENE, KNS_PHASE, KNS_LENGTH, KNS_DROP,
     KNS_REPRISE, KNS_STEPS, KNS_GENERATION, KNS_PLAYS, KNS_FEEDBACK, KNS_WET, KNS_PINGPONG, KNS_FILTERED
@@ -66,8 +66,8 @@ static const char *const KNOB_LABEL[NVIEWS][4] = {
 static const uint8_t PLAY_KNOB[4] = {KN_DIRECTION, KN_GROOVE, KN_DELAY_ON, KN_DELAY_TIME};
 static const uint8_t VOICE_KNOB[4] = {KN_CHANNEL, KN_REGISTER, KN_VDENSITY, KN_COMP_TENSION};
 static const uint8_t COMPOSER_KNOB[4] = {KN_COMPOSER, KN_FORM, KN_COMP_BARS, KN_COMP_EVOLUTION};
-static const uint8_t MIXER_KNOB[4] = {KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_DECAY};
-static const char *const MIXER_LABEL[4] = {"Volume CC7", "Pan CC10", "Cutoff CC74", "Decay CC75"};
+static const uint8_t MIXER_KNOB[4] = {KN_MIX_VOLUME, KN_MIX_PAN, KN_MIX_CUTOFF, KN_MIX_RESONANCE};
+static const char *const MIXER_LABEL[4] = {"Volume CC7", "Pan CC10", "Cutoff CC74", "Resonance CC71"};
 static const uint8_t MIDI_KNOB[4] = {KN_CLOCK_OUT, KN_MIDI_OUT, KN_NONE, KN_NONE};
 static const char *const MIDI_LABEL[4] = {"Clock out", "MIDI out", "Unused", "Unused"};
 static const uint8_t APPEARANCE_KNOB[4] = {KN_THEME, KN_DEVICE_RETRY, KN_NONE, KN_NONE};
@@ -888,7 +888,7 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     case KN_MIX_VOLUME:
     case KN_MIX_PAN:
     case KN_MIX_CUTOFF:
-    case KN_MIX_DECAY: {
+    case KN_MIX_RESONANCE: {
         int voice = key_voice(ui.sel);
         int control = k - KN_MIX_VOLUME;
         int old = proj_mixer_value(voice, control);
