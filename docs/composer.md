@@ -17,7 +17,7 @@ HOME cycles QUICK → PLAY → COMPOSE. QUICK/PLAY mappings remain unchanged.
 | COMPOSE encoder | Function |
 | --- | --- |
 | K1 | Composer OFF/ON at the next engine bar boundary |
-| K2 | CLASSIC, SLOW BUILD or AMBIENT form; choose while stopped |
+| K2 | CLASSIC, SLOW BUILD or AMBIENT form; stopped: now; while Composer plays: next section |
 | K3 | Phrase unit: AUTO or 4–64 bars, in increments of four |
 | K4 | Composer Evolution: OFF, GENTLE, MOVING, ACTIVE |
 
@@ -74,8 +74,14 @@ Each cycle follows Introduction, Theme A, Development, B, Breakdown, Return,
 Outro, then another Introduction rather than Stop. Lengths in phrase units are
 1, 2, 2, 1, 1, 2, 1. AUTO derives a four-bar-aligned unit from the selected
 form's period range using a separate seed-derived RNG; AMBIENT uses at least
-32 bars. The automatic unit is chosen once per cycle. Explicit units stay fixed.
-Queued Advance actions move to the next section at their existing bar boundary.
+32 bars. The automatic unit is ordinarily chosen once per cycle. Live FORM changes
+recalculate the *incoming* section's phrase unit at the next section
+boundary, while its departing section runs to completion. Explicit phrase
+units remain fixed. No section counter, pattern, voice, seed or transport is
+restarted. The latest pending FORM wins; turning back to the active form
+cancels the pending choice. A manual section jump or Advance also provides
+a section boundary. Queued Advance actions move to the next section at
+their existing bar boundary.
 
 Role activity uses staggered ramps from the actual previous section's activity,
 including when manual navigation interrupts a ramp. Bass/first pluck lead upper
@@ -224,7 +230,9 @@ nor test execution was performed for this change.
 
 Timing evolution for legacy, multi-bar and short/irregular foundations,
 automatic pitch PHASE changes, a separate register macro, arbitrary ARP/MOTIF
-pitch mutation, resumable Composer checkpoints and live form replacement are deferred.
+pitch mutation and resumable Composer checkpoints are deferred. Live FORM
+replacement is implemented on the experimental BLE development branch but
+requires compilation, focused regression execution and device validation.
 Existing TIMING/MOTION controls, including 15/16 phasing, retain local-boundary
 semantics and take manual ownership. No new rates, LCM calculations or MIDI event queues
 were added. Original Note-Ons carry an extra display grid identity through the
