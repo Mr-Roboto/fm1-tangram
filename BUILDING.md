@@ -79,8 +79,8 @@ independent MIDI/clock output masks, rejected edits while busy,
 11-byte format-4 persistence, migration and retry behavior. The host
 simulator build also completed on that date.
 
-To run the **focused Tangram BLE simulator smoke gate** (added 11 November
-2026; not yet executed as of this documentation update):
+The **focused Tangram BLE and Composer simulator smoke gate** passed on
+WSL2 on 11 November 2026. To repeat it:
 
 ```sh
 sh tests/run_tangram_smoke.sh
