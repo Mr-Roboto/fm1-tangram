@@ -74,8 +74,9 @@ typedef struct {
 static bl_live_t rt_eng PLAT_POOL;       /* the running engine */
 static bl_project_t rt_proj PLAT_POOL;   /* Transport.project: the next Play's, the running engine's */
 static bl_project_t rt_next PLAT_POOL;   /* pendingProject: takes over at the head's next bar line */
-static bl_note_t rt_note[RT_NOTES] PLAT_POOL;
-static bl_cc_t rt_cc[RT_CC] PLAT_POOL;
+/* Small transient render buffers fit in normal RAM; reserve pool headroom for BLE. */
+static bl_note_t rt_note[RT_NOTES];
+static bl_cc_t rt_cc[RT_CC];
 static rt_ev_t rt_q[RT_QUEUE] PLAT_POOL;
 static rt_ev_t rt_nq[RT_NOW] PLAT_POOL;  /* to send at once, before the queue */
 #define RT_Q(i) rt_q[(rt.qr + (i)) & (RT_QUEUE - 1u)]
