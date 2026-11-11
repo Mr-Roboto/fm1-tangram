@@ -528,10 +528,15 @@ int proj_set_arranger(int on)            /* (arrangement ?? ArrangementConfig())
     return rt_action(&a);
 }
 
-int proj_set_form(int form)              /* arrangement = the preset (enabled, as the presets are) */
+int proj_set_form(int form)              /* change Composer form at the next section, never restart playback */
 {
-    if (form < FORM_CLASSIC || form > FORM_AMBIENT || rt_playing())
-        return -1;
+    if (form < FORM_CLASSIC || form > FORM_AMBIENT) return -1;
+    if (rt_playing()) {
+        if (!proj.composer.enabled || rt_set_form(form)) return -1;
+        arr_set(1, FORMS[form]);    /* the chosen form is saved with the musical project */
+        proj_stale = 1;             /* the next Play also starts with the chosen form */
+        return 0;
+    }
     arr_set(1, FORMS[form]);
     proj_apply();
     return 0;
