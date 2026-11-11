@@ -893,6 +893,12 @@ int rt_select_composer_stage(int section)
     return 0;                         /* retain stopped material/recall and preview */
 }
 
+int rt_set_form(int form)
+{
+    if (form < 1 || form > 3 || rt_loading() || !rt.playing) return -1;
+    return bl_live_set_form(&rt_eng, form);
+}
+
 int rt_set_composer(const bl_compcfg_t *cfg)
 {
     if (!cfg || !bl_comp_valid(cfg) || rt_loading()) return -1;
