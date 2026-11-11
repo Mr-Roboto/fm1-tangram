@@ -45,10 +45,10 @@ The bank remains a separate CRC-protected persistent flash object with
 | Bank version | Embedded project | Entry (occupied+name+record) | Entire bank |
 | --- | --- | --- | --- |
 | TGPB 1 | Project format 8, 312 B | 325 B | 3258 B |
-| TGPB 2 | Project format 9, 382 B | 395 B | 3958 B |
+| TGPB 2 | Project format 9, 382 B | 374 B | 3748 B |
 
 Both bank sizes include the 8-byte header. The format-2 bank fits the
-platform's 4 KiB per-object storage allocation (subject to verified
+platform's 3840-byte per-object storage allocation (subject to verified
 platform headers/CRC overhead in the actual firmware build).
 
 An older TGPB-1 bank is decoded and migrated **in RAM** at boot, preserving
