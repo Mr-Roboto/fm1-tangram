@@ -54,7 +54,9 @@ The development branch now contains: new LFO K1–K4 editors, the second FX MIXE
 
 **Host acceptance (12 November 2026, user-confirmed):** `sh tests/run_tangram_midi_controls.sh` completed successfully on WSL2. Its focused regressions covered BLE MIDI routing, Composer FORM, UX staged markers and ENV VOICE, LFO edits, CC7/10/74/71 MIDI output, musical-project SAVE/reboot, GLASSFACE named-slot save/load, and a test-only legacy bank v1 migration into the 3,748-byte compact v2 bank. Project format 9 is 382 bytes. This acceptance is **host simulation only**, not an AC79 device build or a hardware test.
 
-**NOT YET VERIFIED:** full JieLi/AC79 firmware build, actual device output, long-term scene interactions, real on-device flash update/recovery and hardware RAM/image limits. Previously rendered CC events can remain queued briefly after an LFO target change. Do not flash this branch until the device build passes and the hardware acceptance is planned.
+**Device build acceptance (12 November 2026, user-confirmed):** `./build.sh` completed successfully on WSL2 for the JieLi/AC79 target: image **356,880 bytes**, RAM **89,672 / 98,304** bytes (8,632 free), pool **335,832 / 344,064** bytes (8,232 free). The loader image and package were generated: `app/build/tangram.fwsc` **610,108 bytes**, development identity `FM-1_97500`. The build passed the BSP-only register-access, forbidden inlined 64-bit multiplication and SoftFloat routine checks. The locally modified `base` submodule is intentional and was left untouched.
+
+**NOT YET VERIFIED:** on-device output and UX, long-running LFO/scene interactions, real on-device flash update/recovery, MIDI routing under full load and flash persistence. Previously rendered CC events can remain queued briefly after an LFO target change. The actual firmware *now passes its build*; perform a cautious hardware acceptance before calling it release-ready. The development identity `FM-1_97500` is **not** the final 1.0 release.
 
 ## Release gate
 
