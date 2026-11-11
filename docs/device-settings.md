@@ -1,3 +1,45 @@
+# Global device settings — BLE routing extension (11 November 2026)
+
+**Status:** implemented on `dev/tangram-ble-midi-spike`, awaiting build and hardware validation.
+
+The GLO button cycles **SETUP → MIDI → APPEARANCE → PERFORMANCE**.
+SETUP keeps K1 Root, K2 INT/EXT sync, K3 external clock input, K4 Lights.
+K3 supports USB, TRS, BLE, USB+TRS, USB+BLE, TRS+BLE and USB+TRS+BLE.
+GLO MIDI controls two **independent** output masks:
+
+- K1 **CLOCK OUT** (USB / BLE / USB+BLE): internally generated MIDI realtime
+  Start (FA), Clock (F8), Continue (FB), Stop (FC).
+- K2 **MIDI OUT** (USB / BLE / USB+BLE): note-on/off and CC output, including
+  generated delay echoes and note flushes.
+
+All modes persist device-wide, independently of projects and snapshots.
+Output routing changes are refused while running, a Start is pending, or
+outgoing MIDI still needs draining. Input clock port changes keep their
+existing live-apply behavior. The radio is a **BLE MIDI peripheral** for
+iPad/computer; Bluetooth central/controller discovery is not built in.
+
+`OBJ_DEVICE_SETTINGS` remains object ID 8, in unchanged A/B flash sectors
+0xCE000–0xCFFFF. On-disk format **4** stores exactly 11 bytes:
+`TGDS` (4), version (1), sync (1), external-input mask (1), theme (1),
+lights (1), MIDI output mask (1), clock output mask (1).
+The formats 1 (7 bytes), 2 (8 bytes) and 3 (9 bytes) still load. Migrating
+them preserves the legacy settings and defaults the **new** MIDI and clock
+output masks to USB+BLE, matching Tangram's earlier experimental BLE build.
+No write occurs solely because of reading an older record.
+Flash writes still coalesce after 250 ms and occur only when MIDI is idle.
+
+Host debug commands: `rt port USB|TRS|BLE|both|usbble|trsble|all`,
+`rt midiout USB|BLE|both`, `rt clockout USB|BLE|both`.
+`expect ext_ports`, `expect midi_out`, `expect clock_out` expose these
+separate choices. The output route's bit values match `TO_USB=1`,
+`TO_BLE=2`, `USB+BLE=3`; external input additionally supports TRS (bit 4).
+
+## Previous implementation notes (before BLE routing)
+
+The following documents the original global settings design. Its old page
+count, format version, USB/TRS-only routing and test-status claims are
+historical and superseded by the section above.
+
 # Global device settings (GLOBAL1 / GLOBAL2 / GLOBAL3)
 
 Status: **NOT TESTED**. This stage stores INTERNAL/EXTERNAL synchronization and
