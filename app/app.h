@@ -31,7 +31,7 @@ enum { OBJ_PROJ, OBJ_PANEL, OBJ_SLOT0, OBJ_SLOT1, OBJ_SLOT2, OBJ_SLOT3, OBJ_SLOT
  * OBJ_PROJ, each snapshot slot in its own object. The project is the app's (AppServices.project); the transport
  * runs its own copy, which a change made while playing reaches at the next Play (transportStale) */
 #define PROJ_MAGIC 0x314E4C42u           /* "BLN1" */
-#define PROJ_FORMAT 8u                   /* Composer start replaces LIGHTS; reads formats 5, 6 and 7 */
+#define PROJ_FORMAT 9u                   /* v8 + MIDI CC mixer/LFO overrides; reads formats 5-8 */
 #define PROJ_SLOTS 6                     /* UIState.snapshotSlots */
 #define PROJ_UNDO 20                     /* UIState's undo stack */
 enum { FORM_OTHER, FORM_CLASSIC, FORM_SLOW, FORM_AMBIENT };   /* the arranger's form presets (proj_form) */
@@ -52,7 +52,18 @@ typedef struct {
     uint8_t voice_configured[BL_MAX_VOICES];
     bl_vconfig_t voice_config[BL_MAX_VOICES]; /* requested musical target; defaults inherited when not configured */
     bl_compcfg_t composer;
+    /* 10 bytes per voice: one LFO override and four MIDI CC mixer values.
+     * Separate flags retain original template behavior until actually edited.
+     * A CC affects the whole destination MIDI channel, not only one voice. */
+    uint8_t lfo_override[BL_MAX_VOICES], lfo_target[BL_MAX_VOICES];
+    uint8_t lfo_cycle[BL_MAX_VOICES], lfo_depth[BL_MAX_VOICES], lfo_center[BL_MAX_VOICES];
+    uint8_t mixer_mask[BL_MAX_VOICES], mixer_value[BL_MAX_VOICES][4];
 } proj_t;
+
+enum { LFO_DEST_OFF, LFO_DEST_MOD, LFO_DEST_EXPRESSION, LFO_DEST_PAN,
+       LFO_DEST_RESONANCE, LFO_DEST_CUTOFF, LFO_DEST_DECAY, LFO_NDEST };
+enum { MIDI_MIX_VOLUME, MIDI_MIX_PAN, MIDI_MIX_CUTOFF, MIDI_MIX_DECAY, MIDI_MIX_N };
+#define LFO_NCYCLES 8
 
 extern proj_t proj;
 
@@ -96,6 +107,16 @@ int proj_select_composer_stage(int section);
 int proj_get_delay(int voice, bl_delay_t *out);
 int proj_set_delay(int voice, const bl_delay_t *settings);
 int proj_set_delay_field(int voice, int field, int value);
+/* Per-selected-voice editable sine LFO; OFF disables lane. Overrides are saved
+ * with the musical project and Performance Presets, not device settings. */
+int proj_lfo_get(int voice, int *target, int *cycle, int *depth, int *center);
+int proj_lfo_set(int voice, int target, int cycle, int depth, int center);
+/* Apply the persistent override to one template voice; preserves scene map 0. */
+void proj_lfo_apply(bl_vcfg_t *cfg, int voice);
+/* Four static MIDI CC values per voice, shared by every voice on the same
+ * physical MIDI channel. Changes transmit immediately while stopped or PLAY. */
+int proj_mixer_value(int voice, int control);
+int proj_mixer_set(int voice, int control, int value);
 int proj_set_sync(int ext);              /* compatibility control API: global device setting, stopped only */
 void proj_set_ext_ports(int mask);       /* global device setting; never part of project SAVE */
 int proj_dice(void);                     /* UIState.newSeed: an undo point, then AppServices.reseed */
