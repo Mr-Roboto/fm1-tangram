@@ -102,10 +102,14 @@ OCT− short alone now invokes MUTATE using the existing unlocked-voice re-roll
 mechanism (also retained on EDIT); HOME + OCT− invokes the existing undo path.
 
 AUTO, AMBIENT and RATCHET retain their implementations and stored settings;
-their old knob access is deferred. FORM is accessible on HOME COMPOSE while
-stopped. NONE means no explicit arranger configuration; turning K2 while
-stopped installs a preset form. During playback the existing WHEN STOPPED
-restriction remains; live form replacement is not implemented.
+their old knob access is deferred. FORM is available on HOME COMPOSE K2.
+While stopped, a change applies immediately. While playing with Composer
+active, a new form is staged for the next section entry (automatic, manual
+Advance, or manual section selection); the current section is not shortened.
+The latest selection replaces the preceding pending form, and returning to
+the already-active form cancels the pending change. With Composer disabled,
+live FORM edits are refused. The engine does not restart and existing note
+ownership, phase, delay tails and snapshots are retained.
 Composer details are in [composer.md](composer.md). Global theme changes do not
 change musical project/slot formats, engine behavior or MIDI scheduling.
 
