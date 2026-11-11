@@ -3,12 +3,12 @@
 #include "app.h"
 #include "device_settings.h"
 
-/* Format 3: nine bytes, little-endian magic "TGDS", u8 format, sync,
- * port mask, theme, lights. Reads formats 1 (seven bytes) and 2 (eight). Same object,
- * same sector pair, no padding. Imported LIGHTS settles through the normal idle-save path. */
+/* Format 4: eleven bytes: magic "TGDS", format, sync, external clock input
+ * mask, theme, lights, MIDI output mask, internal clock output mask. Import
+ * format 1 (7 bytes), 2 (8), and 3 (9), preserving old fields. No padding. */
 #define DEVICE_SETTINGS_MAGIC UINT32_C(0x53444754)
-#define DEVICE_SETTINGS_FORMAT 3u
-#define DEVICE_SETTINGS_BYTES 9u
+#define DEVICE_SETTINGS_FORMAT 4u
+#define DEVICE_SETTINGS_BYTES 11u
 #define DEVICE_SETTINGS_SETTLE_MS 250u
 
 static device_settings_t device_current, device_saved;
@@ -18,17 +18,20 @@ static int device_lights_known, device_lights_saved;
 const char *const DEVICE_THEME_NAME[DEVICE_NTHEMES] = {
     "CLASSIC", "GRAPHITE", "AMBER", "NOCTURNE", "MONO", "FIRE"
 };
+const char *const DEVICE_MIDI_NAME[3] = {"USB", "BLE", "USB + BLE"};
 
 static int device_settings_valid(device_settings_t settings)
 {
     return settings.lights <= 2 && settings.theme < DEVICE_NTHEMES && settings.sync <= DEVICE_SYNC_EXTERNAL &&
-        (settings.ext_ports == DEVICE_CLOCK_USB || settings.ext_ports == DEVICE_CLOCK_TRS ||
-         settings.ext_ports == DEVICE_CLOCK_BOTH);
+        settings.ext_ports && !(settings.ext_ports & ~DEVICE_CLOCK_ALL) &&
+        settings.midi_out && !(settings.midi_out & ~DEVICE_MIDI_BOTH) &&
+        settings.clock_out && !(settings.clock_out & ~DEVICE_MIDI_BOTH);
 }
 
 static int device_settings_equal(device_settings_t a, device_settings_t b)
 {
-    return a.sync == b.sync && a.ext_ports == b.ext_ports && a.theme == b.theme && a.lights == b.lights;
+    return a.sync == b.sync && a.ext_ports == b.ext_ports && a.theme == b.theme &&
+        a.lights == b.lights && a.midi_out == b.midi_out && a.clock_out == b.clock_out;
 }
 
 int device_settings_init(void)
@@ -37,18 +40,20 @@ int device_settings_init(void)
     uint8_t record[DEVICE_SETTINGS_BYTES + 1u];
     int n = plat_store_load(OBJ_DEVICE_SETTINGS, record, sizeof record);
     int defaults = 1;
-    device_current = (device_settings_t){DEVICE_SYNC_INTERNAL, DEVICE_CLOCK_BOTH, DEVICE_THEME_CLASSIC, 1};
+    device_current = (device_settings_t){DEVICE_SYNC_INTERNAL, DEVICE_CLOCK_BOTH, DEVICE_THEME_CLASSIC, 1,
+        DEVICE_MIDI_BOTH, DEVICE_MIDI_BOTH};
     device_lights_known = device_lights_saved = 0;
-    if (n == 7 || n == 8 || n == (int)DEVICE_SETTINGS_BYTES) {
+    if (n == 7 || n == 8 || n == 9 || n == (int)DEVICE_SETTINGS_BYTES) {
         uint32_t magic = (uint32_t)record[0] | (uint32_t)record[1] << 8 |
             (uint32_t)record[2] << 16 | (uint32_t)record[3] << 24;
-        int supported = record[4] == n - 6;
+        int supported = record[4] == (n == (int)DEVICE_SETTINGS_BYTES ? DEVICE_SETTINGS_FORMAT : n - 6);
         device_settings_t loaded = {record[5], record[6], n >= 8 ? record[7] : DEVICE_THEME_CLASSIC,
-            n == 9 ? record[8] : 1};
-        if (magic == DEVICE_SETTINGS_MAGIC && supported &&
-            device_settings_valid(loaded)) {
+            n >= 9 ? record[8] : 1,
+            n == (int)DEVICE_SETTINGS_BYTES ? record[9] : DEVICE_MIDI_BOTH,
+            n == (int)DEVICE_SETTINGS_BYTES ? record[10] : DEVICE_MIDI_BOTH};
+        if (magic == DEVICE_SETTINGS_MAGIC && supported && device_settings_valid(loaded)) {
             device_current = loaded;
-            device_lights_known = device_lights_saved = n == 9;
+            device_lights_known = device_lights_saved = n >= 9;
             defaults = 0;
         }
     }
@@ -62,17 +67,22 @@ device_settings_t device_settings_get(void) { return device_current; }
 
 int device_settings_apply(void)
 {
-    return rt_apply_clock_settings(device_current.sync, device_current.ext_ports);
+    if (rt_apply_clock_settings(device_current.sync, device_current.ext_ports)) return -1;
+    return rt_apply_output_settings(device_current.midi_out, device_current.clock_out);
 }
 
 int device_settings_set(device_settings_t settings)
 {
     if (!device_settings_valid(settings)) return -1;
-    /* Appearance-only edits bypass the clock path. Existing clock callers
-     * retain their apply/validation behavior, even for an unchanged request. */
-    if (((settings.theme == device_current.theme && settings.lights == device_current.lights) ||
-         settings.sync != device_current.sync ||
-         settings.ext_ports != device_current.ext_ports) &&
+    /* Check output routing before touching input clock settings. Both runtime
+     * setters reject unsafe transport changes; only persist an accepted edit. */
+    if ((settings.midi_out != device_current.midi_out || settings.clock_out != device_current.clock_out) &&
+        rt_apply_output_settings(settings.midi_out, settings.clock_out)) return -1;
+    /* Preserve existing apply behavior for sync/input edits; changes in
+     * appearance or output routing alone do not reset the clock. */
+    if (((settings.theme == device_current.theme && settings.lights == device_current.lights &&
+          settings.midi_out == device_current.midi_out && settings.clock_out == device_current.clock_out) ||
+         settings.sync != device_current.sync || settings.ext_ports != device_current.ext_ports) &&
         rt_apply_clock_settings(settings.sync, settings.ext_ports)) return -1;
     if (device_settings_equal(settings, device_current)) return 0;
     if (settings.lights != device_current.lights) device_lights_known = 1;
@@ -99,7 +109,8 @@ static int device_settings_save(void)
     const uint8_t record[DEVICE_SETTINGS_BYTES] = {
         (uint8_t)DEVICE_SETTINGS_MAGIC, (uint8_t)(DEVICE_SETTINGS_MAGIC >> 8),
         (uint8_t)(DEVICE_SETTINGS_MAGIC >> 16), (uint8_t)(DEVICE_SETTINGS_MAGIC >> 24),
-        DEVICE_SETTINGS_FORMAT, device_current.sync, device_current.ext_ports, device_current.theme, device_current.lights
+        DEVICE_SETTINGS_FORMAT, device_current.sync, device_current.ext_ports, device_current.theme, device_current.lights,
+        device_current.midi_out, device_current.clock_out
     };
     int error = plat_store_save(OBJ_DEVICE_SETTINGS, record, sizeof record);
     if (error) {
