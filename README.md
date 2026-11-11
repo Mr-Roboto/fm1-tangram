@@ -114,17 +114,17 @@ Six display themes are available: **CLASSIC, GRAPHITE, AMBER, NOCTURNE, FIRE and
 
 For detailed encoder assignments and contextual behavior, see [FM-1 pages and controls](docs/ui-pages.md) and [Themes and help](docs/ui-themes-and-help.md).
 
-## Saving: projects, snapshots and planned presets
+## Saving: projects, snapshots and performance presets
 
 Tangram currently distinguishes between:
 
 1. **The current project:** SAVE stores its musical configuration, including voice parameters, MIDI routing, delay settings, density, arranger/Composer configuration and seed. If SAVE is requested during playback, the flash write waits for a safe stop.
-2. **Six snapshot slots:** These store and recall musical engine states. They are separate from the planned bank of named Performance Presets.
-3. **Global device settings:** Clock-related settings and display theme are persisted independently of the project.
+2. **Six snapshot slots:** These store and recall musical engine states. They are separate from the bank of named Performance Presets.
+3. **Global device settings:** MIDI/Clock routing, synchronization, lights and display theme are persisted independently of the musical project.
 
-### Planned: Performance Presets
+### Named Performance Presets
 
-A future dedicated bank of **10 named Performance Presets** is being designed. Its purpose is to store and recall complete *starting configurations* — including the selected Composer starting section — independently of the three built-in templates. **This bank is not yet implemented.**
+A dedicated bank of **10 named Performance Presets** stores complete *starting configurations* — including the selected Composer starting section — independently of the three built-in templates and the six snapshot slots. The bank is implemented on the Tangram development branches; presets are managed on **GLO PERFORMANCE**.
 
 Resumable Composer checkpoints and recording every live control movement are **not** part of the current plan.
 
