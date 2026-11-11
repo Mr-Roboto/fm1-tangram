@@ -1,6 +1,19 @@
 # Global device settings — BLE routing extension (11 November 2026)
 
-**Status:** implemented on `dev/tangram-ble-midi-spike`, awaiting build and hardware validation.
+**Status (11 November 2026):** the device firmware and host simulator compiled
+successfully; `sh tests/host/run_device_settings.sh` returned
+`device-settings: ok`. On an FM-1, the user confirmed all four GLO pages,
+visible settings, Bluetooth pairing/connection status and wireless MIDI note
+playback into Korg iM1 on an iPad. This validates a real BLE-MIDI **output**
+path. The new external BLE-clock **input**, separate real-time clock **output**,
+multi-destination combinations, and persistence after power cycling have
+**not** been independently exercised on hardware.
+
+The `./build.sh --host` build compiled; an additional regression scenario
+`tests/scenarios/ble_global.bln` exercises the displayed GLO MIDI page and
+independent persisted routes in the simulator, but its execution has not yet
+been confirmed. The scenario is a simulated integration test, not a
+substitute for radio/clock timing measurements.
 
 The GLO button cycles **SETUP → MIDI → APPEARANCE → PERFORMANCE**.
 SETUP keeps K1 Root, K2 INT/EXT sync, K3 external clock input, K4 Lights.
