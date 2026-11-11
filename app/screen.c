@@ -1710,7 +1710,7 @@ static void draw_setup(void)
         row(4, 73, 92, "BLE LINK", plat_ble_connected() ? "CONNECTED" : "NOT CONNECTED", K_TEXT2);
         row(4, 94, 92, "GLOBAL SAVE", status < 0 ? "ERROR" : status ? "PENDING" : "SAVED", K_TEXT2);
         cv_text(6, 125, &FONT_T, "K1 CLOCK OUT; K2 MIDI OUT", K_DIM);
-        cv_text(6, 139, &FONT_T, "USB / BLE / USB + BLE", K_DIM);
+        cv_text(6, 139, &FONT_T, settings.sync ? "EXT SYNC: NO CLOCK OUT" : "USB / BLE / USB + BLE", K_DIM);
         return;
     }
     if (ui.page[V_SETUP] == 2) {
