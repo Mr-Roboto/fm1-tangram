@@ -159,14 +159,16 @@ Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focuse
 
 **Verified additional function (11 November 2026):** Composer FORM switching during PLAY on the FM-1. The new form takes effect at the next section entry without restarting playback. Manual in-play section navigation does not replace the START section selected while stopped; after STOP the earlier START choice remains in place. Further Composer evolution and additional instrument-role templates are deferred. There are no plans to add an internal sound engine or audio processing.
 
-This is a **pre-release development branch**, not a declared stable release. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
+**Tangram 1.0 functional code freeze (11 November 2026):** the successfully tested BLE/Composer firmware is preserved at commit `5b0f7d7` on `dev/tangram-ble-midi-spike`. UI-only improvements are isolated on `dev/tangram-ux-1.0`, described in [the UX decisions and audit](docs/ux-1.0.md). The three musical Performance Preset definitions are still in preparation. **Version 1.0 has not been publicly released**; no 1.1/1.2 version is claimed.
+
+This remains pre-release development. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
 
 ## Project documentation
 
 - [Composer and musical form](docs/composer.md)
 - [Composer Phase II](docs/composer-phase-ii.md)
 - [HEARTBEAT drum generator](docs/heartbeat.md)
-- [FM-1 UI controls](docs/ui-pages.md)
+- [FM-1 UI controls](docs/ui-pages.md) and [1.0 UX audit](docs/ux-1.0.md)
 - [MIDI delay](docs/midi-delay.md)
 - [ARP](docs/arpeggiator.md) and [MOTIF](docs/motif.md)
 - [Scales](docs/scales.md), [Directions](docs/directions.md) and [Grooves](docs/grooves.md)
