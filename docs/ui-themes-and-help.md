@@ -1,9 +1,9 @@
 # Global themes and on-device help
 
-The themes/help notes originated before the BLE routing extension. On
-11 November 2026, Tangram's four GLO pages and wireless BLE-MIDI output to
-Korg iM1 on iPad were confirmed on FM-1 hardware. The BLE clock paths and
-long-term runtime behavior have not been hardware-verified.
+The four GLO subpages and the six-point BLE-MIDI hardware checklist were
+confirmed on 11 November 2026. Tangram 1.0's UX work takes place separately
+on `dev/tangram-ux-1.0`; the tested functional firmware is frozen on
+`dev/tangram-ble-midi-spike`. Long-run BLE timing is not measured.
 
 ## Appearance
 
@@ -77,8 +77,11 @@ See [device-settings.md](device-settings.md).
 ## Help coverage and navigation
 
 Hold a button alone for one second for its first context-sensitive card. Keep
-holding to cycle continuation cards every five seconds; the title shows card
-number/count. Release closes help and consumes the held button's usual release
+holding to cycle continuation cards every five seconds; the title now explicitly
+shows `BUTTON HELP x/y`. **These are help-card numbers, not subpage numbers:**
+GLO has four actual subpages but seven help cards (one context card plus six
+additional cards). The existing hold duration and five-second cadence are not
+changed. Release closes help and consumes the held button's usual release
 action. A working encoder, key or another button dismisses help using the
 existing input rules; these controls retain their normal actions. PLAY still
 acts immediately and has no hold-help card: its operation is covered in HOME.
@@ -108,7 +111,10 @@ LOCK protects automatic development and re-roll, not explicit snapshot recall.
 These existing behaviors are described by the help rather than changed here.
 
 Button/encoder assignments are derived from `app/ui.c` and its project/runtime
-calls; help text lives in `app/ui_help.h`. No musical shortcuts were reassigned.
+calls; help text lives in `app/ui_help.h`. No musical shortcuts were reassigned. The first UX pilot also distinguishes
+active and staged values visually in the parameter strip: normal theme focus
+marks the active value, and an additional bright marker represents a pending
+target. This is a display-only change, not a new scheduling or storage state.
 Current page mappings are in [ui-pages.md](ui-pages.md); Composer stage selection
 is described in [composer.md](composer.md). Previously generated word resources
 are preserved; only `words.tsv` source is extended for the next authorized build.
