@@ -803,6 +803,14 @@ static int proj_expect(const char *what, int *got)
         *got = proj.has_density;
     else if (!strcmp(what, "form"))
         *got = proj_form();
+    else if (!strcmp(what, "composer_section"))
+        *got = rt_engine()->composer.section;
+    else if (!strcmp(what, "composer_pending_form"))
+        *got = rt_engine()->composer.pending_form;
+    else if (!strcmp(what, "composer_active_form_min"))
+        *got = rt_engine()->project.arr.min_bars;
+    else if (!strcmp(what, "composer_active_unit"))
+        *got = rt_engine()->composer.unit;
     else if (!strcmp(what, "arr_has"))
         *got = proj.arr_has;
     else if (!strcmp(what, "arr_on"))
