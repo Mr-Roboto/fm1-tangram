@@ -8,9 +8,9 @@
 
 FM-Tangram is a standalone, performance-oriented MIDI sequencer and generative composition environment for the **M-VAVE FM-1**. It combines independently evolving voices, musical patterns, rhythmic variation and a multi-stage Composer to create long-form electronic performances directly on the hardware — without a computer in the performance workflow.
 
-**Tangram is MIDI-only.** It generates no audio and has no internal synthesizer. Connect a synthesizer, drum machine, sampler or MIDI-compatible software instrument to hear its output. Tangram sends its musical MIDI output over USB; external clock can be received over USB or TRS MIDI.
+**Tangram is MIDI-only.** It generates no audio and has no internal synthesizer. Connect a synthesizer, drum machine, sampler or MIDI-compatible software instrument to hear its output. The BLE test branch supports configurable USB and Bluetooth MIDI outputs and external clock input over USB, TRS or BLE.
 
-> **Development status — 5 November 2026:** Active pre-release development on [`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram). The core sequencer, Composer, Heartbeat drums, MIDI delay, display and project saving have been used on real FM-1 hardware. Features described as *planned* below are not implemented yet.
+> **Development status — 11 November 2026:** Stable musical work is preserved on [`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram). Bluetooth MIDI routing is being tested separately on [`dev/tangram-ble-midi-spike`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram-ble-midi-spike); the updated routing UI and persistence have not yet been verified on hardware.
 
 ## Musical approach
 
@@ -37,7 +37,7 @@ The goal is an instrument that can sustain a musical idea, transform it graduall
 | **Performance display** | Individual pattern strips, source-note and timing playheads, suppressed-note indication and Composer counters |
 | **Interface** | FM-1 buttons and encoders, contextual on-device help and six display themes |
 | **Persistence** | Current project settings and six musical snapshot slots; device-wide settings stored separately |
-| **Clock** | Internal MIDI clock or external sync through USB/TRS input |
+| **Clock** | Internal clock with separately selectable USB/BLE output; external sync input via USB/TRS/BLE or combinations (experimental branch) |
 
 Tangram uses the existing FM-1 panel, screen and controls. No laptop, DAW or companion application is required to operate the sequencer after installation.
 
@@ -104,7 +104,7 @@ The interface is organized into the FM-1's existing sections. Some sections have
 | **LFO** | CC lane and scene information |
 | **SEQ** | Musical motion, groove and loop-related controls |
 | **FX** | Per-voice MIDI delay settings |
-| **GLO** | Global setup and APPEARANCE |
+| **GLO** | Global SETUP, MIDI routing, APPEARANCE and PERFORMANCE (experimental BLE branch) |
 
 The **MASTER** control adjusts global musical density rather than audio volume. Each voice also has its own density setting; when Composer is active, section activity contributes another factor. Musical transport and phases continue even when new notes are suppressed.
 
@@ -155,9 +155,9 @@ Focused host tests are kept in [`tests/host/`](tests/host/); broad test suites a
 
 **Implemented and hardware-used:** multivoice sequencing, ARP/MOTIF, Composer, HEARTBEAT drums, MIDI delay, per-voice/global density, the dual pattern playheads, six display themes, project saving and Python firmware installation.
 
-**Next priority:** named Performance Presets, with a small dedicated bank that does not alter the existing instrument templates or six musical snapshot slots.
+**Current:** ten named Performance Presets and an experimental BLE-MIDI implementation, including separate MIDI/Clock output routing and external BLE Clock input, pending build and hardware validation.
 
-**Deferred:** live Composer FORM replacement during playback, further Composer evolution, BLE-MIDI and additional instrument-role templates. There are no plans to add an internal sound engine or audio processing.
+**Deferred:** live Composer FORM replacement during playback, further Composer evolution and additional instrument-role templates. There are no plans to add an internal sound engine or audio processing.
 
 This is a **pre-release development branch**, not a declared stable release. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
 
