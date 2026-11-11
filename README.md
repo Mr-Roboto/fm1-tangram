@@ -10,7 +10,7 @@ FM-Tangram is a standalone, performance-oriented MIDI sequencer and generative c
 
 **Tangram is MIDI-only.** It generates no audio and has no internal synthesizer. Connect a synthesizer, drum machine, sampler or MIDI-compatible software instrument to hear its output. The BLE test branch supports configurable USB and Bluetooth MIDI outputs and external clock input over USB, TRS or BLE.
 
-> **Development status — 11 November 2026:** Stable musical work is preserved on [`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram). Bluetooth MIDI routing is being tested separately on [`dev/tangram-ble-midi-spike`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram-ble-midi-spike); the updated routing UI and persistence have not yet been verified on hardware.
+> **Development status — 11 November 2026:** Stable musical work is preserved on [`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram). The isolated [`dev/tangram-ble-midi-spike`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram-ble-midi-spike) branch has successfully built and been installed on an FM-1. Its new four-page GLO interface, BLE connection-status display, and wireless MIDI-note output to Korg iM1 on an iPad have been confirmed on real hardware. BLE external clock reception, independent MIDI Clock output, long-run stability, and all reboot-persistence cases are **not yet hardware-verified**.
 
 ## Musical approach
 
@@ -149,13 +149,13 @@ The project also contains a Python USB-MIDI firmware installation adapter at [`t
 
 **Firmware flashing is at your own risk.** Check the target hardware, installed firmware and update procedure before installing. Never assume the MIDI port name alone proves device identity.
 
-Focused host tests are kept in [`tests/host/`](tests/host/); broad test suites are not required for every small change. This repository's inherited [`BUILDING.md`](BUILDING.md) still contains historical Berlinan-specific paths and should not be treated as an authoritative Tangram build-output listing until updated.
+Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focused device-settings regression (`sh tests/host/run_device_settings.sh`) passed on WSL2 on 11 November 2026. The simulator compiles via `./build.sh --host`; the separate GLO BLE scenario is available but has not yet been executed. The old all-in-one `tests/run_tests.sh` still includes legacy project-format checks and must not be treated as an up-to-date green Tangram regression suite.
 
 ## Development status and roadmap
 
 **Implemented and hardware-used:** multivoice sequencing, ARP/MOTIF, Composer, HEARTBEAT drums, MIDI delay, per-voice/global density, the dual pattern playheads, six display themes, project saving and Python firmware installation.
 
-**Current:** ten named Performance Presets and an experimental BLE-MIDI implementation, including separate MIDI/Clock output routing and external BLE Clock input, pending build and hardware validation.
+**Current:** ten named Performance Presets and experimental BLE MIDI. Verified on FM-1 hardware on 11 November 2026: Bluetooth connection to an iPad, connected/disconnected UI status, four Global pages, visible routing settings, and wireless note playback of Korg iM1. The standalone global-settings host regression passed. Still to test on hardware: BLE clock input, MIDI clock output and destination combinations under load, persistence across power cycles, and longer sessions.
 
 **Deferred:** live Composer FORM replacement during playback, further Composer evolution and additional instrument-role templates. There are no plans to add an internal sound engine or audio processing.
 
