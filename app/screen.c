@@ -721,6 +721,11 @@ static void cell(int view, int i, cell_t *c)
 static int cell_active_value(int k, const cell_t *c)
 {
     if (!rt_playing()) return c->v;
+    /* The N/A and fixed-gate text cells are not edit targets. */
+    if (c->kind == CELL_TEXT &&
+        (k == KN_RATE || k == KN_GATE || k == KN_DIRECTION || k == KN_GROOVE))
+        return c->v;
+    if (k == KN_FORM && proj_form() == FORM_OTHER) return c->v;
     const bl_live_t *e = rt_engine();
     const bl_voice_t *v = sel_material();
     const bl_vconfig_t *a = v ? &v->config : NULL;
