@@ -2501,7 +2501,7 @@ static void speak_dump(void)
     static const char *const WARN[][2] = {
         {"SAVE", "FAILED"}, {"UNDO", "NOTHING TO UNDO"}, {"UNDO", "QUEUE FULL"}, {"UNDO", "TOO BIG"},
         {"SLOT 1", "TOO BIG"}, {"SLOT 1", "EMPTY"}, {"SLOT 1", "QUEUE FULL"}, {"DEGREE 2", "SCHEDULE FULL"},
-        {"DICE", "QUEUE FULL"}, {"RE-ROLL", "QUEUE FULL"}, {"FORM", "WHEN STOPPED"}, {"AMBIENT", "WHEN STOPPED"},
+        {"DICE", "QUEUE FULL"}, {"RE-ROLL", "QUEUE FULL"}, {"FORM", "NOT AVAILABLE"}, {"AMBIENT", "WHEN STOPPED"},
         {"SYNC", "WHEN STOPPED"}, {"AUTO", "QUEUE FULL"}, {"ROOT", "QUEUE FULL"}, {"MODE", "QUEUE FULL"},
         {"DENSITY", "QUEUE FULL"}};
     proj_t keep = proj;
