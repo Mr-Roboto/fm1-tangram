@@ -244,7 +244,7 @@ static void rt_echoes(const rt_ev_t *original, uint32_t ch);
  * external synthesizer's sound design and front-panel settings. */
 static void rt_mixer_queue(bl_tick_t at)
 {
-    static const uint8_t number[MIDI_MIX_N] = {7, 10, 74, 75};
+    static const uint8_t number[MIDI_MIX_N] = {7, 10, 74, 71};
     for (int i = 0; i < rt_proj.nvoices; i++) {
         const bl_vcfg_t *v = &rt_proj.voice[i];
         for (int c = 0; c < MIDI_MIX_N; c++) {
