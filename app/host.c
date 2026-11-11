@@ -834,10 +834,10 @@ static int proj_expect(const char *what, int *got)
     else if (!strcmp(what, "ux_mixer_volume") ||
              !strcmp(what, "ux_mixer_pan") ||
              !strcmp(what, "ux_mixer_cutoff") ||
-             !strcmp(what, "ux_mixer_decay")) {
+             !strcmp(what, "ux_mixer_resonance")) {
         int control = !strcmp(what, "ux_mixer_volume") ? MIDI_MIX_VOLUME :
                       !strcmp(what, "ux_mixer_pan") ? MIDI_MIX_PAN :
-                      !strcmp(what, "ux_mixer_cutoff") ? MIDI_MIX_CUTOFF : MIDI_MIX_DECAY;
+                      !strcmp(what, "ux_mixer_cutoff") ? MIDI_MIX_CUTOFF : MIDI_MIX_RESONANCE;
         *got = proj_mixer_value(key_voice(ui.sel), control);
     }
     else if (!strcmp(what, "ux_project_record_bytes"))
