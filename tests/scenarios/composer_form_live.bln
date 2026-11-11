@@ -1,0 +1,38 @@
+# Integrated FM-Tangram Composer live FORM control in the host simulator.
+# The currently playing section is not interrupted; manual stage selection
+# provides a clean next-section boundary for the staged form.
+proj form classic
+expect form 1
+tap HOME
+tap HOME
+turn K1 1
+tap PLAY
+wait 400
+expect playing 1
+expect composer_section 0
+expect composer_active_form_min 8
+
+# HOME COMPOSE K2 selects SLOW BUILD while the Composer plays.
+turn K2 1
+expect form 2
+expect composer_pending_form 2
+expect composer_active_form_min 8
+expect composer_section 0
+
+# A manual stage change is a legitimate musical section boundary.
+turn ALGO 1
+wait 3800
+expect playing 1
+expect composer_section 1
+expect composer_pending_form 0
+expect composer_active_form_min 12
+
+# Another live FORM change can be cancelled by returning to the active form.
+turn K2 1
+expect form 3
+expect composer_pending_form 3
+turn K2 -1
+expect form 2
+expect composer_pending_form 0
+tap PLAY
+expect playing 0
