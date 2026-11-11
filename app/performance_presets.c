@@ -1,15 +1,21 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Included by project.c: reuse its explicit musical serializer and scratch buffer.
- * Format 1: "TGPB", version, slot count, name width, reserved zero; then ten
- * entries: occupied u8, twelve printable ASCII bytes, 312-byte format-8 project.
- * Empty entries are entirely zero. No native structs or runtime state on disk. */
+ * TGPB bank v2 contains ten format-9 project records (382 bytes each).
+ * Read and migrate legacy bank v1 (ten format-8 records, 312 bytes each)
+ * in RAM, with no automatic flash writes or loss of named user presets.
+ * Empty entries are entirely zero. No native structs on disk. */
 enum {
     PERFORMANCE_BANK_HEAD = 8,
     PERFORMANCE_ENTRY_BYTES = 1 + PERFORMANCE_PRESET_NAME_BYTES + PROJECT_RECORD_BYTES,
-    PERFORMANCE_BANK_BYTES = PERFORMANCE_BANK_HEAD + PERFORMANCE_PRESET_SLOTS * PERFORMANCE_ENTRY_BYTES
+    PERFORMANCE_BANK_BYTES = PERFORMANCE_BANK_HEAD + PERFORMANCE_PRESET_SLOTS * PERFORMANCE_ENTRY_BYTES,
+    PERFORMANCE_V1_ENTRY_BYTES = 1 + PERFORMANCE_PRESET_NAME_BYTES + PROJECT_RECORD8_BYTES,
+    PERFORMANCE_V1_BANK_BYTES = PERFORMANCE_BANK_HEAD + PERFORMANCE_PRESET_SLOTS * PERFORMANCE_V1_ENTRY_BYTES
 };
 typedef char performance_bank_must_fit[PERFORMANCE_BANK_BYTES <= PLAT_STORE_MAX ? 1 : -1];
-static const uint8_t performance_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 1,
+typedef char performance_bank_is_3958[PERFORMANCE_BANK_BYTES == 3958 ? 1 : -1];
+static const uint8_t performance_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 2,
+    PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
+static const uint8_t performance_legacy_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 1,
     PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
 static uint8_t performance_bank[PERFORMANCE_BANK_BYTES] PLAT_POOL;
 static int performance_bank_ready;
@@ -46,6 +52,30 @@ int performance_presets_init(void)
     if (bytes < 0) {
         performance_bank_ready = 1;
         return 1;
+    }
+    if (bytes == PERFORMANCE_V1_BANK_BYTES &&
+        !memcmp(proj_buf, performance_legacy_head, PERFORMANCE_BANK_HEAD)) {
+        /* Never write migration at boot. Convert the entire bank in memory,
+         * atomically commit the new format only at an explicit user SAVE or
+         * RENAME. Reject any damaged entries without touching flash. */
+        for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
+            const uint8_t *old = proj_buf + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_V1_ENTRY_BYTES;
+            uint8_t *dst = performance_bank + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_ENTRY_BYTES;
+            if (!old[0]) {
+                for (int j = 1; j < PERFORMANCE_V1_ENTRY_BYTES; j++) if (old[j]) return -1;
+                continue;
+            }
+            if (old[0] != 1 ||
+                !performance_name_valid((const char *)old + 1, PERFORMANCE_PRESET_NAME_BYTES) ||
+                project_record_read(old + 1 + PERFORMANCE_PRESET_NAME_BYTES, PROJECT_RECORD8_BYTES, &decoded, NULL))
+                return -1;
+            dst[0] = 1;
+            memcpy(dst + 1, old + 1, PERFORMANCE_PRESET_NAME_BYTES);
+            if (project_record_write(&decoded, dst + 1 + PERFORMANCE_PRESET_NAME_BYTES,
+                                     PROJECT_RECORD_BYTES) != PROJECT_RECORD_BYTES) return -1;
+        }
+        performance_bank_ready = 1;
+        return 0;
     }
     if (bytes != PERFORMANCE_BANK_BYTES || memcmp(proj_buf, performance_head, sizeof performance_head)) return -1;
     for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
