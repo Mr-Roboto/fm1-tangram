@@ -1,7 +1,11 @@
 # FM-1 pages and K1–K4
 
-**BLE routing extension (11 November 2026):** source changes committed; new
-routing/persistence behavior still requires a build and hardware verification.
+**BLE routing extension (11 November 2026):** the host and device builds
+succeeded and the standalone device-settings test passed. On actual FM-1
+hardware, all four GLO menus, routing display, BLE connection status and
+MIDI note output into Korg iM1 on iPad were confirmed. Independent MIDI-clock
+transmission, external BLE clock reception, long-run stability and persistence
+after a power cycle remain unverified on hardware.
 
 | Section/page | K1 | K2 | K3 | K4 |
 | --- | --- | --- | --- | --- |
