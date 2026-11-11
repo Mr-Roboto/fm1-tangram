@@ -6,6 +6,10 @@
  * The firmware's unit (app.c) includes it; the host has its own libc (tests/host/libc_test.c checks this one there). */
 #include <stdint.h>
 
+/* The fm1-base BLE shim (ble/shim/misc.c) already exports memmove and
+ * strcmp. Keep these standalone implementations only for USB-only builds:
+ * otherwise both unity.o and the radio's misc.o define the same symbols. */
+#if !FM1B_BLE
 void *memmove(void *d, const void *s, unsigned n)
 {
     unsigned char *p = d;
@@ -27,6 +31,7 @@ int strcmp(const char *a, const char *b)
     }
     return (unsigned char)*a - (unsigned char)*b;
 }
+#endif
 
 int abs(int v) { return v < 0 ? -v : v; }
 
