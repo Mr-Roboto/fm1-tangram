@@ -803,6 +803,19 @@ static int proj_expect(const char *what, int *got)
         *got = proj.has_density;
     else if (!strcmp(what, "form"))
         *got = proj_form();
+    else if (!strcmp(what, "ux_global_pages"))
+        *got = VIEW_PAGES[V_SETUP];
+    else if (!strcmp(what, "ux_global_help_cards"))
+        *got = help_count(B_GLO);
+    else if (!strcmp(what, "ux_pending_cells")) {
+        *got = 0;
+        for (int i = 0; i < 4; i++) {
+            cell_t c;
+            int k = view_knob(ui.view, i);
+            cell(ui.view, i, &c);
+            *got += cell_active_value(k, &c) != c.v;
+        }
+    }
     else if (!strcmp(what, "composer_section"))
         *got = rt_engine()->composer.section;
     else if (!strcmp(what, "composer_pending_form"))
