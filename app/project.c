@@ -135,6 +135,15 @@ static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: 
     memset(proj.channel, 0, sizeof proj.channel);
     memset(proj.voice_configured, 0, sizeof proj.voice_configured);
     memset(proj.voice_config, 0, sizeof proj.voice_config);
+    /* A fresh template must not inherit the preceding template's LFO
+     * targets or mixer CCs, just as it does not inherit voice configs. */
+    memset(proj.lfo_override, 0, sizeof proj.lfo_override);
+    memset(proj.lfo_target, 0, sizeof proj.lfo_target);
+    memset(proj.lfo_cycle, 0, sizeof proj.lfo_cycle);
+    memset(proj.lfo_depth, 0, sizeof proj.lfo_depth);
+    memset(proj.lfo_center, 0, sizeof proj.lfo_center);
+    memset(proj.mixer_mask, 0, sizeof proj.mixer_mask);
+    memset(proj.mixer_value, 0, sizeof proj.mixer_value);
     for (i = 0; i < BL_MAX_VOICES; i++) proj.delay[i] = bl_delay_config((bl_delay_t){0});
     for (i = 0; i < proj_eng.nvoices; i++)
         proj.channel[i] = proj_eng.voice[i].channel;
