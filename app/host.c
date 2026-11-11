@@ -825,6 +825,10 @@ static int proj_expect(const char *what, int *got)
         *got = device_settings_get().midi_out;
     else if (!strcmp(what, "clock_out"))
         *got = device_settings_get().clock_out;
+    else if (!strcmp(what, "midi_sent_usb"))
+        *got = (int)plat_midi_count(PORT_USB, 1);   /* realtime clock is excluded */
+    else if (!strcmp(what, "midi_sent_ble"))
+        *got = (int)plat_midi_count(PORT_BLE, 1);   /* realtime clock is excluded */
     else if (!strcmp(what, "lights"))
         *got = device_settings_get().lights;
     else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])
