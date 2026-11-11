@@ -619,9 +619,23 @@ static int rt_cmd(const char *a, const char *b, const char *c)
         device_settings_t settings = device_settings_get();
         settings.sync = b[0] == 'e' ? DEVICE_SYNC_EXTERNAL : DEVICE_SYNC_INTERNAL;
         return rt_playing() ? -1 : device_settings_set(settings);
-    } else if (!strcmp(a, "port") && (!strcmp(b, "USB") || !strcmp(b, "TRS") || !strcmp(b, "both"))) {
+    } else if (!strcmp(a, "port") &&
+               (!strcmp(b, "USB") || !strcmp(b, "TRS") || !strcmp(b, "BLE") ||
+                !strcmp(b, "both") || !strcmp(b, "usbble") || !strcmp(b, "trsble") || !strcmp(b, "all"))) {
         device_settings_t settings = device_settings_get();
-        settings.ext_ports = b[0] == 'U' ? DEVICE_CLOCK_USB : b[0] == 'T' ? DEVICE_CLOCK_TRS : DEVICE_CLOCK_BOTH;
+        settings.ext_ports = !strcmp(b, "USB") ? DEVICE_CLOCK_USB :
+            !strcmp(b, "TRS") ? DEVICE_CLOCK_TRS : !strcmp(b, "BLE") ? DEVICE_CLOCK_BLE :
+            !strcmp(b, "usbble") ? DEVICE_CLOCK_USB | DEVICE_CLOCK_BLE :
+            !strcmp(b, "trsble") ? DEVICE_CLOCK_TRS | DEVICE_CLOCK_BLE :
+            !strcmp(b, "all") ? DEVICE_CLOCK_ALL : DEVICE_CLOCK_BOTH;
+        return device_settings_set(settings);
+    } else if ((!strcmp(a, "midiout") || !strcmp(a, "clockout")) &&
+               (!strcmp(b, "USB") || !strcmp(b, "BLE") || !strcmp(b, "both"))) {
+        device_settings_t settings = device_settings_get();
+        uint8_t target = !strcmp(b, "USB") ? DEVICE_MIDI_USB :
+                         !strcmp(b, "BLE") ? DEVICE_MIDI_BLE : DEVICE_MIDI_BOTH;
+        if (!strcmp(a, "midiout")) settings.midi_out = target;
+        else settings.clock_out = target;
         return device_settings_set(settings);
     }
     else if (!strcmp(a, "burst") && rt_playing() && atoi(b) > 0 && atoi(b) <= 128) {
@@ -807,6 +821,10 @@ static int proj_expect(const char *what, int *got)
         *got = device_settings_get().sync;
     else if (!strcmp(what, "ext_ports"))
         *got = device_settings_get().ext_ports;
+    else if (!strcmp(what, "midi_out"))
+        *got = device_settings_get().midi_out;
+    else if (!strcmp(what, "clock_out"))
+        *got = device_settings_get().clock_out;
     else if (!strcmp(what, "lights"))
         *got = device_settings_get().lights;
     else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])
