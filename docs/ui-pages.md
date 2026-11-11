@@ -19,7 +19,7 @@ measurements were not part of these checks.
 | LFO CC | Target (read-only) | Cycle (read-only) | Depth (read-only) | Scene (read-only) |
 | SEQ MOTION | Groove | Loop length | Pitch phase | Direction |
 | FX MIDI DELAY | Delay ON/OFF | Time | Feedback | Decay |
-| GLO SETUP | Global root | Sync | External clock input (USB/TRS/BLE and combinations) | Lights |
+| GLO SETUP | Musical root | Sync | External clock input (USB/TRS/BLE and combinations) | Lights |
 | GLO MIDI | Clock output (USB/BLE/both) | Notes/CC output (USB/BLE/both) | Unused | Unused |
 | GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
 | GLO PERFORMANCE | Preset slot | Load/Save/Rename | Position | Character |
@@ -42,7 +42,9 @@ PRESETS clamps in the existing Demo / Full / Ambient order. Turning beyond an
 endpoint leaves the selected preset and seed intact.
 
 Short-pressing the active section cycles its pages; HOME has three, ENV two,
-GLO four (SETUP → MIDI → APPEARANCE → PERFORMANCE).
+GLO four (SETUP → MIDI → APPEARANCE → PERFORMANCE). The GLO help overlay
+uses seven *help cards*, not seven GLO subpages; its heading is explicitly
+labelled `GLO HELP x/7` in the Tangram 1.0 UX pilot.
 Switching away and returning restores that section's last page. Page memory is
 runtime-only and starts at QUICK/TIMING after initialization. Other sections
 have one page. Holding a section for about 1000 ms opens context-sensitive help;
@@ -77,6 +79,13 @@ ordered `1/16, 1/8, 1/8D, 1/4, 5/16, 1/4D, 7/16`. Feedback is strictly
 Existing echoes and active-note offs retain their captured settings/channels.
 
 The existing screen layout, selected-source grid and voice overview are reused.
+In the separate Tangram 1.0 UX pilot, knob-strip rings/pips show the actual
+active parameter in the normal theme focus color, while a brighter second
+marker indicates a differently staged target. The textual value remains the
+requested value; the existing transient NEXT BAR/LOOP/SECTION messages remain.
+This is supported only for controls where actual versus staged values can be
+read reliably from existing state; MIDI-Delay echo generations and other
+per-event state are intentionally not approximated.
 SEQ now shows the source grid; FX shows actual MIDI delay state/time per voice.
 Compact knob labels use K1–K4, with full generator/scale names in screen-reader
 announcements. Preview refresh includes the new project settings. Display and
