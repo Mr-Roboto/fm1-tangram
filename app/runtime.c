@@ -84,7 +84,7 @@ static rt_ev_t rt_nq[RT_NOW] PLAT_POOL;  /* to send at once, before the queue */
 static struct {
     /* the main loop's */
     bl_tick_t head, origin;              /* the render head; where the running engine's tick 0 sits */
-    uint8_t has_next, stop_queued, ext, clock_out;
+    uint8_t has_next, stop_queued, ext, clock_out, out_ports;
     uint8_t fresh;                       /* the engine is not rt_proj's yet (none since it came stopped): its preview */
     uint8_t muted;                       /* mutedVoices: a bit per BL_VID_ */
     uint8_t chan[BL_NVIDS];              /* channelMap by BL_VID_, RT_NONE: none */
@@ -210,8 +210,8 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
 {
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
     uint8_t *k = &rt.snd[st & 15u][n];
-    /* Mirror the exact timed MIDI stream to both USB and a connected BLE-MIDI host. */
-    plat_midi_send(pkt, TO_USB | TO_BLE);
+    /* Notes, CC and internally generated Clock/Start/Stop share one output route. */
+    plat_midi_send(pkt, rt.out_ports);
     rt.sent_ms = plat_ms();
     if ((st & 0xF0u) == 0x90u)
         *k = 1;
@@ -731,6 +731,7 @@ void rt_init(void)                       /* the Full ensemble until the saved pr
     rt.pend_bpm = -1;
     rt.swap_tick = rt.tempo_tick = rt.stop_at = -1;
     rt.ext_ports = 1u << PORT_USB | 1u << PORT_TRS;
+    rt.out_ports = TO_USB | TO_BLE;
     bl_template(BL_TPL_FULL, &rt_proj);
     rt_channels(&rt_proj);
     rt.bpm = rt_proj.bpm;
@@ -1098,6 +1099,19 @@ int rt_apply_clock_settings(int ext, int ports)
         }
     }
     rt.ext_ports = (uint8_t)ports;
+    plat_unlock(f);
+    return 0;
+}
+
+int rt_apply_output_settings(int output_mask)
+{
+    if (!output_mask || (output_mask & ~(TO_USB | TO_BLE))) return -1;
+    uint32_t f = plat_lock();
+    if (rt.out_ports != output_mask && (rt.playing || rt.start_req)) {
+        plat_unlock(f);
+        return -1;
+    }
+    rt.out_ports = (uint8_t)output_mask;
     plat_unlock(f);
     return 0;
 }
