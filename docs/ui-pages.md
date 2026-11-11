@@ -110,6 +110,10 @@ The latest selection replaces the preceding pending form, and returning to
 the already-active form cancels the pending change. With Composer disabled,
 live FORM edits are refused. The engine does not restart and existing note
 ownership, phase, delay tails and snapshots are retained.
+Verified on FM-1 hardware (11 November 2026): live FORM switching and section
+navigation work while playing, with no reported playback interruption. When
+PLAY is stopped, the original START section selected while stopped is still
+the next PLAY's starting point; live section choices do not overwrite it.
 Composer details are in [composer.md](composer.md). Global theme changes do not
 change musical project/slot formats, engine behavior or MIDI scheduling.
 
