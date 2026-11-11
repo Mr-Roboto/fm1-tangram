@@ -326,8 +326,8 @@ static void convergence_text(int64_t period, char *t, int words)
  * is shown (and a second line under it) */
 enum { CELL_RING, CELL_PIPS, CELL_TEXT };
 typedef struct {
-    uint8_t kind;
-    int16_t lo, hi, v;
+    uint8_t kind, queued;          /* queued: current value differs from a staged edit */
+    int16_t lo, hi, v, active_v; /* v: selected target; active_v: sounding value */
     char val[24], sub[24];
 } cell_t;
 static const char *const FORM_SHORT[] = {"CUSTOM", "CLASSIC", "SLOW", "PLATEAU"};
@@ -710,6 +710,53 @@ static void cell(int view, int i, cell_t *c)
         break;
     default:
         break;
+    }
+}
+
+/* A visual-only comparison: the parameter strip retains its staged textual
+ * value, but shows the active marker in the theme's normal focus color and
+ * the requested marker in the brighter text color. No change in scheduling,
+ * storage, MIDI or the actual knob value. Only parameter-level differences
+ * are marked; an unrelated pending voice edit does not light up this cell. */
+static int cell_active_value(int k, const cell_t *c)
+{
+    if (!rt_playing()) return c->v;
+    const bl_live_t *e = rt_engine();
+    const bl_voice_t *v = sel_material();
+    const bl_vconfig_t *a = v ? &v->config : NULL;
+    if (a) switch (k) {
+    case KN_VDENSITY: return 100 - a->density_cut;
+    case KN_GENERATOR: return a->gen.kind;
+    case KN_VROOT: return a->key.root;
+    case KN_SCALE: return a->key.scale.mode;
+    case KN_DIRECTION: return a->gen.direction;
+    case KN_GROOVE: return a->gen.groove;
+    case KN_RATE: return a->gen.a == 240;
+    case KN_GATE: return a->gen.b;
+    case KN_LOOP: return clamp((int32_t)(a->length / STEP_TICKS), 1, 16);
+    case KN_PHASE: return a->phase;
+    case KN_REGISTER: return a->reg_low;
+    case KN_DRUM_PARTS: return bl_drum_parts(a->gen.direction);
+    case KN_DRUM_GROOVE:
+        return a->gen.groove == BL_DRUM_SPARSE ? 1 :
+            a->gen.groove == BL_DRUM_DRIVE ? 3 : 2;
+    default: break;
+    }
+    switch (k) {
+    case KN_COMPOSER: return e->project.composer.enabled;
+    case KN_COMP_BARS: return e->project.composer.bars / 4;
+    case KN_COMP_EVOLUTION: return e->project.composer.evolution;
+    case KN_COMP_TENSION: return e->project.composer.tension;
+    case KN_FORM: {
+        const bl_arrcfg_t *aform = e->project.has_arr ? &e->project.arr : &bl_arr_classic;
+        const bl_arrcfg_t *const forms[] = {0, &bl_arr_classic, &bl_arr_slow, &bl_arr_ambient};
+        for (int j = FORM_CLASSIC; j <= FORM_AMBIENT; j++)
+            if (aform->ambient == forms[j]->ambient && aform->reprise == forms[j]->reprise &&
+                aform->min_bars == forms[j]->min_bars && aform->max_bars == forms[j]->max_bars)
+                return j;
+        return c->v;
+    }
+    default: return c->v;
     }
 }
 
