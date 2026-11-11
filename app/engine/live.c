@@ -403,6 +403,23 @@ int bl_live_set_composer(bl_live_t *e, const bl_compcfg_t *cfg, bl_tick_t reques
     return bl_live_enqueue(e, &a, request);
 }
 
+/* Do not replace the engine or reinitialize Composer. Only the latest knob
+ * choice is remembered; the outgoing section plays to its natural boundary. */
+int bl_live_set_form(bl_live_t *e, int form)
+{
+    if (form < 1 || form > 3 || !e->project.composer.enabled || e->stop >= 0)
+        return -1;
+    const bl_arrcfg_t *target = form == 1 ? &bl_arr_classic :
+        form == 2 ? &bl_arr_slow : &bl_arr_ambient;
+    const bl_arrcfg_t *active = e->project.has_arr ? &e->project.arr : &bl_arr_classic;
+    /* Returning the knob to the active form cancels the pending transition. */
+    e->composer.pending_form =
+        active->ambient == target->ambient && active->reprise == target->reprise &&
+        active->min_bars == target->min_bars && active->max_bars == target->max_bars ?
+        0 : (uint8_t)form;
+    return 0;
+}
+
 int bl_live_select_composer_stage(bl_live_t *e, int section, bl_tick_t request)
 {
     if (section < 0 || section >= 7 || !e->project.composer.enabled || e->stop >= 0) return -1;
@@ -1166,6 +1183,30 @@ static void composer_development(bl_live_t *e, bl_tick_t tick)
     }
 }
 
+/* Commit only on entering a new section. Rephrase its upcoming dwell, not
+ * the departing section, and preserve the running engine's notes, patterns,
+ * phase, harmony, motif RNG, theme and manual/LOCK ownership. */
+static const bl_arrcfg_t *composer_target_form(const bl_live_t *e)
+{
+    return e->composer.pending_form == 1 ? &bl_arr_classic :
+        e->composer.pending_form == 2 ? &bl_arr_slow :
+        e->composer.pending_form == 3 ? &bl_arr_ambient : composer_form(e);
+}
+static void composer_commit_form(bl_live_t *e, int cycle_rephrased)
+{
+    if (!e->composer.pending_form) return;
+    const bl_arrcfg_t *form = composer_target_form(e);
+    e->project.has_arr = 1;
+    e->project.arr = *form;
+    /* The original AUTO handover remains separate from the Composer owner. */
+    uint8_t legacy_on = e->composer.legacy_enabled;
+    e->composer.legacy_form = *form;
+    e->composer.legacy_form.enabled = legacy_on;
+    e->composer.pending_form = 0;
+    /* The Composer already drew a new unit at OUTRO -> INTRO. Never draw twice. */
+    if (!cycle_rephrased) bl_comp_rephrase(&e->composer, form);
+}
+
 static void composer_boundary(bl_live_t *e, bl_tick_t tick, int created)
 {
     int changed = 0, advanced = 0;
@@ -1176,6 +1217,7 @@ static void composer_boundary(bl_live_t *e, bl_tick_t tick, int created)
     }
     int selected = e->composer.enter_pending;
     if (selected) {
+        composer_commit_form(e, 0); /* manual section jump also enters a new section */
         e->composer.enter_pending = 0;
         for (int i = 0; i < e->project.nvoices; i++) composer_cancel_voice(e, i);
         composer_section(e, tick);
@@ -1186,13 +1228,19 @@ static void composer_boundary(bl_live_t *e, bl_tick_t tick, int created)
     while (e->has_arr && !selected && e->nadv && e->adv[0] <= tick) {
         e->nadv--;
         memmove(&e->adv[0], &e->adv[1], (size_t)e->nadv * sizeof e->adv[0]);
-        (void)bl_comp_tick(&e->composer, composer_form(e), 1);
+        int last = e->composer.section == 6;
+        (void)bl_comp_tick(&e->composer, composer_target_form(e), 1);
+        composer_commit_form(e, last);
         composer_section(e, tick);
         changed = advanced = 1;
     }
     if (e->has_arr && !selected && !advanced && !created && tick > e->composer.started_at) {
-        changed = bl_comp_tick(&e->composer, composer_form(e), 0);
-        if (changed) composer_section(e, tick);
+        int last = e->composer.section == 6;
+        changed = bl_comp_tick(&e->composer, composer_target_form(e), 0);
+        if (changed) {
+            composer_commit_form(e, last);
+            composer_section(e, tick);
+        }
     }
     if (changed || (e->has_arr && e->composer.cfg.evolution >= 2 && e->composer.bars_in_section &&
         !(e->composer.bars_in_section % 8))) composer_development(e, tick);
