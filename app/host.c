@@ -819,6 +819,19 @@ static int proj_expect(const char *what, int *got)
                VOICE_KNOB[2] == KN_VDENSITY && VOICE_KNOB[3] == KN_COMP_TENSION;
     else if (!strcmp(what, "ux_fx_pages"))
         *got = VIEW_PAGES[V_DELAY];
+    else if (!strcmp(what, "ux_lfo_target_order"))
+        *got = LFO_TARGET_ORDER[4] == LFO_DEST_CUTOFF &&
+               LFO_TARGET_ORDER[5] == LFO_DEST_RESONANCE &&
+               LFO_TARGET_ORDER[6] == LFO_DEST_DECAY;
+    else if (!strcmp(what, "ux_pan_bipolar")) {
+        char left[24], center[24], right[24], mid[24];
+        midi_pan_text(0, left);
+        midi_pan_text(64, center);
+        midi_pan_text(127, right);
+        midi_pan_text(65, mid);
+        *got = !strcmp(left, "-64") && !strcmp(center, "0") &&
+               !strcmp(right, "+64") && !strcmp(mid, "+1");
+    }
     else if (!strcmp(what, "ux_fx_is_mixer"))
         *got = ui.view == V_DELAY && !strcmp(view_name(V_DELAY), "FX MIXER");
     else if (!strcmp(what, "ux_lfo_target") ||
@@ -846,6 +859,12 @@ static int proj_expect(const char *what, int *got)
         *got = PERFORMANCE_BANK_BYTES;
     else if (!strcmp(what, "ux_bank_slot1"))
         *got = performance_preset_used(1);
+    else if (!strcmp(what, "ux_bank_slot3"))
+        *got = performance_preset_used(3);
+    else if (!strcmp(what, "ux_perf_slot"))
+        *got = ui.perf_slot + 1;
+    else if (!strcmp(what, "ux_perf_last_saved_slot"))
+        *got = performance_preset_last_slot();
     else if (!strcmp(what, "ux_bank_flash_bytes")) {
         static uint8_t probe[PLAT_STORE_MAX];
         *got = plat_store_load(OBJ_PERFORMANCE_PRESETS, probe, sizeof probe);
