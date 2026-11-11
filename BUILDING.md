@@ -79,18 +79,23 @@ independent MIDI/clock output masks, rejected edits while busy,
 11-byte format-4 persistence, migration and retry behavior. The host
 simulator build also completed on that date.
 
-For the **new** Global MIDI simulator scenario (not yet executed at the
-time this document was written):
+To run the **focused Tangram BLE simulator smoke gate** (added 11 November
+2026; not yet executed as of this documentation update):
 
 ```sh
-./build.sh --host
-mkdir -p app/build/scenarios/ble_global
-./app/build/host/tangram_host tests/scenarios/ble_global.bln app/build/scenarios/ble_global
+sh tests/run_tangram_smoke.sh
 ```
 
-Expected: exit code 0, no `FAIL` / `EXPECTATIONS FAILED` lines. Two
-PNG previews are placed under `app/build/scenarios/ble_global/`.
-This checks simulated GLO navigation and settings persistence only.
+It runs the standalone device-settings regression, builds the host simulator,
+then executes `ble_global.bln` (GLO page, persisted outputs) and
+`ble_routing.bln` (simulated USB/BLE note/clock output and external BLE
+Start/Stop). It exits nonzero on a failing check, prints the scenario log,
+and leaves the logs at `app/build/scenarios/{ble_global,ble_routing}/run.log`.
+The Global scenario also writes two PNG previews. **Do not confuse a
+simulator pass with a measured physical BLE clock test.**
+
+Expected terminal line:
+`Tangram BLE smoke tests passed (host simulation only).`
 
 **Legacy test-suite caveat:** `tests/run_tests.sh` and
 `tests/host/project_test.c` still contain historical Berlinan/
