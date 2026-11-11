@@ -68,7 +68,7 @@ tap PLAY
 expect playing 0
 
 # v1 bank upgrade: old flash must remain untouched at boot; an explicit
-# user edit migrates the occupied slot and writes the new 3958-byte bank.
+# user edit migrates the occupied slot and writes the new 3748-byte bank.
 legacybank
 expect ux_bank_flash_bytes 3258
 reboot
