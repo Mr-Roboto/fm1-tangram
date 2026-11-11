@@ -26,24 +26,21 @@ flash layout or the already accepted UX phase-1 baseline.
    Presets on hardware during the next few days. This is not a task for
    firmware code to invent. The bank has 10 slots with 12 printable ASCII
    characters per preset name; keep names at or under 12 bytes.
-2. **Explicit `INIT` action.** The current GLO PERFORMANCE operation list
-   in `app/ui.c` is strictly `LOAD / SAVE / RENAME`; it does **not**
-   contain `INIT`. `performance_presets_init()` in
-   `app/performance_presets.c` is *internal startup bank loading* and
-   must not be confused with a selectable slot operation. The requested
-   fourth action should be implemented only with precise, tested per-slot
-   semantics, a confirmation before destructive writes, stopped/idle
-   gating, and preservation of every other slot and the current working
-   project. Define whether INIT restores a named factory performance or
-   a neutral initialized preset before implementing either behavior;
-   these two meanings are not interchangeable.
+2. **Optional working-Preset INIT (clarified).** The user's INIT idea is
+   for resetting the **current performance configuration** to a fresh
+   initialized working preset that can subsequently overwrite any of
+   the ten occupied slots. It was NOT a request to delete an individual
+   stored slot. The existing GLO PERFORMANCE operations remain LOAD / SAVE /
+   RENAME; there is no user INIT command yet. Do not add a destructive
+   slot-delete or slot-reset action on the basis of this discussion.
+   Treat an eventual INIT workflow as a separate, optional UX decision.
 3. **Factory provisioning.** The existing `TGPB` bank is stored as a
    separate persistent flash object. Merely storing four slots on the
    developer's FM-1 does **not** embed them in a downloadable firmware.
    Provide a reproducible, tested way to include the agreed factory
    music in a clean-device release. Never blindly rewrite the existing
    preset bank on firmware upgrades. Test clean install, upgrade with
-   existing user presets, overwrite/rename/INIT, stop/idle restrictions,
+   existing user presets, overwrite/rename, stop/idle restrictions,
    preservation of slots and project on failed writes, and format
    compatibility. Do not assume a firmware update always preserves flash
    objects; verify the real installer and device path.
@@ -69,6 +66,4 @@ flash layout or the already accepted UX phase-1 baseline.
 - Shipping copyrighted musical compositions as presets; the musical presets
   will be the user's own configurations.
 
-**Current implementation status:** planning only; INIT UI, factory preset
-seeding, and 3–4 musical presets have **not** been implemented by this
-document.
+**Current implementation status:** GLASSFACE is the chosen first preset name, but its musical configuration and the other planned presets have not yet been embedded as factory content. INIT is optional and absent. The LFO edit / FX MIXER exception is being developed separately on `dev/tangram-1.0-midi-controls`; no public 1.0 release has occurred.
