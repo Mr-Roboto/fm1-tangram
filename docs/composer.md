@@ -21,7 +21,7 @@ HOME cycles QUICK → PLAY → COMPOSE. QUICK/PLAY mappings remain unchanged.
 | COMPOSE encoder | Function |
 | --- | --- |
 | K1 | Composer OFF/ON at the next engine bar boundary |
-| K2 | CLASSIC, SLOW BUILD or AMBIENT form; stopped: now; while Composer plays: next section |
+| K2 | DEFAULT (implicit Classic Arc) until a form is selected; CLASSIC, SLOW BUILD or AMBIENT form; stopped: now; while Composer plays: next section |
 | K3 | Phrase unit: AUTO or 4–64 bars, in increments of four |
 | K4 | Composer Evolution: OFF, GENTLE, MOVING, ACTIVE |
 
