@@ -14,7 +14,7 @@ measurements were not part of these checks.
 | HOME PLAY | Direction | Groove | Delay ON/OFF | Delay time |
 | HOME COMPOSE | Composer ON/OFF (NEXT BAR) | Form (stopped: immediate; PLAY: next section) | Phrase bars (config NEXT BAR; section length on next section) | Evolution (NEXT BAR) |
 | ENV TIMING | Rate | Gate | Loop length | Pitch phase |
-| ENV ROUTING | MIDI channel | Register | Voice density | Composer tension |
+| ENV VOICE | MIDI channel | Register | Voice density | Composer tension |
 | ARP HARMONY | Generator | Root | Scale | Direction |
 | LFO CC | Target (read-only) | Cycle (read-only) | Depth (read-only) | Scene (read-only) |
 | SEQ MOTION | Groove | Loop length | Pitch phase | Direction |
@@ -34,7 +34,7 @@ playback, section changes reset PART only. Silence/density zero still counts. Pr
 and stopped time do not. See [Composer counter semantics and reset conditions](composer.md#playback-counters).
 
 Heartbeat exceptions: HOME QUICK keeps K3 PARTS / K4 drum GROOVE; ARP HARMONY
-disables K2 Root / K3 Scale and ALGORITHM; ENV ROUTING disables K2 Register.
+disables K2 Root / K3 Scale and ALGORITHM; ENV VOICE disables K2 Register.
 The hidden controls do not edit voice or global pitch settings. Melodic
 voices retain the mappings above. See [Heartbeat drums](heartbeat.md).
 
