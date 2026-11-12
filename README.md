@@ -103,7 +103,7 @@ The interface is organized into the FM-1's existing sections. Some sections have
 | **ARP** | Generator, harmony and direction controls |
 | **LFO** | Editable per-voice MIDI CC LFO (target, cycle, depth, center) and independent scene information |
 | **SEQ** | Musical motion, groove and loop-related controls |
-| **FX** | MIDI DELAY and second FX MIXER page (CC7 volume, CC10 pan, CC74 filter brightness, CC71 resonance) |
+| **FX** | MIDI DELAY and FX MIXER: CC7 volume, bipolar CC10 pan, CC74 cutoff, CC71 resonance (default readouts 100 / 0 / 70 / 30) |
 | **GLO** | Global SETUP, MIDI routing, APPEARANCE and PERFORMANCE (experimental BLE branch) |
 
 The **MASTER** control adjusts global musical density rather than audio volume. Each voice also has its own density setting; when Composer is active, section activity contributes another factor. Musical transport and phases continue even when new notes are suppressed.
