@@ -45,7 +45,7 @@ typedef struct {
     uint8_t ncc;
     const char *cc_name[2];
     uint8_t cc_num[2];
-    uint8_t mixer_mask, mixer_value[4];  /* per-voice CC7/10/74/75, on selected MIDI channel */
+    uint8_t mixer_mask, mixer_value[4];  /* per-voice CC7/10/74/71, on selected MIDI channel */
     bl_delay_t delay;             /* output effect; zero fields retain OFF / 3/16 / 75% / 70% defaults */
     uint8_t has_config;          /* 0: preserve the template's original materialization */
     bl_vconfig_t config;         /* explicit initial musical settings when has_config */
