@@ -41,6 +41,11 @@ Older firmware is not assumed capable of reading newer saved records.
 
 The bank remains a separate CRC-protected persistent flash object with
 **ten independently named slots** of at most twelve ASCII bytes each.
+The v2 bank header byte 7 is an optional last-saved slot selector: 0 means
+legacy/default slot 01, 1..10 means the last committed named SAVE. This
+changes only the selected GLO PERFORMANCE slot at boot; it does not
+load a working preset or write flash while browsing. The v2 header prefix
+(first seven bytes) remains unchanged and old v2 banks with zero are valid.
 
 | Bank version | Embedded project | Entry (occupied+name+record) | Entire bank |
 | --- | --- | --- | --- |
