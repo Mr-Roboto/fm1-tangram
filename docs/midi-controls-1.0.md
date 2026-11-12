@@ -17,7 +17,7 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 - MIDI CCs are channel-scoped. Several Tangram voices mapped to a
   shared MIDI channel cannot have independent CC volumes/filters.
   A downstream synth may ignore or remap any optional sound CC.
-- Provide 0–127 parameter values; PAN center 64.
+- MIDI wire values remain 0–127. The PAN *display* and ring are bipolar: CC64 reads 0 at center, CC0 reads -64 and CC127 reads +64. Because MIDI has 128 values and this signed labeling has 129 integer positions, one intermediate positive label is skipped by rounding. Volume starts at 100; cutoff displays 70; resonance displays 30. These defaults are readouts, **not automatically transmitted** until a knob is moved or explicitly saved values are restored on PLAY.
 - Keep working-project saving and ten Performance Presets, including
   optional backward reading of old-format banks, rather than adding transient-only
   controls that disappear when powered off.
@@ -48,7 +48,13 @@ modified. This is an explicit *pre-1.0 feature exception*, not version 1.1.
 - CC74 from a mixer knob may be overridden by an active LFO on CC74
   or a template scene morph. Do not claim independent filtering.
 
-## Implementation checkpoint (not yet tested)
+## Hardware observations and UX correction (12 November 2026)
+
+User hardware feedback on the installed first MIDI-controls build: the LFO target/cycle/depth/center controls and the second FX MIXER page are operational; the target synth (Korg iM1) visibly receives MIDI CC, but no confirmed parameter response. The iM1's Control Change MIDI Filter **ON blocks CC**; its global and per-timbre filtering need checking before attributing the absence of sound changes to Tangram. This is not an accepted synthesis-side CC response test.
+
+The subsequent source revision (not yet tested/built/flashed) changes ONLY the mixer initial display values to 100 / CC64-centered 0 / 70 / 30, renders PAN as a bipolar ring, and orders LFO choices FILTER -> RESONANCE -> DECAY without changing stored format-9 target IDs. The ten-slot bank v2 now stores the **last successfully saved slot number** in its previously reserved header byte (0=legacy default; 1..10=last stored). GLO PERFORMANCE restores only that slot *selection* at boot, never silently loads it. Browsing and boot incur no new flash writes. The physical SAVE LED still indicates deferred working-project SAVE; the selected named Performance Preset is confirmed using the existing blinking SELECT LED after required name entry.
+
+## Implementation checkpoint (host acceptance from previous build)
 
 The development branch now contains: new LFO K1–K4 editors, the second FX MIXER page, immediate channel CC output (0–127), per-project persisted values, project-record format 9 (382 bytes), 3748-byte losslessly packed ten-slot bank v2 (49-byte extension per preset), backward readers for project format 8 and bank v1, and a new host regression scenario covering simulated CC messages, project SAVE/reboot and legacy bank migration.
 
