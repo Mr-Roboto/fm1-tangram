@@ -19,7 +19,7 @@ measurements were not part of these checks.
 | LFO EDIT | CC Target (OFF/1/11/10/71/74/75) | Cycle (0.5–64 bars) | Depth (0–100%) | Center (0–100%) |
 | SEQ MOTION | Groove | Loop length | Pitch phase | Direction |
 | FX MIDI DELAY | Delay ON/OFF | Time | Feedback | Decay |
-| FX MIXER | Volume CC7 | Pan CC10 | Cutoff CC74 | Resonance CC71 |
+| FX MIXER | Volume CC7 (100 default) | Bipolar Pan CC10 (center 0, -64..+64) | Cutoff CC74 (70 default) | Resonance CC71 (30 default) |
 | GLO SETUP | Musical root | Sync | External clock input (USB/TRS/BLE and combinations) | Lights |
 | GLO MIDI | Clock output (USB/BLE/both) | Notes/CC output (USB/BLE/both) | Unused | Unused |
 | GLO APPEARANCE | Global theme | Retry failed global save | Unused | Unused |
