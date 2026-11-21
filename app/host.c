@@ -1142,9 +1142,45 @@ static int rt_expect(const char *what, int *got)   /* the transport's, under the
     return ok;
 }
 
+/* Find a deterministic legacy STRING TRIO pattern containing root and
+ * octave-root in both plucks. Inspect SOURCE degrees only, not rendered
+ * pitches, so this fixture cannot silently adapt to a broken resolver. */
+static int pitch_fixture(void)
+{
+    static bl_project_t source;
+    static bl_state_t state;
+    bl_template(BL_TPL_DEMO, &source);
+    for (uint64_t seed = 1; seed < 1024; seed++) {
+        source.seed = seed;
+        if (bl_initial_state(&source, &state)) return -1;
+        int all = 1;
+        for (int v = 0; v < 2; v++) {
+            int root = 0, octave = 0;
+            for (int i = 0; i < state.v[v].pat.n; i++) {
+                const bl_pitch_t p = state.v[v].pat.note[i].pitch;
+                if (!p.degree && !p.accidental) {
+                    root |= p.octave == 0;
+                    octave |= p.octave == 1;
+                }
+            }
+            all &= root && octave;
+        }
+        if (all) {
+            printf("  pitch fixture seed %llu\n", (unsigned long long)seed);
+            return template_seeded(BL_TPL_DEMO, seed);
+        }
+    }
+    return -1;
+}
+
 int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d)
 {
-    if (!strcmp(cmd, "selfrender"))
+    if (!strcmp(cmd, "pitchfixture")) {
+        if (pitch_fixture()) {
+            printf("FAIL pitchfixture: no deterministic seed\n");
+            dump_bad++;
+        }
+    } else if (!strcmp(cmd, "selfrender"))
         selfrender(a, b);
     else if (!strcmp(cmd, "selfscript"))
         selfscript(a);
