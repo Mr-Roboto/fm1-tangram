@@ -8,6 +8,8 @@
 
 FM-Tangram is a standalone, performance-oriented MIDI sequencer and generative composition environment for the **M-VAVE FM-1**. It combines independently evolving voices, musical patterns, rhythmic variation and a multi-stage Composer to create long-form electronic performances directly on the hardware — without a computer in the performance workflow.
 
+![Tangram 1.0 HOME screen — CLASSIC theme, default String Trio project](docs/img/tangram-home.png)
+
 **Tangram is MIDI-only.** It generates no audio and has no internal synthesizer. Connect a synthesizer, drum machine, sampler or MIDI-compatible software instrument to hear its output. The BLE test branch supports configurable USB and Bluetooth MIDI outputs and external clock input over USB, TRS or BLE.
 
 > **Development status — 11 November 2026:** Stable musical work is preserved on [`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram). The isolated [`dev/tangram-ble-midi-spike`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram-ble-midi-spike) branch built successfully and was installed on an FM-1. **User-confirmed hardware acceptance:** four GLO pages, BLE connection status, BLE MIDI notes to Korg iM1 on iPad, persistence after restart, internal MIDI clock sent over BLE, external BLE clock input, simultaneous USB/BLE operation, and reconnection. The Composer live FORM change was separately confirmed on hardware. The focused host smoke suite passed. Extended soak testing, exhaustive combinations, and quantified clock-jitter/latency measurements remain outside this acceptance.
