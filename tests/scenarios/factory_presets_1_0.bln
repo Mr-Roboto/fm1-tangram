@@ -44,16 +44,50 @@ expect bpm_proj 112
 expect form 1
 expect density_pct 90
 
-# A user SAVE wins against the supplied starter, survives reboot and
-# persists the other available factory presets in the existing TGPB bank.
+# Simulate upgrading a device with existing user material in slots 01 and 06.
+# Occupied slots 01-04 are deliberately replaced once by factory starters.
+# Slots 05-10 stay as they were; no repeated replacement on later reboot.
 proj template full 0xABCDEF12
 perfstore 1
-expect ux_bank_flash_bytes 3748
+perfstore 6
+expect ux_bank_slot6 1
+expect ux_bank_flash_version 3
+
+# Host-only old-bank fixture: same 3748-byte content with historical v2 header.
+v2bank
+expect ux_bank_flash_version 2
 reboot
 wait 10
+expect ux_bank_flash_version 3
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
-expect ux_bank_flash_bytes 3748
+expect ux_bank_slot6 1
 perfload 1
+expect tpl 0
+expect bpm_proj 110
+perfload 2
+expect tpl 2
+expect bpm_proj 72
+perfload 3
+expect tpl 1
+expect bpm_proj 115
+perfload 4
+expect tpl 0
+expect bpm_proj 112
+perfload 6
+expect tpl 1
+expect bpm_proj 96
+
+# After upgrade the bank is v3. A subsequent explicit user STORE in slot 1
+# must survive a second reboot (factory material is not reinstalled every boot).
+proj template full 0xABCDEF34
+perfstore 1
+reboot
+wait 10
+expect ux_bank_flash_version 3
+perfload 1
+expect tpl 1
+expect bpm_proj 96
+perfload 6
 expect tpl 1
 expect bpm_proj 96
