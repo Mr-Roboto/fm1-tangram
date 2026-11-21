@@ -826,6 +826,33 @@ static int proj_expect(const char *what, int *got)
         if (proj_get_voice_config(index, &cfg)) return 0;
         *got = cfg.reg_low;
     }
+    else if (!strcmp(what, "ux_octave_shift_exact")) {
+        /* Test the actual note resolver + fold against the original Berlinan
+         * template, not merely the advertised REGISTER bounds. */
+        bl_project_t before, after;
+        bl_template(proj.tpl, &before);
+        proj_to_engine(&after);
+        *got = before.nvoices == after.nvoices;
+        for (int i = 0; *got && i < after.nvoices; i++) {
+            const bl_vcfg_t *a = &before.voice[i], *b = &after.voice[i];
+            if (a->gen.kind == BL_GEN_HEARTBEAT) {
+                *got = a->ref_c == b->ref_c &&
+                       a->reg_low == b->reg_low && a->reg_high == b->reg_high;
+                continue;
+            }
+            int lo = proj.voice_configured[i] ? proj.voice_config[i].reg_low : b->reg_low;
+            int hi = proj.voice_configured[i] ? proj.voice_config[i].reg_high : b->reg_high;
+            for (int octave = -1; *got && octave <= 1; octave++)
+                for (int degree = -6; *got && degree <= 7; degree++) {
+                    bl_pitch_t pitch = {degree, octave, 0};
+                    int old_note = bl_fold(a->reg_low, a->reg_high,
+                        bl_resolve(&after.key, pitch, a->ref_c));
+                    int tuned_note = bl_fold((uint8_t)lo, (uint8_t)hi,
+                        bl_resolve(&after.key, pitch, b->ref_c));
+                    if (tuned_note != old_note + 12) *got = 0;
+                }
+        }
+    }
     else if (!strcmp(what, "ux_env_timing_unchanged"))
         *got = VIEW_KNOB[V_VOICE][0] == KN_RATE && VIEW_KNOB[V_VOICE][1] == KN_GATE &&
                VIEW_KNOB[V_VOICE][2] == KN_LOOP && VIEW_KNOB[V_VOICE][3] == KN_PHASE;
