@@ -38,3 +38,23 @@ reboot
 expect ext_ports 7
 expect midi_out 3
 expect clock_out 2
+
+# CLOCK OUT OFF: intentional silence on realtime USB/BLE, without muting notes.
+rt midiout USB
+rt clockout off
+expect midi_out 1
+expect clock_out 0
+wait 350
+reboot
+expect midi_out 1
+expect clock_out 0
+rt play
+wait 600
+expect playing 1
+expect midi_sent_usb >0
+expect midi_realtime_usb 0
+expect midi_realtime_ble 0
+rt stop
+wait 30
+expect midi_realtime_usb 0
+expect midi_realtime_ble 0
