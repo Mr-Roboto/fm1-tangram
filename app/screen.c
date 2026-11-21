@@ -1555,8 +1555,7 @@ static void voice_title(const felucca_font_t *f, int32_t y)
     if (ui.view == V_VOICE) {
         int pitch = rt_last_pitch(vid);
         if (pitch >= 0) {
-            char midi[16];
-            strcpy(midi, "MIDI ");
+            char midi[16] = "MIDI ";
             cat_u(midi, (uint32_t)pitch);
             int w = text_w(&FONT_T, midi) + 6;
             if (x - w >= 105) {
