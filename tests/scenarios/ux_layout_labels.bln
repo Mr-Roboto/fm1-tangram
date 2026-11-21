@@ -9,3 +9,19 @@ tap ENV
 expect ux_env_is_voice 1
 tap ENV
 expect ux_env_is_voice 0
+
+# A selected melodic voice must offer K2 REGISTER and move exactly one octave
+# per encoder step, without touching its note-generation pitch offsets.
+tap ENV
+expect ux_env_is_voice 0
+tap ENV
+expect ux_env_is_voice 1
+expect ux_register_k2_available 1
+expect ux_register_low 55
+expect ux_register_high 79
+turn K2 1
+expect ux_register_low 67
+expect ux_register_high 91
+turn K2 -1
+expect ux_register_low 55
+expect ux_register_high 79
