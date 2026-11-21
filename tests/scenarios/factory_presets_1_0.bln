@@ -85,3 +85,30 @@ perfload 1
 expect tpl 1
 expect bpm_proj 96
 expect ux_bank_slot6 0
+
+# STRING TRIO regression: actual wire output, not just range math.
+# The fixture finds a seed with BOTH root and octave-root in both source
+# patterns. MIDI 69 and 81 must each be dispatched on channels 1 and 2.
+pitchfixture
+expect dumpbad 0
+expect ux_register_low 55
+expect ux_register_high 84
+proj ratchet 0
+rt midiout USB
+rt clockout off
+dumpmidi app/build/scenarios/factory_presets_1_0/pitch_wire.txt
+tap PLAY
+wait 3100
+expect playing 1
+dumpcount 90 45 *
+expect dumpcount >0
+dumpcount 90 51 *
+expect dumpcount >0
+dumpcount 91 45 *
+expect dumpcount >0
+dumpcount 91 51 *
+expect dumpcount >0
+expect ux_last_pitch_matches_wire 1
+tap PLAY
+expect playing 0
+dumpmidi
