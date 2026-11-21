@@ -41,24 +41,24 @@ Each starter uses a fixed, distinct seed to enable reproducible material. Slots 
 - BASS: 13-step ARP, 1/16, DOWN, pitch phase 1, 55%.
 - Neither Composer nor Arranger changes the form: phase shifts follow the independent loop lengths. No MIDI delay is imposed, preserving note timing.
 
-## Data and upgrade behavior
+## Storage
 
-The four factory starters are ordinary, editable format-9 Performance Preset records in the existing ten-slot TGPB bank. TGPB-v3 changes the bank header version only; its packed 3748-byte layout and flash allocation remain identical to v2. No project-format or flash-map revision is intended.
+There is one Performance Bank format: **1**. Incompatible development
+banks are discarded. Four factory starters occupy slots 01–04; slots
+05–10 are empty. Subsequent explicit SAVE and RENAME edits persist.
+There is no migration of previous bank formats. Global settings, the
+working project and snapshots remain separate.
 
-- On the **first boot with an existing v1 or v2 bank**, all ten old user presets are intentionally discarded. Slots 01–04 receive the four factory starters; slots 05–10 become empty.
-- The bank is validated, converted to v3 and committed exactly once through the existing A/B flash store. This first-upgrade boot intentionally **writes flash**; a failure is returned rather than falsely marking the migration complete.
-- Later boots with a valid v3 bank do not replace slots 01–04 again. Explicit user SAVE/RENAME edits are durable and take precedence from then on.
-- On a genuinely empty/uninitialized bank the four starters are initially constructed in RAM; there is no boot flash write until an explicit SAVE/RENAME.
-- Loading a factory starter requires stopped/idle transport, as with any Performance Preset.
-- Device-global routing, BLE, clock setup, display settings, snapshot slots and external synth patches are unchanged.
-- No automatic loading of factory slot contents is added. The separate existing startup behavior is left untouched.
+## Pitch recovery
 
-## Validation gate before 1.0
+Global +12-semitone changes have been removed. PLUCK 1's default upper
+register limit is MIDI 84 rather than 79, so the A-root (69) and its octave
+(81) are not folded into the same note. Other voices and explicit user
+register choices are unchanged. ENV displays the most recent original
+MIDI Note-On number; the pattern strip uses the effective voice key,
+reference and register fold. The focused host scenario captures the wire
+output of both plucks and checks that both octave notes actually occur.
 
-1. Review the fixed preset parameters and confirm all four factory records survive format-9 serialize/compact/unpack/read roundtrips.
-2. Run **only the focused host smoke**: `sh tests/run_tangram_factory_presets.sh` (builds host simulator only; no AC79 firmware or hardware flashing).
-3. Confirm that a **populated v2 bank** loses all ten previous entries, gains factory slots 01–04, leaves 05–10 empty, and persists version 3 on first boot. Verify later user edits survive reboot and the factory installation does not repeat. Confirm analogous v1 conversion and no flash write on first boot of a truly blank bank.
-4. After explicit agreement, build AC79 firmware for this branch, check CPU/RAM/flash size, and load onto a real FM-1 for a short musical MIDI/USB/BLE acceptance.
-5. Only after those passes: decide how to integrate into the designated 1.0 release branch, verify identity/version/release artefacts and publish deliberately. Do **not** overwrite historical gh-pages (older Berlinan site) during this work.
-
-The earlier host tests and AC79 build passed before the v3 migration change; repeat the host gates and AC79 build before any new installation. No releases, merges, firmware installs or deployments are performed by the source-change commits.
+Validation: run the MIDI-controls suite, the factory-preset suite and the
+AC79 build, followed by user-confirmed hardware acceptance. This branch
+is not a release.
