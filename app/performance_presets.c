@@ -133,8 +133,8 @@ int performance_presets_init(void)
     }
     if (bytes == PERFORMANCE_V1_BANK_BYTES &&
         !memcmp(proj_buf, performance_legacy_head, PERFORMANCE_BANK_HEAD)) {
-        /* Legacy format 8 is decoded and repacked as version 2 IN RAM.
-         * A user SAVE/RENAME is required before committing the new bank. */
+        /* Validate the complete historical v1 bank before the intentional
+         * replacement. Invalid data must not trigger an automatic rewrite. */
         for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
             const uint8_t *old = proj_buf + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_V1_ENTRY_BYTES;
             uint8_t *dst = performance_bank + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_ENTRY_BYTES;
