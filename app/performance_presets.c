@@ -7,7 +7,7 @@
  * the first 312 bytes of a format-9 project record, plus 7*7 compact bytes.
  * 8 + 10 * (1+12+312+49) = 3748, within the existing flash allocation.
  * Project SAVE still uses full, uncompressed 382-byte project format 9.
- * Reads TGPB v1/v2 and upgrades once to v3, replacing the four factory slots.
+ * Reads TGPB v1/v2 and upgrades once to v3, replacing all old presets.
  * An upgrade is committed once so subsequent user saves survive reboot.
  * Empty entries are all zero. */
 enum {
@@ -103,14 +103,15 @@ static int performance_project_read(const uint8_t *compact, proj_t *out)
 
 #include "factory_presets.c"  /* four factory starters, one-time v1/v2 upgrade */
 
-/* Factory installation is a deliberate one-time replacement of slots 1-4.
- * A successful A/B flash commit marks version 3 and prevents any later boot
- * from undoing the user's own subsequent SAVE. On a commit error the old
- * CRC-protected v1/v2 bank remains available for a later retry. */
+/* Factory installation deliberately clears the previous bank ONCE, then
+ * installs four starters in slots 1-4; slots 5-10 are empty. The v3 A/B
+ * flash commit marks this as completed, so future explicit user SAVE edits
+ * are retained on later boots. A failed commit does not mark it complete. */
 static int performance_factory_upgrade(void)
 {
+    memset(performance_bank, 0, sizeof performance_bank);
+    memcpy(performance_bank, performance_head, sizeof performance_head);
     if (factory_presets_install()) return -1;
-    performance_bank[4] = performance_head[4];
     if (plat_store_save(OBJ_PERFORMANCE_PRESETS, performance_bank, PERFORMANCE_BANK_BYTES))
         return -1;
     performance_bank_ready = 1;
