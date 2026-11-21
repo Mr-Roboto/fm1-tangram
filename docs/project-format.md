@@ -64,8 +64,8 @@ platform's 3840-byte per-object storage allocation (subject to verified
 platform headers/CRC overhead in the actual firmware build).
 
 On the first boot with an existing valid TGPB-1 or TGPB-2 bank, the
-four factory starters **intentionally replace occupied slots 1–4**. Slots
-5–10 are carried forward. The migrated bank is written once as TGPB-3
+four factory starters **intentionally replace the entire old user bank**:
+slots 1–4 are installed and slots 5–10 cleared. The new bank is written once as TGPB-3
 using the existing CRC-protected A/B store, so later user SAVE or RENAME
 edits in slots 1–4 survive subsequent reboots. No rewrite occurs on a
 normal boot with an existing TGPB-3 bank. A first boot with no bank creates
@@ -82,7 +82,7 @@ Run `sh tests/run_tangram_midi_controls.sh` on WSL2. The targeted host
 scenario includes project SAVE/reboot, MIDI CC output routing and a host-only
 TGPB-1 fixture migrated to version 3 by an intentional one-time boot rewrite.
 The factory-preset scenario separately exercises occupied TGPB-2 bank upgrade,
-slot 5–10 preservation and later user saves. Before installation
+empty slots 5–10 and later user saves. Before installation
 verify actual firmware RAM/flash capacity, compatibility with existing
 saved projects and slot banks, and an on-device real-MIDI smoke test.
 
