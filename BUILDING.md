@@ -59,6 +59,20 @@ Outputs:
 | Host simulator | `app/build/host/tangram_host` |
 
 The BLE firmware target declares `ble = true` in `app/fm1.toml`.
+On the isolated factory-presets candidate branch, **GLO → MIDI → CLOCK OUT**
+can be set to **OFF** (K1 turned left past USB), USB, BLE or USB + BLE.
+CLOCK OUT=OFF suppresses outgoing MIDI Clock and Start/Stop while allowing
+musical Note and CC output through the separate MIDI OUT routing.
+The choice is stored in the existing format-4 device-settings record.
+Change it while the transport is stopped and let the GLOBAL SAVE status settle.
+The new OFF behavior must pass the focused host gates and an AC79 build before flashing.
+
+On **ENV VOICE**, the selected melodic voice's **K2 REGISTER** shifts the
+minimum and maximum pitch bounds together in semitone steps of 12. While
+playing, the changed voice configuration is applied on a local loop boundary;
+stop before editing for an immediately repeatable audition. Tangram's
+display spells MIDI note 60 as C3, unlike hosts that spell it C4; the
+numeric MIDI note sent is unchanged by that octave-label convention.
 Build checks validate image, normal RAM and pool capacity as well as
 platform instruction and register restrictions. A successful build is
 **not** evidence that radio pairing or clock synchronization works.
