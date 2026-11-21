@@ -98,6 +98,8 @@ static int performance_project_read(const uint8_t *compact, proj_t *out)
     return project_record_read(full, sizeof full, out, NULL);
 }
 
+#include "factory_presets.c"  /* four optional, non-destructive factory starters */
+
 int performance_presets_init(void)
 {
     proj_t decoded;
@@ -107,6 +109,7 @@ int performance_presets_init(void)
     /* Full scratch capacity also detects oversized/truncated bank records. */
     int bytes = plat_store_load(OBJ_PERFORMANCE_PRESETS, proj_buf, sizeof proj_buf);
     if (bytes < 0) {
+        factory_presets_fill_empty();
         performance_bank_ready = 1;
         return 1;
     }
@@ -131,6 +134,7 @@ int performance_presets_init(void)
             memcpy(dst + 1, old + 1, PERFORMANCE_PRESET_NAME_BYTES);
             performance_pack(full, dst + 1 + PERFORMANCE_PRESET_NAME_BYTES);
         }
+        factory_presets_fill_empty();
         performance_bank_ready = 1;
         return 0;
     }
@@ -147,6 +151,7 @@ int performance_presets_init(void)
             performance_project_read(entry + 1 + PERFORMANCE_PRESET_NAME_BYTES, &decoded)) return -1;
     }
     memcpy(performance_bank, proj_buf, sizeof performance_bank);
+    factory_presets_fill_empty();
     performance_bank_ready = 1;
     return 0;
 }
