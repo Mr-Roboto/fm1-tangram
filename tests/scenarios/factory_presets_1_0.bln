@@ -20,6 +20,7 @@ expect form 2
 expect density_pct 85
 expect ux_register_low 67
 expect ux_register_high 91
+expect ux_octave_shift_exact 1
 expect ux_voice_bass_low 36
 
 perfload 2
@@ -31,6 +32,7 @@ expect form 3
 expect density_pct 62
 expect ux_register_low 67
 expect ux_register_high 91
+expect ux_octave_shift_exact 1
 
 perfload 3
 expect tpl 1
@@ -42,6 +44,7 @@ expect density_pct 80
 expect chan5 9
 expect ux_register_low 67
 expect ux_register_high 91
+expect ux_octave_shift_exact 1
 expect ux_voice_bass_low 36
 expect ux_voice_kick_low 36
 
@@ -54,6 +57,7 @@ expect form 1
 expect density_pct 90
 expect ux_register_low 67
 expect ux_register_high 91
+expect ux_octave_shift_exact 1
 
 # Simulate upgrading a device with existing material in slots 01 and 06.
 # Both are deliberately discarded; slots 01-04 become the factory starters,
@@ -116,4 +120,5 @@ perfload 1
 expect bpm_proj 110
 expect ux_register_low 67
 expect ux_register_high 91
+expect ux_octave_shift_exact 1
 expect ux_voice_bass_low 36
