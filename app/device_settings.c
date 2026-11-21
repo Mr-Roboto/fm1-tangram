@@ -19,13 +19,14 @@ const char *const DEVICE_THEME_NAME[DEVICE_NTHEMES] = {
     "CLASSIC", "GRAPHITE", "AMBER", "NOCTURNE", "MONO", "FIRE"
 };
 const char *const DEVICE_MIDI_NAME[3] = {"USB", "BLE", "USB + BLE"};
+const char *const DEVICE_CLOCK_OUTPUT_NAME[4] = {"OFF", "USB", "BLE", "USB + BLE"};
 
 static int device_settings_valid(device_settings_t settings)
 {
     return settings.lights <= 2 && settings.theme < DEVICE_NTHEMES && settings.sync <= DEVICE_SYNC_EXTERNAL &&
         settings.ext_ports && !(settings.ext_ports & ~DEVICE_CLOCK_ALL) &&
         settings.midi_out && !(settings.midi_out & ~DEVICE_MIDI_BOTH) &&
-        settings.clock_out && !(settings.clock_out & ~DEVICE_MIDI_BOTH);
+        !(settings.clock_out & ~DEVICE_MIDI_BOTH);
 }
 
 static int device_settings_equal(device_settings_t a, device_settings_t b)
