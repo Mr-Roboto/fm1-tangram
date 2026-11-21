@@ -7,8 +7,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Berlinan for the FM-1 in the browser</title>
-<meta name="description" content="Berlinan for the M-VAVE FM-1, in the browser: the same code the FM-1 runs, its MIDI to your synths over Web MIDI.">
+<title>Tangram 1.0 – FM-1 browser simulator</title>
+<meta name="description" content="Tangram for the M-VAVE FM-1, in the browser: the same code the FM-1 runs, its MIDI to your synths over Web MIDI.">
 <link rel="icon" href="../assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -95,8 +95,8 @@ h1 span { color: var(--muted); font-weight: 600; }
 </head>
 <body>
 <header>
-  <h1>Berlinan <span>in the browser</span></h1>
-  <nav aria-label="Site"><a href="../">Berlinan FM-1</a> <a href="../manual/">Manual</a> <a href="../install/">Install</a></nav>
+  <h1>Tangram <span>in the browser</span></h1>
+  <nav aria-label="Site"><a href="https://github.com/Mr-Roboto/fm1-tangram">Tangram FM-1</a> <a href="https://github.com/Mr-Roboto/fm1-tangram/blob/main/docs/ui-pages.md">Manual</a> <a href="https://github.com/Mr-Roboto/fm1-tangram/releases/tag/v1.0">Firmware</a></nav>
 </header>
 <main>
 <h2 class="sr">The FM-1</h2>
@@ -140,7 +140,7 @@ h1 span { color: var(--muted); font-weight: 600; }
 
 <details class="speak" id="midi" open>
   <summary><h2>MIDI</h2></summary>
-  <p class="note">The FM-1 makes no sound: Berlinan plays your synths over MIDI, each voice on its own channel. Send its
+  <p class="note">The FM-1 makes no sound: Tangram plays your synths over MIDI, each voice on its own channel. Send its
     MIDI to an output of this computer (a synth, an interface, or a virtual bus such as the IAC Driver into a DAW), and
     choose an input for EXT sync (MIDI clock, Start and Stop, as on the FM-1's USB port). Chrome, Edge or Firefox; the
     browser asks once to allow MIDI.</p>
@@ -678,7 +678,7 @@ async function switchOn() {
           drawLights(m.buttons, m.keys);
           if (m.said) onSaid(m.said);
           window.emuLast = m;
-          if (m.load !== undefined) cpu.textContent = `Berlinan uses ${m.load}% of this computer's time`;
+          if (m.load !== undefined) cpu.textContent = `Tangram uses ${m.load}% of this computer's time`;
           if (m.store) saveStore(m.store);
         }
       };
