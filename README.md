@@ -45,6 +45,12 @@ Tangram uses the existing FM-1 panel, screen and controls. No laptop, DAW or com
 
 Tangram currently defines these **seven roles**: **Pluck 1, Pluck 2, Bass, Pad, Lead, Drone and Heartbeat**. Not every role needs to be active in a performance.
 
+**Tangram-specific melodic tuning:** the working project's pitched
+voices are rendered +12 semitones above their original Berlinan template
+registers (both reference C and register fold range); GM heartbeat notes
+remain absolute and are not transposed. Built-in engine reference templates
+are unchanged. Loading factory presets is still a separate explicit action.
+
 The built-in templates are *starting configurations*, not user performance-preset slots:
 
 | Template | Voices | Instrumentation |
