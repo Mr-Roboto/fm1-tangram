@@ -2,8 +2,9 @@
 /* Tangram 1.0 musical factory starters. Included by performance_presets.c.
  *
  * These are ordinary format-9 Performance Presets, not special playback modes.
- * Only vacant slots 1-4 are seeded in RAM. Existing user bank entries always
- * take precedence, and boot never writes the persistent bank to flash.
+ * Upgrading a stored TGPB-1/2 bank replaces slots 1-4 exactly once,
+ * then commits TGPB-3 so later user SAVE and RENAME operations persist.
+ * New/empty devices get factory starters in RAM without a flash write.
  * Everything uses existing template, generator, Composer and MIDI features. */
 
 static void factory_pattern(proj_t *p, int voice, int generator, int steps,
@@ -46,7 +47,6 @@ static int factory_preset_make(int slot)
 
     if (slot < 1 || slot > 4) return -1;
     entry = performance_bank + PERFORMANCE_BANK_HEAD + (slot - 1) * PERFORMANCE_ENTRY_BYTES;
-    if (entry[0]) return 0; /* user content wins: never overwrite an occupied slot */
     n = slot - 1;
 
     memset(&p, 0, sizeof p);
@@ -141,11 +141,11 @@ static int factory_preset_make(int slot)
     return 0;
 }
 
-/* No flash write here: an explicit SAVE/RENAME later persists the ordinary
- * ten-slot bank. A malformed factory configuration must never block access
- * to an otherwise valid user bank. */
-static void factory_presets_fill_empty(void)
+/* Caller decides whether a one-time bank upgrade must be committed to flash.
+ * Never mark a partial factory installation as a successful upgrade. */
+static int factory_presets_install(void)
 {
     for (int slot = 1; slot <= 4; slot++)
-        (void)factory_preset_make(slot);
+        if (factory_preset_make(slot)) return -1;
+    return 0;
 }
