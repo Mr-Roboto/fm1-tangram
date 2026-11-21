@@ -6,6 +6,10 @@ expect ux_bank_slot3 1
 expect ux_bank_flash_bytes -1
 expect ux_perf_last_saved_slot 1
 
+# The runtime intentionally refuses load/store until its MIDI drain guard
+# has been idle for at least 5ms. The host boots at simulated time 0.
+wait 10
+
 # Each starter is a normal editable, reproducible project, not a new engine.
 perfload 1
 expect tpl 0
@@ -46,6 +50,7 @@ proj template full 0xABCDEF12
 perfstore 1
 expect ux_bank_flash_bytes 3748
 reboot
+wait 10
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
 expect ux_bank_flash_bytes 3748
