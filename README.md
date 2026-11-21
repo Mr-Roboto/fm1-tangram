@@ -124,7 +124,7 @@ Tangram currently distinguishes between:
 
 ### Named Performance Presets
 
-The pre-1.0 MIDI-controls development branch uses a new 382-byte project record (format 9), including persisted per-voice LFO and mixer CC settings. It reads prior format-8 projects and supports optional migration of ten-slot banks from 3258-byte v1 records into a losslessly packed 3748-byte v2 bank **in RAM**. The old flash bank is not rewritten at boot; an explicit SAVE/RENAME writes the new bank format. This extension is not yet a tested firmware release.
+Tangram 1.0 uses a 382-byte project record (format 9) and a separate 3748-byte Performance bank, format 1 (TGPP). Old development banks are discarded and replaced with four factory presets in slots 01–04 and empty slots 05–10. Explicit user saves persist. Working projects and snapshots are independent.
 
 A dedicated bank of **10 named Performance Presets** stores complete *starting configurations* — including the selected Composer starting section — independently of the three built-in templates and the six snapshot slots. The bank is implemented on the Tangram development branches; presets are managed on **GLO PERFORMANCE**.
 
@@ -137,7 +137,7 @@ The repository uses [fm1-base](https://github.com/charlesvestal/fm1-base) as a G
 ```sh
 git clone --recursive https://github.com/Mr-Roboto/fm1-tangram.git
 cd fm1-tangram
-git switch dev/tangram
+git switch recovery/tangram-1.0-clean
 ./build.sh
 ```
 
@@ -157,11 +157,11 @@ Build and simulator instructions are in [`BUILDING.md`](BUILDING.md). The focuse
 
 **Implemented and hardware-used:** multivoice sequencing, ARP/MOTIF, Composer, HEARTBEAT drums, MIDI delay, per-voice/global density, the dual pattern playheads, six display themes, project saving and Python firmware installation.
 
-**Current:** ten-slot Performance Preset storage is implemented; the first three *musical preset definitions* remain to be created. Experimental USB/BLE MIDI routing passed the user-performed six-point hardware acceptance on 11 November 2026: iPad pairing, note playback, settings persistence after restart, BLE clock send, BLE clock receive, simultaneous USB/BLE routing and reconnect. The standalone global-settings regression and the complete focused host smoke suite passed. Additional extended stability and clock timing measurements may be performed before a public stable release.
+**Current:** the four [factory presets](docs/factory-presets-1.0.md), preset-local registers and independent CLOCK OUT OFF are integrated. The user confirmed normal template pitches, preset management and preset pitches on FM-1 on 21 November 2026 (commit `2418898`). Earlier BLE routing acceptance remains recorded in BUILDING.md.
 
 **Verified additional function (11 November 2026):** Composer FORM switching during PLAY on the FM-1. The new form takes effect at the next section entry without restarting playback. Manual in-play section navigation does not replace the START section selected while stopped; after STOP the earlier START choice remains in place. Further Composer evolution and additional instrument-role templates are deferred. There are no plans to add an internal sound engine or audio processing.
 
-**Tangram 1.0 functional code freeze (11 November 2026):** the successfully tested BLE/Composer firmware is preserved at commit `5b0f7d7` on `dev/tangram-ble-midi-spike`. UI-only improvements are isolated on `dev/tangram-ux-1.0`, described in [the UX decisions and audit](docs/ux-1.0.md). The three musical Performance Preset definitions are still in preparation. **Version 1.0 has not been publicly released**; no 1.1/1.2 version is claimed.
+**Tangram 1.0 release candidate:** musical engine and templates are unchanged from the hardware-confirmed `4074514`; the candidate adds independent clock output OFF, factory presets and the web endless-encoder marker fix. Final release build and generated web assets require verification before publication.
 
 This remains pre-release development. The latest source and actual local firmware build should be checked before drawing conclusions from older documentation or historical test notes.
 

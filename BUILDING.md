@@ -1,11 +1,6 @@
 # Building and testing FM-Tangram
 
-Status: 11 November 2026. The working musical baseline is
-[`dev/tangram`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram).
-The isolated BLE MIDI implementation is
-[`dev/tangram-ble-midi-spike`](https://github.com/Mr-Roboto/fm1-tangram/tree/dev/tangram-ble-midi-spike).
-Do not merge experimental routing changes into the stable branch before
-appropriate validation.
+Status: 21 November 2026. The 1.0 candidate is `recovery/tangram-1.0-clean`, based on hardware-confirmed `4074514`. The user confirmed the restored templates and factory presets at `2418898`. Historical BLE acceptance below remains unchanged.
 
 ## Prerequisites
 
@@ -28,7 +23,7 @@ New clone:
 ```sh
 git clone --recursive https://github.com/Mr-Roboto/fm1-tangram.git
 cd fm1-tangram
-git switch dev/tangram-ble-midi-spike
+git switch recovery/tangram-1.0-clean
 ```
 
 Existing local BLE checkout:
@@ -47,6 +42,7 @@ These commands only fetch changes; they do not flash the FM-1.
 ```sh
 ./build.sh                # device firmware
 ./build.sh --host         # desktop/WSL2 simulator
+./build.sh --web          # browser simulator
 ```
 
 Outputs:
@@ -102,7 +98,7 @@ Expected terminal line:
 **Legacy test-suite caveat:** `tests/run_tests.sh` and
 `tests/host/project_test.c` still contain historical Berlinan/
 Tangram project-format-6/slot-format-8 assumptions. Tangram currently
-uses project format 8 and slot format 9. The old suite is **not a
+uses project format 9 and slot format 9. The old suite is **not a
 reliable all-green gate** for the BLE branch until updated, and it
 also treats vendor SoftFloat's fallthrough warning as an error under
 modern host GCC. The new standalone device-settings test avoids these
@@ -157,3 +153,17 @@ Emergency recovery is a distinct procedure: see the pinned
 `fm1-base`/BSP recovery documentation before attempting any
 chip-level rescue. Normal update and rescue procedures are not
 interchangeable.
+
+## Tangram 1.0 final release gate
+
+The musical engine, project-to-engine conversion and built-in templates
+must remain identical to commit `4074514`. The candidate adds CLOCK OUT OFF
+(GLO MIDI K1; MIDI OUT is independent), four named factory presets with
+preset-local registers, and a web-only encoder marker fix. Check the
+app/engine and project.c diff against that baseline before building.
+
+Run both focused suites and generate the release package and browser build
+from the same checked-out commit. Verify the package identity, checksum,
+and actual browser operation before publishing. The user-confirmed hardware
+candidate is `2418898`; the subsequent web patch is HTML-only. Quantitative
+BLE timing, soak stability and interrupted-update recovery remain untested.

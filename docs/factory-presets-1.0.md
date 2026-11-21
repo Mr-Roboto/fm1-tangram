@@ -1,6 +1,6 @@
 # Tangram 1.0 — four musical factory starter presets (candidate)
 
-**Status:** clean candidate based on hardware-confirmed 4074514; test/build and musical acceptance pending.
+**Status:** User-confirmed factory preset loading and musical register suitability on FM-1 at `2418898`, 21 November 2026. Final release build pending.
 
 The four names and original stylistic directions were agreed during the Tangram 2 sessions. Specific parameters not already fixed are new musical defaults proposed for 1.0. External synthesizer patches remain outside Tangram's saved Performance Preset records.
 
@@ -50,7 +50,7 @@ Each starter uses a fixed, distinct seed to enable reproducible material. Slots 
 | MINIMAL PULS | 60–88, 64–91, 36–60, 48–72, 60–96, 36–47 |
 | PHASE GLASS | 60–84, 60–84, 36–60 |
 
-These are proposed musical settings, not changes to the template defaults. The original reference C, generator and fold logic are unchanged. Drum notes are absolute and not transposed.
+These are hardware-auditioned preset settings, not changes to the template defaults. The original reference C, generator and fold logic are unchanged. Drum notes are absolute and not transposed.
 
 ## Storage and validation
 
