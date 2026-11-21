@@ -191,6 +191,22 @@ int performance_preset_name(int slot, char out[PERFORMANCE_PRESET_NAME_BYTES + 1
     return 0;
 }
 
+/* Startup is before the MIDI transport becomes idle. Resolve an installed
+ * preset to the working project without the runtime's 5ms live LOAD guard.
+ * app_init() will apply it once after all settings and banks are initialized.
+ * This does not save the current project record or write flash. */
+static int performance_preset_boot_load(int slot)
+{
+    proj_t decoded;
+    int at = performance_offset(slot);
+    if (at < 0 || !performance_bank[at] ||
+        performance_project_read(performance_bank + at + 1 + PERFORMANCE_PRESET_NAME_BYTES, &decoded))
+        return -1;
+    proj = decoded;
+    proj_unseeded = 0;
+    return 0;
+}
+
 int performance_preset_load(int slot)
 {
     proj_t decoded;
