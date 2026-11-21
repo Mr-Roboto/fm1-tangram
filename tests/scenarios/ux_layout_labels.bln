@@ -18,10 +18,10 @@ tap ENV
 expect ux_env_is_voice 1
 expect ux_register_k2_available 1
 expect ux_register_low 55
-expect ux_register_high 79
+expect ux_register_high 84
 turn K2 1
 expect ux_register_low 67
-expect ux_register_high 91
+expect ux_register_high 96
 turn K2 -1
 expect ux_register_low 55
-expect ux_register_high 79
+expect ux_register_high 84
