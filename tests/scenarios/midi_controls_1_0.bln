@@ -75,7 +75,7 @@ tap PLAY
 expect playing 0
 
 # The NAMED 10-slot bank must round-trip the complete LFO/mixer edits too.
-# Simulated only: there are NO finished user factory presets in 1.0.
+# Simulated only: replacing factory starter slot 1 must keep editable MIDI CC values.
 perfstore 1
 expect ux_bank_slot1 1
 expect ux_bank_flash_bytes 3748
