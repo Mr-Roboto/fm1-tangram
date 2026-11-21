@@ -41,30 +41,36 @@ Older firmware is not assumed capable of reading newer saved records.
 
 The bank remains a separate CRC-protected persistent flash object with
 **ten independently named slots** of at most twelve ASCII bytes each.
-The v2 bank header byte 7 is an optional last-saved slot selector: 0 means
+The v2/v3 bank header byte 7 is an optional last-saved slot selector: 0 means
 legacy/default slot 01, 1..10 means the last committed named SAVE. This
 changes only the selected GLO PERFORMANCE slot at boot; it does not
-load a working preset or write flash while browsing. The v2 header prefix
-(first seven bytes) remains unchanged and old v2 banks with zero are valid.
+load a working preset or write flash while browsing. TGPB-3 retains the
+same record layout and last-slot selector as v2; only the header version byte
+changes from 2 to 3 when the one-time factory installation is committed.
 
 | Bank version | Embedded project | Entry (occupied+name+record) | Entire bank |
 | --- | --- | --- | --- |
 | TGPB 1 | Project format 8, 312 B | 325 B | 3258 B |
 | TGPB 2 | Project format 9 compressed losslessly to 361 B | 374 B | 3748 B |
+| TGPB 3 | Same format 9 compression and layout as v2 | 374 B | 3748 B |
 
-The v2 bank bit-packs each voice's 10-byte LFO/mixer extension into 7 bytes
+The v2/v3 bank bit-packs each voice's 10-byte LFO/mixer extension into 7 bytes
 without losing its 0–127 values or four-bit active mask. The bank holds
 the same 312-byte project prefix plus 49 encoded bytes for seven voices.
 Full project saves continue to use the uncompressed 382-byte format.
 
-Both bank sizes include the 8-byte header. The format-2 bank fits the
+All bank sizes include the 8-byte header. The format-2/3 bank fits the
 platform's 3840-byte per-object storage allocation (subject to verified
 platform headers/CRC overhead in the actual firmware build).
 
-An older TGPB-1 bank is decoded and migrated **in RAM** at boot, preserving
-occupied names and projects. Loading existing banks performs **no flash
-write**; a subsequent explicit user SAVE or RENAME commits the complete
-TGPB-2 bank. Corrupt banks are not overwritten silently.
+On the first boot with an existing valid TGPB-1 or TGPB-2 bank, the
+four factory starters **intentionally replace occupied slots 1–4**. Slots
+5–10 are carried forward. The migrated bank is written once as TGPB-3
+using the existing CRC-protected A/B store, so later user SAVE or RENAME
+edits in slots 1–4 survive subsequent reboots. No rewrite occurs on a
+normal boot with an existing TGPB-3 bank. A first boot with no bank creates
+factory starters in RAM without immediately writing flash. Invalid or
+corrupt banks are not silently overwritten.
 
 Six snapshot slots and the undo-stack state format are **independent** of
 the musical project record and named Performance Preset bank. Their
@@ -74,7 +80,9 @@ snapshot wrapper format remains 9.
 
 Run `sh tests/run_tangram_midi_controls.sh` on WSL2. The targeted host
 scenario includes project SAVE/reboot, MIDI CC output routing and a host-only
-TGPB-1 fixture migrated with no boot-time rewrite. Before installation
+TGPB-1 fixture migrated to version 3 by an intentional one-time boot rewrite.
+The factory-preset scenario separately exercises occupied TGPB-2 bank upgrade,
+slot 5–10 preservation and later user saves. Before installation
 verify actual firmware RAM/flash capacity, compatibility with existing
 saved projects and slot banks, and an on-device real-MIDI smoke test.
 
