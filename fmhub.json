@@ -4,5 +4,6 @@
   "kinds": [
     "other"
   ],
-  "image": "app/site/assets/tangram-logo-240x240.png"
+  "image": "app/site/assets/tangram-logo-240x240.png",
+  "play": "https://mr-roboto.github.io/fm1-tangram/tangram/emu/"
 }
