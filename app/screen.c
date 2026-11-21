@@ -1167,7 +1167,7 @@ static void strip_source_marker(int32_t x, int32_t y, int32_t w, int32_t h, cons
 }
 
 /* a pattern strip (PatternStripView): the notes by position, length and pitch (self-scaling to the
- * pattern's range, in the key at MIDI 60, the Mac's referenceC), the accents' tops tangerine, the voice's own
+ * pattern's folded range in the voice's active key and current harmony), the accents' tops tangerine, the voice's own
  * playhead (its loop position: the phasing, visible); dimmed when muted, waiting or blanked */
 static void strip(int32_t x, int32_t y, int32_t w, int32_t h, const lane_t *l, uint16_t c, int dim)
 {
@@ -1186,11 +1186,22 @@ static void strip(int32_t x, int32_t y, int32_t w, int32_t h, const lane_t *l, u
     if (len <= 0)
         return;
     visible_onsets(p, audible);
-    key_now(&k);
+    const bl_voice_t *voice = voice_material(l->vid);
+    if (voice) k = voice->config.key;
+    else key_now(&k);
+    int degree_offset = 0;
+    if (voice && voice->participates) {
+        const bl_sched_t *sched = ui.st_ok ? &rt_engine()->sched : &ui_pre.sched;
+        degree_offset = bl_sched_offset(sched, (int32_t)(rt_play_tick() / BL_TICKS_PER_BAR));
+    }
     if (p->generator == BL_GEN_HEARTBEAT) { lo = BL_DRUM_KICK; hi = BL_DRUM_OPEN_HAT; }
     for (i = 0; i < p->n; i++) {
+        bl_pitch_t source = p->note[i].pitch;
+        source.degree += degree_offset;
         pitch[i] = p->generator == BL_GEN_HEARTBEAT ? p->note[i].pitch.degree :
-                   bl_resolve(&k, p->note[i].pitch, 60);
+                   voice ? bl_fold(voice->reg_low, voice->reg_high,
+                                   bl_resolve(&k, source, voice->ref_c)) :
+                           bl_resolve(&k, source, 60);
         lo = pitch[i] < lo ? pitch[i] : lo;
         hi = pitch[i] > hi ? pitch[i] : hi;
     }
@@ -1538,6 +1549,22 @@ static void voice_title(const felucca_font_t *f, int32_t y)
     if (!l) {
         x -= text_w(&FONT_T, "NOT PLAYING") + 6;
         tag(x, y + (title_h - 14) / 2, 14, "NOT PLAYING", K_DIM);
+    }
+    /* Show the exact submitted MIDI note on ENV, independently of the
+     * source-pattern visualization or the receiver's octave convention. */
+    if (ui.view == V_VOICE) {
+        int pitch = rt_last_pitch(vid);
+        if (pitch >= 0) {
+            char midi[16];
+            strcpy(midi, "MIDI ");
+            cat_u(midi, (uint32_t)pitch);
+            int w = text_w(&FONT_T, midi) + 6;
+            if (x - w >= 105) {
+                x -= w;
+                tag(x, y + (title_h - 14) / 2, 14, midi, K_INFO);
+                x -= 4;
+            }
+        }
     }
     if (ui.view != V_CC && ui.view != V_SETUP)
         text_box(6, y, x - 12, title_h, f, t, l && lane_dim(l) ? K_DIM2 : vid_color(vid), 0);
@@ -2042,6 +2069,7 @@ static uint32_t main_sig(void)
             ui.view == V_PATTERN || ui.view == V_ARRANGER))
             h = hash(h, (uint32_t)rt_play_tick()); /* redraw between onsets, including Density 0 */
     }
+    if (ui.view == V_VOICE) h = hash(h, (uint32_t)(rt_last_pitch(key_vid(ui.sel)) + 1));
     for (k = 0; k < nlanes; k++) {       /* the patterns: a mutation changes them */
         const bl_pattern_t *p = lane[k].pat;
         h = hash(h, lane[k].source_onset); /* gate endings/rests redraw without waiting for a timing step */
@@ -2050,7 +2078,8 @@ static uint32_t main_sig(void)
             h = hash(h, p->groove);      /* active groove can change without changing source positions */
         h = hash(hash(h, p->n | (uint32_t)p->locked << 8), (uint32_t)p->seed);
         for (i = 0; i < p->n; i++)
-            h = hash(h, (uint32_t)p->note[i].position ^ (uint32_t)p->note[i].pitch.degree << 20);
+            h = hash(hash(h, (uint32_t)p->note[i].position ^ (uint32_t)p->note[i].pitch.degree << 20),
+                     (uint32_t)p->note[i].pitch.octave ^ ((uint32_t)p->note[i].pitch.accidental << 16));
     }
     return h;
 }
