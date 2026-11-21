@@ -1,6 +1,6 @@
 # Tangram 1.0 — four musical factory starter presets (candidate)
 
-**Status:** implemented on isolated branch `feature/tangram-1.0-factory-presets`; NOT yet compiled, tested or hardware accepted. No release/tag/flash is implied.
+**Status:** isolated 1.0 factory-preset candidate. Initial factory-preset host smoke, existing MIDI/Composer/UX regression suites and AC79 build passed on 21 November 2026. The new one-time populated-bank migration is not yet tested or flashed. No release/tag is implied.
 
 The four names and original stylistic directions were agreed during the Tangram 2 sessions. Specific parameters not already fixed are new musical defaults proposed for 1.0. External synthesizer patches remain outside Tangram's saved Performance Preset records.
 
@@ -43,11 +43,12 @@ Each starter uses a fixed, distinct seed to enable reproducible material. Slots 
 
 ## Data and upgrade behavior
 
-The four factory starters are ordinary, editable format-9 Performance Preset records in the existing ten-slot TGPB-v2 bank. No project-format or flash-map revision is intended.
+The four factory starters are ordinary, editable format-9 Performance Preset records in the existing ten-slot TGPB bank. TGPB-v3 changes the bank header version only; its packed 3748-byte layout and flash allocation remain identical to v2. No project-format or flash-map revision is intended.
 
-- On initialization, **only vacant** slots 1–4 get an in-memory factory starter. Any existing occupied user entry takes precedence.
-- Valid saved TGPB-v1 or v2 banks are read first, without overwriting flash.
-- Boot **does not write flash**; a later explicit user SAVE/RENAME persists the bank, including the remaining factory starters.
+- On the **first boot with an existing v1 or v2 bank**, the four factory starters **replace slots 01–04, even if occupied**. This is intentional and explicitly desired for Tangram 1.0. Slots 05–10 retain their existing entries.
+- The bank is validated, converted to v3 and committed exactly once through the existing A/B flash store. This first-upgrade boot intentionally **writes flash**; a failure is returned rather than falsely marking the migration complete.
+- Later boots with a valid v3 bank do not replace slots 01–04 again. Explicit user SAVE/RENAME edits are durable and take precedence from then on.
+- On a genuinely empty/uninitialized bank the four starters are initially constructed in RAM; there is no boot flash write until an explicit SAVE/RENAME.
 - Loading a factory starter requires stopped/idle transport, as with any Performance Preset.
 - Device-global routing, BLE, clock setup, display settings, snapshot slots and external synth patches are unchanged.
 - No automatic loading of factory slot contents is added. The separate existing startup behavior is left untouched.
@@ -56,8 +57,8 @@ The four factory starters are ordinary, editable format-9 Performance Preset rec
 
 1. Review the fixed preset parameters and confirm all four factory records survive format-9 serialize/compact/unpack/read roundtrips.
 2. Run **only the focused host smoke**: `sh tests/run_tangram_factory_presets.sh` (builds host simulator only; no AC79 firmware or hardware flashing).
-3. Confirm that existing user entries in slots 1–4 are never replaced, v1/v2 bank migrations retain names, and boot performs no flash writes.
+3. Confirm that a **populated v2 bank** replaces slots 01–04 and persists version 3 on first boot, retains slots 05–10, preserves later user edits across reboot, and never repeats the replacement. Confirm analogous v1 conversion and no flash write on first boot of a truly blank bank.
 4. After explicit agreement, build AC79 firmware for this branch, check CPU/RAM/flash size, and load onto a real FM-1 for a short musical MIDI/USB/BLE acceptance.
 5. Only after those passes: decide how to integrate into the designated 1.0 release branch, verify identity/version/release artefacts and publish deliberately. Do **not** overwrite historical gh-pages (older Berlinan site) during this work.
 
-No full-suite tests, releases, merges, firmware builds or deployments are performed by the source-change commits.
+The earlier host tests and AC79 build passed before the v3 migration change; repeat the host gates and AC79 build before any new installation. No releases, merges, firmware installs or deployments are performed by the source-change commits.
