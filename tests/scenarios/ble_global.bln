@@ -52,13 +52,19 @@ wait 350
 reboot
 expect midi_out 1
 expect clock_out 0
+# Record actual outgoing MIDI statuses, not plat_midi_count() input/output
+# counters (those counters never count realtime transport bytes).
+dumpmidi app/build/scenarios/ble_global/clock_off_midi.txt
 rt play
 wait 600
 expect playing 1
 expect midi_sent_usb >0
-expect midi_realtime_usb 0
-expect midi_realtime_ble 0
+dumpcount FA * *
+expect dumpcount 0
+dumpcount F8 * *
+expect dumpcount 0
 rt stop
 wait 30
-expect midi_realtime_usb 0
-expect midi_realtime_ble 0
+dumpcount FC * *
+expect dumpcount 0
+dumpmidi
