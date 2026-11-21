@@ -820,6 +820,12 @@ static int proj_expect(const char *what, int *got)
         if (proj_get_voice_config(key_voice(ui.sel), &cfg)) return 0;
         *got = !strcmp(what, "ux_register_low") ? cfg.reg_low : cfg.reg_high;
     }
+    else if (!strcmp(what, "ux_voice_bass_low") || !strcmp(what, "ux_voice_kick_low")) {
+        bl_vconfig_t cfg;
+        int index = !strcmp(what, "ux_voice_bass_low") ? 2 : 5;
+        if (proj_get_voice_config(index, &cfg)) return 0;
+        *got = cfg.reg_low;
+    }
     else if (!strcmp(what, "ux_env_timing_unchanged"))
         *got = VIEW_KNOB[V_VOICE][0] == KN_RATE && VIEW_KNOB[V_VOICE][1] == KN_GATE &&
                VIEW_KNOB[V_VOICE][2] == KN_LOOP && VIEW_KNOB[V_VOICE][3] == KN_PHASE;
@@ -1187,6 +1193,16 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         if (performance_preset_load(atoi(a)))
             printf("FAIL perfload %s: unable to load working project\n", a);
         else printf("  ok perfload slot %s\n", a);
+    }
+    else if (!strcmp(cmd, "v3bank")) {
+        /* Host-only fixture: populate a historical bank with v3 header, then
+         * reboot and prove that the v4 tuning upgrade installs new starters. */
+        static uint8_t previous[PERFORMANCE_BANK_BYTES];
+        memcpy(previous, performance_bank, sizeof previous);
+        previous[4] = performance_v3_head[4];
+        if (plat_store_save(OBJ_PERFORMANCE_PRESETS, previous, sizeof previous))
+            printf("FAIL v3bank: cannot write test fixture\n");
+        else printf("  ok simulated existing TGPB-v3 bank\n");
     }
     else if (!strcmp(cmd, "v2bank")) {
         /* Host-only fixture: make a complete stored bank appear to originate
