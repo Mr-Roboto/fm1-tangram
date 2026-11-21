@@ -861,6 +861,13 @@ static int proj_expect(const char *what, int *got)
         *got = performance_preset_used(1);
     else if (!strcmp(what, "ux_bank_slot3"))
         *got = performance_preset_used(3);
+    else if (!strcmp(what, "ux_bank_slot6"))
+        *got = performance_preset_used(6);
+    else if (!strcmp(what, "ux_bank_flash_version")) {
+        static uint8_t probe[PLAT_STORE_MAX];
+        int n = plat_store_load(OBJ_PERFORMANCE_PRESETS, probe, sizeof probe);
+        *got = n >= PERFORMANCE_BANK_HEAD ? probe[4] : -1;
+    }
     else if (!strcmp(what, "ux_perf_slot"))
         *got = ui.perf_slot + 1;
     else if (!strcmp(what, "ux_perf_last_saved_slot"))
@@ -1171,6 +1178,16 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         if (performance_preset_load(atoi(a)))
             printf("FAIL perfload %s: unable to load working project\n", a);
         else printf("  ok perfload slot %s\n", a);
+    }
+    else if (!strcmp(cmd, "v2bank")) {
+        /* Host-only fixture: make a complete stored bank appear to originate
+         * from the older firmware, with occupied slots ready for replacement. */
+        static uint8_t previous[PERFORMANCE_BANK_BYTES];
+        memcpy(previous, performance_bank, sizeof previous);
+        previous[4] = performance_v2_head[4];
+        if (plat_store_save(OBJ_PERFORMANCE_PRESETS, previous, sizeof previous))
+            printf("FAIL v2bank: cannot write test fixture\\n");
+        else printf("  ok simulated existing TGPB-v2 bank\\n");
     }
     else if (!strcmp(cmd, "legacybank")) {
         /* Host-only fixture: genuine v1 bank bytes and format-8 project
