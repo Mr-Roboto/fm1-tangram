@@ -306,7 +306,7 @@ static void ratchet_text(int pct, char *t)   /* the ratchet as shown: OFF, 5% ..
 static const bl_project_t *tpl_now(void) /* the app project's template */
 {
     if (ui.tpl != proj.tpl + 1u) {
-        bl_template(proj.tpl, &ui_p);
+        tangram_template(proj.tpl, &ui_p);
         ui.tpl = (uint8_t)(proj.tpl + 1u);
     }
     return &ui_p;
