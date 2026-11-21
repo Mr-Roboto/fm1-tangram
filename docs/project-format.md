@@ -39,52 +39,29 @@ Older firmware is not assumed capable of reading newer saved records.
 
 ## Named Performance Preset bank (TGPB)
 
-The bank remains a separate CRC-protected persistent flash object with
-**ten independently named slots** of at most twelve ASCII bytes each.
-The v2/v3 bank header byte 7 is an optional last-saved slot selector: 0 means
-legacy/default slot 01, 1..10 means the last committed named SAVE. This
-changes only the selected GLO PERFORMANCE slot at boot; it does not
-load a working preset or write flash while browsing. TGPB-3 retains the
-same record layout and last-slot selector as v2; only the header version byte
-changes from 2 to 3 when the one-time factory installation is committed.
+The Performance bank is a distinct CRC-protected flash object with ten
+independently named slots (12 ASCII bytes per name). **Format 1 is the only
+supported bank format for Tangram 1.0.** Each slot contains an occupied byte,
+the name and a 361-byte losslessly compressed project-format-9 record.
+The complete bank is 3748 bytes including an eight-byte header; byte 7
+records the most recently saved slot, or zero for the default slot 01.
 
-| Bank version | Embedded project | Entry (occupied+name+record) | Entire bank |
-| --- | --- | --- | --- |
-| TGPB 1 | Project format 8, 312 B | 325 B | 3258 B |
-| TGPB 2 | Project format 9 compressed losslessly to 361 B | 374 B | 3748 B |
-| TGPB 3 | Same format 9 compression and layout as v2 | 374 B | 3748 B |
-
-The v2/v3 bank bit-packs each voice's 10-byte LFO/mixer extension into 7 bytes
-without losing its 0–127 values or four-bit active mask. The bank holds
-the same 312-byte project prefix plus 49 encoded bytes for seven voices.
-Full project saves continue to use the uncompressed 382-byte format.
-
-All bank sizes include the 8-byte header. The format-2/3 bank fits the
-platform's 3840-byte per-object storage allocation (subject to verified
-platform headers/CRC overhead in the actual firmware build).
-
-On the first boot with an existing valid TGPB-1 or TGPB-2 bank, the
-four factory starters **intentionally replace the entire old user bank**:
-slots 1–4 are installed and slots 5–10 cleared. The new bank is written once as TGPB-3
-using the existing CRC-protected A/B store, so later user SAVE or RENAME
-edits in slots 1–4 survive subsequent reboots. No rewrite occurs on a
-normal boot with an existing TGPB-3 bank. A first boot with no bank creates
-factory starters in RAM without immediately writing flash. Invalid or
-corrupt banks are not silently overwritten.
+Incompatible development banks are discarded and replaced with the four
+factory starters in 01–04 and empty slots 05–10. There is no migration
+or compatibility decoder for previous development bank layouts. A valid
+format-1 bank is retained on reboot; an empty device constructs the
+factory defaults in RAM until the first explicit save. An incompatible
+stored bank is replaced through the existing CRC-protected A/B store.
 
 Six snapshot slots and the undo-stack state format are **independent** of
 the musical project record and named Performance Preset bank. Their
 snapshot wrapper format remains 9.
 
-## Upgrade acceptance still required
+## Validation
 
-Run `sh tests/run_tangram_midi_controls.sh` on WSL2. The targeted host
-scenario includes project SAVE/reboot, MIDI CC output routing and a host-only
-TGPB-1 fixture migrated to version 3 by an intentional one-time boot rewrite.
-The factory-preset scenario separately exercises occupied TGPB-2 bank upgrade,
-empty slots 5–10 and later user saves. Before installation
-verify actual firmware RAM/flash capacity, compatibility with existing
-saved projects and slot banks, and an on-device real-MIDI smoke test.
-
-**Do not publish/flash on the basis of this document or the present source
-commits alone.**
+Run `sh tests/run_tangram_midi_controls.sh` and
+`sh tests/run_tangram_factory_presets.sh`. Verify the incompatible-bank
+reset, subsequent user-save persistence and the actual MIDI output of
+STRING TRIO. Build AC79 firmware and perform hardware acceptance before
+release. No changes to the project or snapshot storage formats are made
+by this recovery branch.
