@@ -630,9 +630,11 @@ static int rt_cmd(const char *a, const char *b, const char *c)
             !strcmp(b, "all") ? DEVICE_CLOCK_ALL : DEVICE_CLOCK_BOTH;
         return device_settings_set(settings);
     } else if ((!strcmp(a, "midiout") || !strcmp(a, "clockout")) &&
-               (!strcmp(b, "USB") || !strcmp(b, "BLE") || !strcmp(b, "both"))) {
+               (!strcmp(b, "USB") || !strcmp(b, "BLE") || !strcmp(b, "both") ||
+                (!strcmp(a, "clockout") && !strcmp(b, "off")))) {
         device_settings_t settings = device_settings_get();
-        uint8_t target = !strcmp(b, "USB") ? DEVICE_MIDI_USB :
+        uint8_t target = !strcmp(b, "off") ? 0 :
+                         !strcmp(b, "USB") ? DEVICE_MIDI_USB :
                          !strcmp(b, "BLE") ? DEVICE_MIDI_BLE : DEVICE_MIDI_BOTH;
         if (!strcmp(a, "midiout")) settings.midi_out = target;
         else settings.clock_out = target;
@@ -811,6 +813,13 @@ static int proj_expect(const char *what, int *got)
         *got = VIEW_PAGES[V_VOICE];
     else if (!strcmp(what, "ux_env_is_voice"))
         *got = ui.view == V_VOICE && !strcmp(view_name(V_VOICE), "ENV VOICE");
+    else if (!strcmp(what, "ux_register_k2_available"))
+        *got = ui.view == V_VOICE && view_knob(V_VOICE, 1) == KN_REGISTER;
+    else if (!strcmp(what, "ux_register_low") || !strcmp(what, "ux_register_high")) {
+        bl_vconfig_t cfg;
+        if (proj_get_voice_config(key_voice(ui.sel), &cfg)) return 0;
+        *got = !strcmp(what, "ux_register_low") ? cfg.reg_low : cfg.reg_high;
+    }
     else if (!strcmp(what, "ux_env_timing_unchanged"))
         *got = VIEW_KNOB[V_VOICE][0] == KN_RATE && VIEW_KNOB[V_VOICE][1] == KN_GATE &&
                VIEW_KNOB[V_VOICE][2] == KN_LOOP && VIEW_KNOB[V_VOICE][3] == KN_PHASE;
@@ -919,6 +928,10 @@ static int proj_expect(const char *what, int *got)
         *got = (int)plat_midi_count(PORT_USB, 1);   /* realtime clock is excluded */
     else if (!strcmp(what, "midi_sent_ble"))
         *got = (int)plat_midi_count(PORT_BLE, 1);   /* realtime clock is excluded */
+    else if (!strcmp(what, "midi_realtime_usb"))
+        *got = (int)(plat_midi_count(PORT_USB, 0) - plat_midi_count(PORT_USB, 1));
+    else if (!strcmp(what, "midi_realtime_ble"))
+        *got = (int)(plat_midi_count(PORT_BLE, 0) - plat_midi_count(PORT_BLE, 1));
     else if (!strcmp(what, "lights"))
         *got = device_settings_get().lights;
     else if (!strncmp(what, "slot_used", 9) && what[9] >= '0' && what[9] < '0' + PROJ_SLOTS && !what[10])
