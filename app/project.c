@@ -380,6 +380,20 @@ void proj_to_engine(bl_project_t *out)
 {
     int i;
     bl_template(proj.tpl, out);
+    /* Tangram's musical register tuning: +12 semitones for pitched voices
+     * relative to the original Berlinan templates. Moving BOTH the fold
+     * bounds and the reference C guarantees an exact octave shift; moving
+     * the bounds alone can leave overlapping notes in the old octave.
+     * Keep GM heartbeat percussion on its absolute MIDI notes unchanged.
+     * This is app-only: engine/templates.c and reference parity stay intact. */
+    for (i = 0; i < out->nvoices; i++) {
+        bl_vcfg_t *voice = &out->voice[i];
+        if (voice->gen.kind == BL_GEN_HEARTBEAT) continue;
+        if (voice->reg_high > 115 || voice->ref_c > 115) continue;
+        voice->reg_low += 12;
+        voice->reg_high += 12;
+        voice->ref_c += 12;
+    }
     out->seed = proj.seed;
     out->key.root = proj.key_root;
     bl_scale_preset(proj.key_mode, &out->key.scale);
