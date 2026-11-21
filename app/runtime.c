@@ -211,8 +211,9 @@ static void rt_send(bl_tick_t tick, uint32_t pkt)
     uint32_t st = (pkt >> 8) & 0xFFu, n = (pkt >> 16) & 0x7Fu;
     uint8_t *k = &rt.snd[st & 15u][n];
     /* Route realtime transport/clock separately from notes and CC; same scheduler. */
-    uint32_t to = st == 0xF8u || st == 0xFAu || st == 0xFBu || st == 0xFCu ?
-        rt.clock_ports : rt.out_ports;
+    uint32_t realtime = st == 0xF8u || st == 0xFAu || st == 0xFBu || st == 0xFCu;
+    uint32_t to = realtime ? rt.clock_ports : rt.out_ports;
+    if (realtime && !to) return; /* OFF must not depend on platform zero-mask behavior */
     plat_midi_send(pkt, to);
     rt.sent_ms = plat_ms();
     if ((st & 0xF0u) == 0x90u)
@@ -786,7 +787,7 @@ static void rt_start(int fa)
     rt_engine_new();
     rt.head = rt.origin = 0;
     rt.has_next = 0;
-    rt.clock_out = !rt.ext;
+    rt.clock_out = !rt.ext && rt.clock_ports != 0;
 #ifdef PLAT_HOST
     if (rt_host_start)
         rt_host_start();
@@ -1175,7 +1176,7 @@ int rt_apply_clock_settings(int ext, int ports)
 int rt_apply_output_settings(int midi_mask, int clock_mask)
 {
     if (!midi_mask || (midi_mask & ~(TO_USB | TO_BLE)) ||
-        !clock_mask || (clock_mask & ~(TO_USB | TO_BLE))) return -1;
+        (clock_mask & ~(TO_USB | TO_BLE))) return -1;
     uint32_t f = plat_lock();
     if ((rt.out_ports != midi_mask || rt.clock_ports != clock_mask) &&
         (rt.playing || rt.start_req || rt.nn || rt.nrelease || rt.qn)) {
