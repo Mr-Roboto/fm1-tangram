@@ -45,7 +45,7 @@ Each starter uses a fixed, distinct seed to enable reproducible material. Slots 
 
 The four factory starters are ordinary, editable format-9 Performance Preset records in the existing ten-slot TGPB bank. TGPB-v3 changes the bank header version only; its packed 3748-byte layout and flash allocation remain identical to v2. No project-format or flash-map revision is intended.
 
-- On the **first boot with an existing v1 or v2 bank**, the four factory starters **replace slots 01–04, even if occupied**. This is intentional and explicitly desired for Tangram 1.0. Slots 05–10 retain their existing entries.
+- On the **first boot with an existing v1 or v2 bank**, all ten old user presets are intentionally discarded. Slots 01–04 receive the four factory starters; slots 05–10 become empty.
 - The bank is validated, converted to v3 and committed exactly once through the existing A/B flash store. This first-upgrade boot intentionally **writes flash**; a failure is returned rather than falsely marking the migration complete.
 - Later boots with a valid v3 bank do not replace slots 01–04 again. Explicit user SAVE/RENAME edits are durable and take precedence from then on.
 - On a genuinely empty/uninitialized bank the four starters are initially constructed in RAM; there is no boot flash write until an explicit SAVE/RENAME.
@@ -57,7 +57,7 @@ The four factory starters are ordinary, editable format-9 Performance Preset rec
 
 1. Review the fixed preset parameters and confirm all four factory records survive format-9 serialize/compact/unpack/read roundtrips.
 2. Run **only the focused host smoke**: `sh tests/run_tangram_factory_presets.sh` (builds host simulator only; no AC79 firmware or hardware flashing).
-3. Confirm that a **populated v2 bank** replaces slots 01–04 and persists version 3 on first boot, retains slots 05–10, preserves later user edits across reboot, and never repeats the replacement. Confirm analogous v1 conversion and no flash write on first boot of a truly blank bank.
+3. Confirm that a **populated v2 bank** loses all ten previous entries, gains factory slots 01–04, leaves 05–10 empty, and persists version 3 on first boot. Verify later user edits survive reboot and the factory installation does not repeat. Confirm analogous v1 conversion and no flash write on first boot of a truly blank bank.
 4. After explicit agreement, build AC79 firmware for this branch, check CPU/RAM/flash size, and load onto a real FM-1 for a short musical MIDI/USB/BLE acceptance.
 5. Only after those passes: decide how to integrate into the designated 1.0 release branch, verify identity/version/release artefacts and publish deliberately. Do **not** overwrite historical gh-pages (older Berlinan site) during this work.
 
