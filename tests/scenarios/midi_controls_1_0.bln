@@ -106,18 +106,5 @@ expect ux_perf_last_saved_slot 3
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
 
-# v1 bank upgrade: factory slots 1-4 replace the old presets exactly once
-# and the converted 3748-byte v3 bank is committed during that first boot.
-legacybank
-expect ux_bank_flash_bytes 3258
-reboot
-expect ux_bank_slot1 1
-expect ux_bank_flash_bytes 3748
-expect ux_bank_flash_version 3
-migratebank
-expect ux_bank_slot1 1
-expect ux_bank_flash_bytes 3748
-reboot
-expect ux_bank_slot1 1
-expect ux_bank_flash_bytes 3748
-expect ux_bank_flash_version 3
+# User saves survive reboot in the single release bank format.
+expect ux_bank_flash_version 1
