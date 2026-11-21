@@ -18,6 +18,9 @@ expect mode 0
 expect bpm_proj 110
 expect form 2
 expect density_pct 85
+expect ux_register_low 67
+expect ux_register_high 91
+expect ux_voice_bass_low 36
 
 perfload 2
 expect tpl 2
@@ -26,6 +29,8 @@ expect mode 1
 expect bpm_proj 72
 expect form 3
 expect density_pct 62
+expect ux_register_low 67
+expect ux_register_high 91
 
 perfload 3
 expect tpl 1
@@ -35,6 +40,10 @@ expect bpm_proj 115
 expect form 1
 expect density_pct 80
 expect chan5 9
+expect ux_register_low 67
+expect ux_register_high 91
+expect ux_voice_bass_low 36
+expect ux_voice_kick_low 36
 
 perfload 4
 expect tpl 0
@@ -43,6 +52,8 @@ expect mode 9
 expect bpm_proj 112
 expect form 1
 expect density_pct 90
+expect ux_register_low 67
+expect ux_register_high 91
 
 # Simulate upgrading a device with existing material in slots 01 and 06.
 # Both are deliberately discarded; slots 01-04 become the factory starters,
@@ -51,14 +62,14 @@ proj template full 0xABCDEF12
 perfstore 1
 perfstore 6
 expect ux_bank_slot6 1
-expect ux_bank_flash_version 3
+expect ux_bank_flash_version 4
 
 # Host-only old-bank fixture: same 3748-byte content with historical v2 header.
 v2bank
 expect ux_bank_flash_version 2
 reboot
 wait 10
-expect ux_bank_flash_version 3
+expect ux_bank_flash_version 4
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
 expect ux_bank_slot6 0
@@ -74,14 +85,35 @@ expect bpm_proj 115
 perfload 4
 expect tpl 0
 expect bpm_proj 112
-# After upgrade the bank is v3. A subsequent explicit user STORE in slot 1
+# After upgrade the bank is v4. A subsequent explicit user STORE in slot 1
 # must survive a second reboot (factory material is not reinstalled every boot).
 proj template full 0xABCDEF34
 perfstore 1
 reboot
 wait 10
-expect ux_bank_flash_version 3
+expect ux_bank_flash_version 4
 perfload 1
 expect tpl 1
 expect bpm_proj 96
 expect ux_bank_slot6 0
+
+# The firmware currently in the user's device already contains a populated
+# version-3 bank. Its one-time v4 upgrade must overwrite OLD low registrations
+# without disturbing subsequent explicit v4 user saves.
+proj template full 0xABCDEF55
+perfstore 1
+perfstore 6
+expect ux_bank_slot6 1
+expect ux_bank_flash_version 4
+v3bank
+expect ux_bank_flash_version 3
+reboot
+wait 10
+expect ux_bank_flash_version 4
+expect ux_bank_slot1 1
+expect ux_bank_slot6 0
+perfload 1
+expect bpm_proj 110
+expect ux_register_low 67
+expect ux_register_high 91
+expect ux_voice_bass_low 36
