@@ -51,14 +51,14 @@ proj template full 0xABCDEF12
 perfstore 1
 perfstore 6
 expect ux_bank_slot6 1
-expect ux_bank_flash_version 3
+expect ux_bank_flash_version 1
 
-# Host-only old-bank fixture: same 3748-byte content with historical v2 header.
-v2bank
-expect ux_bank_flash_version 2
+# A populated incompatible development bank must be discarded entirely.
+invalidbank
+expect ux_bank_flash_version 4
 reboot
 wait 10
-expect ux_bank_flash_version 3
+expect ux_bank_flash_version 1
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
 expect ux_bank_slot6 0
@@ -74,13 +74,13 @@ expect bpm_proj 115
 perfload 4
 expect tpl 0
 expect bpm_proj 112
-# After upgrade the bank is v3. A subsequent explicit user STORE in slot 1
+# After reset the bank has the sole format 1. A subsequent explicit user STORE in slot 1
 # must survive a second reboot (factory material is not reinstalled every boot).
 proj template full 0xABCDEF34
 perfstore 1
 reboot
 wait 10
-expect ux_bank_flash_version 3
+expect ux_bank_flash_version 1
 perfload 1
 expect tpl 1
 expect bpm_proj 96
