@@ -44,9 +44,9 @@ expect bpm_proj 112
 expect form 1
 expect density_pct 90
 
-# Simulate upgrading a device with existing user material in slots 01 and 06.
-# Occupied slots 01-04 are deliberately replaced once by factory starters.
-# Slots 05-10 stay as they were; no repeated replacement on later reboot.
+# Simulate upgrading a device with existing material in slots 01 and 06.
+# Both are deliberately discarded; slots 01-04 become the factory starters,
+# 05-10 are left empty, and later user saves are NOT reset on reboot.
 proj template full 0xABCDEF12
 perfstore 1
 perfstore 6
@@ -61,7 +61,7 @@ wait 10
 expect ux_bank_flash_version 3
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
-expect ux_bank_slot6 1
+expect ux_bank_slot6 0
 perfload 1
 expect tpl 0
 expect bpm_proj 110
@@ -74,10 +74,6 @@ expect bpm_proj 115
 perfload 4
 expect tpl 0
 expect bpm_proj 112
-perfload 6
-expect tpl 1
-expect bpm_proj 96
-
 # After upgrade the bank is v3. A subsequent explicit user STORE in slot 1
 # must survive a second reboot (factory material is not reinstalled every boot).
 proj template full 0xABCDEF34
@@ -88,6 +84,4 @@ expect ux_bank_flash_version 3
 perfload 1
 expect tpl 1
 expect bpm_proj 96
-perfload 6
-expect tpl 1
-expect bpm_proj 96
+expect ux_bank_slot6 0
