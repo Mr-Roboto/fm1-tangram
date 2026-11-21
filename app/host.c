@@ -813,6 +813,25 @@ static int proj_expect(const char *what, int *got)
         *got = VIEW_PAGES[V_VOICE];
     else if (!strcmp(what, "ux_env_is_voice"))
         *got = ui.view == V_VOICE && !strcmp(view_name(V_VOICE), "ENV VOICE");
+    else if (!strcmp(what, "ux_last_pitch_matches_wire")) {
+        /* Independent record of the last actual Note-On on each pluck
+         * channel. Compare it to the same accessor the ENV badge uses. */
+        long long tick;
+        unsigned st, note, vel;
+        int last[2] = {-1, -1};
+        char line[80];
+        if (dump) fflush(dump);
+        FILE *in = fopen(dump_path, "r");
+        if (!in) { *got = 0; return 1; }
+        while (fgets(line, sizeof line, in))
+            if (sscanf(line, "%lld %x %x %x", &tick, &st, &note, &vel) == 4 &&
+                (st == 0x90 || st == 0x91) && vel)
+                last[st - 0x90] = (int)note;
+        fclose(in);
+        *got = last[0] >= 0 && last[1] >= 0 &&
+               last[0] == rt_last_pitch(BL_VID_BED1) &&
+               last[1] == rt_last_pitch(BL_VID_BED2);
+    }
     else if (!strcmp(what, "ux_register_k2_available"))
         *got = ui.view == V_VOICE && view_knob(V_VOICE, 1) == KN_REGISTER;
     else if (!strcmp(what, "ux_register_low") || !strcmp(what, "ux_register_high")) {
