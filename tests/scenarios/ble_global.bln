@@ -38,3 +38,33 @@ reboot
 expect ext_ports 7
 expect midi_out 3
 expect clock_out 2
+
+# CLOCK OUT OFF: use the actual GLO MIDI K1 control from USB -> OFF.
+# Outgoing realtime traffic must stop, while musical notes continue.
+rt midiout USB
+rt clockout USB
+tap GLO
+tap GLO
+turn K1 -1
+expect midi_out 1
+expect clock_out 0
+wait 350
+reboot
+expect midi_out 1
+expect clock_out 0
+# Record actual outgoing MIDI statuses, not plat_midi_count() input/output
+# counters (those counters never count realtime transport bytes).
+dumpmidi app/build/scenarios/ble_global/clock_off_midi.txt
+rt play
+wait 600
+expect playing 1
+expect midi_sent_usb >0
+dumpcount FA * *
+expect dumpcount 0
+dumpcount F8 * *
+expect dumpcount 0
+rt stop
+wait 30
+dumpcount FC * *
+expect dumpcount 0
+dumpmidi

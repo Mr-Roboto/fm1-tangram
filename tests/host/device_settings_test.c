@@ -47,7 +47,7 @@ int rt_apply_clock_settings(int sync, int ports)
 }
 int rt_apply_output_settings(int midi, int clock)
 {
-    if (!midi || (midi & ~DEVICE_MIDI_BOTH) || !clock || (clock & ~DEVICE_MIDI_BOTH) ||
+    if (!midi || (midi & ~DEVICE_MIDI_BOTH) || (clock & ~DEVICE_MIDI_BOTH) ||
         ((midi != output_midi || clock != output_clock) &&
          (playing || pending_start || busy))) return -1;
     output_midi = midi;
@@ -116,6 +116,35 @@ static void test_defaults_and_masks(void)
     CHECK(device_settings_set(d) == -1, "unsupported external clock input bit is invalid");
     CHECK(output_midi == DEVICE_MIDI_BLE && output_clock == DEVICE_MIDI_USB,
           "rejected masks do not modify runtime");
+}
+
+static void test_clock_output_off(void)
+{
+    reset_all();
+    device_settings_t d = device_settings_get();
+    d.clock_out = 0;
+    CHECK(!device_settings_set(d), "CLOCK OUT OFF is valid under internal sync");
+    CHECK(output_midi == DEVICE_MIDI_BOTH && output_clock == 0,
+          "CLOCK OFF does not disable ordinary USB/BLE MIDI destinations");
+    now_ms += 300;
+    CHECK(!device_settings_poll() && stored_len == 11 && stored[10] == 0,
+          "CLOCK OUT OFF persists in unchanged format-4 record");
+    output_midi = output_clock = DEVICE_MIDI_BOTH;
+    CHECK(!device_settings_init() && !device_settings_apply() &&
+          device_settings_get().clock_out == 0 && output_clock == 0 &&
+          output_midi == DEVICE_MIDI_BOTH,
+          "reboot restores CLOCK OUT OFF while retaining musical output");
+    d = device_settings_get();
+    d.clock_out = 4;
+    CHECK(device_settings_set(d) == -1 && output_clock == 0,
+          "unsupported clock bits remain invalid");
+    d.clock_out = DEVICE_MIDI_USB;
+    playing = 1;
+    CHECK(device_settings_set(d) == -1 && output_clock == 0,
+          "live transport prevents changing CLOCK OUT from OFF");
+    playing = 0;
+    CHECK(!device_settings_set(d) && output_clock == DEVICE_MIDI_USB,
+          "clock transmission can be reenabled while stopped");
 }
 
 static void test_running_safety(void)
@@ -202,6 +231,7 @@ static void test_save_retry(void)
 int main(void)
 {
     test_defaults_and_masks();
+    test_clock_output_off();
     test_running_safety();
     test_legacy_and_bad_records();
     test_save_retry();

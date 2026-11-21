@@ -630,9 +630,11 @@ static int rt_cmd(const char *a, const char *b, const char *c)
             !strcmp(b, "all") ? DEVICE_CLOCK_ALL : DEVICE_CLOCK_BOTH;
         return device_settings_set(settings);
     } else if ((!strcmp(a, "midiout") || !strcmp(a, "clockout")) &&
-               (!strcmp(b, "USB") || !strcmp(b, "BLE") || !strcmp(b, "both"))) {
+               (!strcmp(b, "USB") || !strcmp(b, "BLE") || !strcmp(b, "both") ||
+                (!strcmp(a, "clockout") && !strcmp(b, "off")))) {
         device_settings_t settings = device_settings_get();
-        uint8_t target = !strcmp(b, "USB") ? DEVICE_MIDI_USB :
+        uint8_t target = !strcmp(b, "off") ? 0 :
+                         !strcmp(b, "USB") ? DEVICE_MIDI_USB :
                          !strcmp(b, "BLE") ? DEVICE_MIDI_BLE : DEVICE_MIDI_BOTH;
         if (!strcmp(a, "midiout")) settings.midi_out = target;
         else settings.clock_out = target;

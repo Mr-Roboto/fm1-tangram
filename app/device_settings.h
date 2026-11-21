@@ -21,6 +21,7 @@ enum {
     DEVICE_MIDI_BOTH = TO_USB | TO_BLE
 };
 extern const char *const DEVICE_MIDI_NAME[3]; /* USB, BLE, USB + BLE */
+extern const char *const DEVICE_CLOCK_OUTPUT_NAME[4]; /* OFF, USB, BLE, USB + BLE */
 typedef struct {
     uint8_t sync, ext_ports, theme, lights, midi_out, clock_out;
 } device_settings_t;
@@ -30,7 +31,8 @@ typedef struct {
  * INT/USB+TRS/CLASSIC/LIGHTS ON, MIDI+clock on USB+BLE.
  * Format 1 imports clock choices with CLASSIC; format 2 also stores theme.
  * Format 3 adds global LIGHTS; older records import LIGHTS from the working project.
- * Format 4 adds independent MIDI and internal-clock output routing; older records
+ * Format 4 adds independent MIDI and internal-clock output routing, including
+ * clock_out=0 for OFF (no outgoing FA/F8/FC; notes and CC unaffected); older records
  * default to USB + BLE, as the first Tangram BLE build did.
  * set rejects invalid values or a mode change during playback/pending Start
  * (-1); an accepted edit (0) is saved after settling. Port-only edits retain

@@ -1020,11 +1020,21 @@ static void knob(int role, int k, int32_t e)   /* a page's knob: the values the 
     case KN_MIDI_OUT:
     case KN_CLOCK_OUT: {
         device_settings_t settings = device_settings_get();
-        uint8_t *destination = k == KN_MIDI_OUT ? &settings.midi_out : &settings.clock_out;
-        int index = clamp((int)*destination - DEVICE_MIDI_USB + d, 0, 2);
-        *destination = (uint8_t)(index + DEVICE_MIDI_USB);
-        if (device_settings_set(settings)) warn(k == KN_MIDI_OUT ? "MIDI OUT" : "CLOCK OUT", "STOP FIRST");
-        else show(k == KN_MIDI_OUT ? "MIDI OUT" : "CLOCK OUT", DEVICE_MIDI_NAME[index]);
+        int clock = k == KN_CLOCK_OUT;
+        int index;
+        if (clock) {
+            /* Clock mask 0 is OFF; never disable musical note/CC output. */
+            index = clamp((int)settings.clock_out + d, 0, 3);
+            settings.clock_out = (uint8_t)index;
+        } else {
+            index = clamp((int)settings.midi_out - DEVICE_MIDI_USB + d, 0, 2);
+            settings.midi_out = (uint8_t)(index + DEVICE_MIDI_USB);
+        }
+        if (device_settings_set(settings))
+            warn(clock ? "CLOCK OUT" : "MIDI OUT", "STOP FIRST");
+        else
+            show(clock ? "CLOCK OUT" : "MIDI OUT",
+                 clock ? DEVICE_CLOCK_OUTPUT_NAME[index] : DEVICE_MIDI_NAME[index]);
         break;
     }
     case KN_LIGHTS: {

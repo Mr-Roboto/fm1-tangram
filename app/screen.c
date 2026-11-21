@@ -639,9 +639,11 @@ static void cell(int view, int i, cell_t *c)
         break;
     case KN_MIDI_OUT:
     case KN_CLOCK_OUT: {
-        uint8_t mask = k == KN_MIDI_OUT ? screen_clock().midi_out : screen_clock().clock_out;
-        c->hi = 2, c->v = (int16_t)(mask - DEVICE_MIDI_USB);
-        cat(c->val, DEVICE_MIDI_NAME[c->v]);
+        int clock = k == KN_CLOCK_OUT;
+        uint8_t mask = clock ? screen_clock().clock_out : screen_clock().midi_out;
+        c->hi = clock ? 3 : 2;
+        c->v = (int16_t)(clock ? mask : mask - DEVICE_MIDI_USB);
+        cat(c->val, clock ? DEVICE_CLOCK_OUTPUT_NAME[c->v] : DEVICE_MIDI_NAME[c->v]);
         break;
     }
     case KN_LIGHTS:
@@ -1919,12 +1921,12 @@ static void draw_setup(void)
         device_settings_t settings = screen_clock();
         int status = device_settings_status();
         text_box(4, 3, 232, 22, &FONT_B, "GLOBAL MIDI", K_FOCUS, 0);
-        row(4, 31, 92, "CLOCK OUT", DEVICE_MIDI_NAME[settings.clock_out - DEVICE_MIDI_USB], K_TEXT);
+        row(4, 31, 92, "CLOCK OUT", DEVICE_CLOCK_OUTPUT_NAME[settings.clock_out], K_TEXT);
         row(4, 52, 92, "MIDI OUT", DEVICE_MIDI_NAME[settings.midi_out - DEVICE_MIDI_USB], K_TEXT);
         row(4, 73, 92, "BLE LINK", plat_ble_connected() ? "CONNECTED" : "NOT CONNECTED", K_TEXT2);
         row(4, 94, 92, "GLOBAL SAVE", status < 0 ? "ERROR" : status ? "PENDING" : "SAVED", K_TEXT2);
         cv_text(6, 125, &FONT_T, "K1 CLOCK OUT; K2 MIDI OUT", K_DIM);
-        cv_text(6, 139, &FONT_T, settings.sync ? "EXT SYNC: NO CLOCK OUT" : "USB / BLE / USB + BLE", K_DIM);
+        cv_text(6, 139, &FONT_T, settings.sync ? "EXT SYNC: NO CLOCK OUT" : "OFF / USB / BLE / USB + BLE", K_DIM);
         return;
     }
     if (ui.page[V_SETUP] == 2) {
@@ -1953,7 +1955,7 @@ static void draw_setup(void)
     if (screen_clock().sync)
         cat(cat(t, "EXT from "), GLO_EXT_NAMES[port_index()]);
     else
-        cat(cat(t, "INT via "), DEVICE_MIDI_NAME[screen_clock().clock_out - DEVICE_MIDI_USB]);
+        cat(cat(t, "INT via "), DEVICE_CLOCK_OUTPUT_NAME[screen_clock().clock_out]);
     row(4, 36, 76, "CLOCK", t, K_TEXT);
     row(4, 52, 76, "MIDI OUT", DEVICE_MIDI_NAME[screen_clock().midi_out - DEVICE_MIDI_USB], K_TEXT);
     row(4, 68, 76, "VERSION", BL_VERSION, K_TEXT2);
@@ -2588,7 +2590,7 @@ static void sp_main(void)
         }
         if (ui.page[V_SETUP] == 1) {
             sp_cat("Global MIDI. Clock output ");
-            sp_cat(DEVICE_MIDI_NAME[screen_clock().clock_out - DEVICE_MIDI_USB]);
+            sp_cat(DEVICE_CLOCK_OUTPUT_NAME[screen_clock().clock_out]);
             sp_cat(". MIDI output ");
             sp_cat(DEVICE_MIDI_NAME[screen_clock().midi_out - DEVICE_MIDI_USB]);
             break;
