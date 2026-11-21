@@ -75,7 +75,7 @@ tap PLAY
 expect playing 0
 
 # The NAMED 10-slot bank must round-trip the complete LFO/mixer edits too.
-# Simulated only: there are NO finished user factory presets in 1.0.
+# Explicit user SAVE replaces a factory preset as usual.
 perfstore 1
 expect ux_bank_slot1 1
 expect ux_bank_flash_bytes 3748
@@ -106,16 +106,6 @@ expect ux_perf_last_saved_slot 3
 expect ux_bank_slot1 1
 expect ux_bank_slot3 1
 
-# v1 bank upgrade: old flash must remain untouched at boot; an explicit
-# user edit migrates the occupied slot and writes the new 3748-byte bank.
-legacybank
-expect ux_bank_flash_bytes 3258
-reboot
-expect ux_bank_slot1 1
-expect ux_bank_flash_bytes 3258
-migratebank
-expect ux_bank_slot1 1
-expect ux_bank_flash_bytes 3748
-reboot
-expect ux_bank_slot1 1
-expect ux_bank_flash_bytes 3748
+
+# User saves persist in the single supported bank format.
+expect ux_bank_flash_version 1

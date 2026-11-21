@@ -1,0 +1,144 @@
+# Tangram 1.0 factory Performance Presets: focused host-only smoke.
+# New bank must show four starters without writing flash at boot.
+expect ux_bank_bytes 3748
+expect ux_bank_slot1 1
+expect ux_bank_slot2 1
+expect ux_bank_slot3 1
+expect ux_bank_slot4 1
+expect ux_bank_slot5 0
+expect ux_bank_slot6 0
+expect ux_bank_slot7 0
+expect ux_bank_slot8 0
+expect ux_bank_slot9 0
+expect ux_bank_slot10 0
+expect ux_bank_flash_bytes -1
+expect ux_perf_last_saved_slot 1
+
+# The runtime intentionally refuses load/store until its MIDI drain guard
+# has been idle for at least 5ms. The host boots at simulated time 0.
+wait 10
+
+# Each starter is a normal editable, reproducible project, not a new engine.
+perfload 1
+expect tpl 0
+expect root 9
+expect mode 0
+expect bpm_proj 110
+expect form 2
+expect density_pct 85
+expect ux_reg0_low 60
+expect ux_reg0_high 91
+expect ux_reg1_low 60
+expect ux_reg1_high 91
+expect ux_reg2_low 36
+expect ux_reg2_high 60
+
+perfload 2
+expect tpl 2
+expect root 2
+expect mode 1
+expect bpm_proj 72
+expect form 3
+expect density_pct 62
+expect ux_reg0_low 36
+expect ux_reg0_high 60
+expect ux_reg1_low 55
+expect ux_reg1_high 84
+expect ux_reg2_low 60
+expect ux_reg2_high 84
+expect ux_reg3_low 48
+expect ux_reg3_high 72
+
+perfload 3
+expect tpl 1
+expect root 4
+expect mode 0
+expect bpm_proj 115
+expect form 1
+expect density_pct 80
+expect ux_reg0_low 60
+expect ux_reg0_high 88
+expect ux_reg1_low 64
+expect ux_reg1_high 91
+expect ux_reg2_low 36
+expect ux_reg2_high 60
+expect ux_reg3_low 48
+expect ux_reg3_high 72
+expect ux_reg4_low 60
+expect ux_reg4_high 96
+expect ux_reg5_low 36
+expect ux_reg5_high 47
+expect chan5 9
+
+perfload 4
+expect tpl 0
+expect root 0
+expect mode 9
+expect bpm_proj 112
+expect form 1
+expect density_pct 90
+expect ux_reg0_low 60
+expect ux_reg0_high 84
+expect ux_reg1_low 60
+expect ux_reg1_high 84
+expect ux_reg2_low 36
+expect ux_reg2_high 60
+
+# Simulate upgrading a device with existing material in slots 01 and 06.
+# Both are deliberately discarded; slots 01-04 become the factory starters,
+# 05-10 are left empty, and later user saves are NOT reset on reboot.
+proj template full 0xABCDEF12
+perfstore 1
+perfstore 6
+expect ux_bank_slot6 1
+expect ux_bank_flash_version 1
+
+# A populated prerelease bank with the old storage signature is discarded.
+invalidbank
+expect ux_bank_flash_version 1
+reboot
+wait 10
+expect ux_bank_flash_version 1
+expect ux_bank_slot1 1
+expect ux_bank_slot3 1
+expect ux_bank_slot6 0
+perfload 1
+expect tpl 0
+expect bpm_proj 110
+perfload 2
+expect tpl 2
+expect bpm_proj 72
+perfload 3
+expect tpl 1
+expect bpm_proj 115
+perfload 4
+expect tpl 0
+expect bpm_proj 112
+# After reset the bank is format 1. A subsequent explicit user STORE in slot 1
+# must survive a second reboot (factory material is not reinstalled every boot).
+proj template full 0xABCDEF34
+perfstore 1
+reboot
+wait 10
+expect ux_bank_flash_version 1
+perfload 1
+expect tpl 1
+expect bpm_proj 96
+expect ux_bank_slot6 0
+
+# A new template selection after preset load restores exactly the original
+# hardware-confirmed template defaults (not factory-preset range overrides).
+proj template demo 0xBE1271A9
+expect bpm_proj 90
+expect ux_reg0_low 55
+expect ux_reg0_high 79
+expect ux_reg1_low 60
+expect ux_reg1_high 84
+expect ux_reg2_low 24
+expect ux_reg2_high 48
+proj template full 0x93B3BFE5
+expect ux_reg0_low 55
+expect ux_reg0_high 79
+proj template ambient 0x0A3B11ED
+expect ux_reg1_low 55
+expect ux_reg1_high 79

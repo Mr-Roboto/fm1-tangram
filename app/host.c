@@ -859,10 +859,21 @@ static int proj_expect(const char *what, int *got)
         *got = PROJECT_RECORD_BYTES;
     else if (!strcmp(what, "ux_bank_bytes"))
         *got = PERFORMANCE_BANK_BYTES;
-    else if (!strcmp(what, "ux_bank_slot1"))
-        *got = performance_preset_used(1);
-    else if (!strcmp(what, "ux_bank_slot3"))
-        *got = performance_preset_used(3);
+    else if (!strncmp(what, "ux_bank_slot", 12))
+        *got = performance_preset_used(atoi(what + 12));
+    else if (!strcmp(what, "ux_bank_flash_version")) {
+        static uint8_t probe[PLAT_STORE_MAX];
+        int n = plat_store_load(OBJ_PERFORMANCE_PRESETS, probe, sizeof probe);
+        *got = n >= PERFORMANCE_BANK_HEAD ? probe[4] : -1;
+    }
+    else if (!strncmp(what, "ux_reg", 6) && what[6] >= '0' &&
+             what[6] < '0' + BL_MAX_VOICES && what[7] == '_') {
+        bl_vconfig_t cfg;
+        if (proj_get_voice_config(what[6] - '0', &cfg)) return 0;
+        if (!strcmp(what + 8, "low")) *got = cfg.reg_low;
+        else if (!strcmp(what + 8, "high")) *got = cfg.reg_high;
+        else return 0;
+    }
     else if (!strcmp(what, "ux_perf_slot"))
         *got = ui.perf_slot + 1;
     else if (!strcmp(what, "ux_perf_last_saved_slot"))
@@ -1174,28 +1185,14 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
             printf("FAIL perfload %s: unable to load working project\n", a);
         else printf("  ok perfload slot %s\n", a);
     }
-    else if (!strcmp(cmd, "legacybank")) {
-        /* Host-only fixture: genuine v1 bank bytes and format-8 project
-         * without CC mixer/LFO extension. No device firmware path can run it. */
-        static uint8_t old[PERFORMANCE_V1_BANK_BYTES], rec[PROJECT_RECORD_BYTES];
-        memset(old, 0, sizeof old);
-        memcpy(old, performance_legacy_head, PERFORMANCE_BANK_HEAD);
-        if (project_record_write(&proj, rec, sizeof rec) != PROJECT_RECORD_BYTES) {
-            printf("FAIL legacybank: cannot encode test project\n");
-        } else {
-            rec[4] = 8; /* first 312 bytes are identical to format 8 */
-            old[PERFORMANCE_BANK_HEAD] = 1;
-            memcpy(old + PERFORMANCE_BANK_HEAD + 1, "LEGACY BANK ", PERFORMANCE_PRESET_NAME_BYTES);
-            memcpy(old + PERFORMANCE_BANK_HEAD + 1 + PERFORMANCE_PRESET_NAME_BYTES,
-                   rec, PROJECT_RECORD8_BYTES);
-            if (plat_store_save(OBJ_PERFORMANCE_PRESETS, old, sizeof old))
-                printf("FAIL legacybank: flash fixture write\n");
-            else printf("  ok legacy performance bank v1 seeded\n");
-        }
-    } else if (!strcmp(cmd, "migratebank")) {
-        if (performance_preset_rename(1, "MIGRATED", 8))
-            printf("FAIL migratebank: old slot cannot rename\n");
-        else printf("  ok legacy bank migrated by explicit user rename\n");
+    else if (!strcmp(cmd, "invalidbank")) {
+        /* Same version and layout, previous development signature. */
+        static uint8_t old[PERFORMANCE_BANK_BYTES];
+        memcpy(old, performance_bank, sizeof old);
+        old[3] = 'B';
+        if (plat_store_save(OBJ_PERFORMANCE_PRESETS, old, sizeof old))
+            printf("FAIL invalidbank: cannot write fixture\n");
+        else printf("  ok incompatible development bank fixture\n");
     }
     else if (!strcmp(cmd, "rt")) {
         int r = rt_cmd(a, b, c);
