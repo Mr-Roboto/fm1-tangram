@@ -1188,38 +1188,14 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
             printf("FAIL perfload %s: unable to load working project\n", a);
         else printf("  ok perfload slot %s\n", a);
     }
-    else if (!strcmp(cmd, "v2bank")) {
-        /* Host-only fixture: make a complete stored bank appear to originate
-         * from the older firmware, with occupied slots ready for replacement. */
-        static uint8_t previous[PERFORMANCE_BANK_BYTES];
-        memcpy(previous, performance_bank, sizeof previous);
-        previous[4] = performance_v2_head[4];
-        if (plat_store_save(OBJ_PERFORMANCE_PRESETS, previous, sizeof previous))
-            printf("FAIL v2bank: cannot write test fixture\n");
-        else printf("  ok simulated existing TGPB-v2 bank\n");
-    }
-    else if (!strcmp(cmd, "legacybank")) {
-        /* Host-only fixture: genuine v1 bank bytes and format-8 project
-         * without CC mixer/LFO extension. No device firmware path can run it. */
-        static uint8_t old[PERFORMANCE_V1_BANK_BYTES], rec[PROJECT_RECORD_BYTES];
-        memset(old, 0, sizeof old);
-        memcpy(old, performance_legacy_head, PERFORMANCE_BANK_HEAD);
-        if (project_record_write(&proj, rec, sizeof rec) != PROJECT_RECORD_BYTES) {
-            printf("FAIL legacybank: cannot encode test project\n");
-        } else {
-            rec[4] = 8; /* first 312 bytes are identical to format 8 */
-            old[PERFORMANCE_BANK_HEAD] = 1;
-            memcpy(old + PERFORMANCE_BANK_HEAD + 1, "LEGACY BANK ", PERFORMANCE_PRESET_NAME_BYTES);
-            memcpy(old + PERFORMANCE_BANK_HEAD + 1 + PERFORMANCE_PRESET_NAME_BYTES,
-                   rec, PROJECT_RECORD8_BYTES);
-            if (plat_store_save(OBJ_PERFORMANCE_PRESETS, old, sizeof old))
-                printf("FAIL legacybank: flash fixture write\n");
-            else printf("  ok legacy performance bank v1 seeded\n");
-        }
-    } else if (!strcmp(cmd, "migratebank")) {
-        if (performance_preset_rename(1, "MIGRATED", 8))
-            printf("FAIL migratebank: old slot cannot rename\n");
-        else printf("  ok legacy bank migrated by explicit user rename\n");
+    else if (!strcmp(cmd, "invalidbank")) {
+        /* An incompatible prerelease bank is replaced, regardless of its contents. */
+        static uint8_t old[PERFORMANCE_BANK_BYTES];
+        memcpy(old, performance_bank, sizeof old);
+        old[4] = 4;
+        if (plat_store_save(OBJ_PERFORMANCE_PRESETS, old, sizeof old))
+            printf("FAIL invalidbank: cannot write test fixture\n");
+        else printf("  ok incompatible development bank fixture\n");
     }
     else if (!strcmp(cmd, "rt")) {
         int r = rt_cmd(a, b, c);
