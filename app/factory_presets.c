@@ -2,8 +2,8 @@
 /* Tangram 1.0 musical factory starters. Included by performance_presets.c.
  *
  * These are ordinary format-9 Performance Presets, not special playback modes.
- * Upgrading a stored TGPB-1/2 bank discards all ten old slots exactly once,
- * installs the four factory starters and commits TGPB-3 so later user
+ * Upgrading a stored TGPB-1/2/3 bank discards all ten old slots exactly once,
+ * installs the retuned factory starters and commits TGPB-4 so later user
  * SAVE and RENAME operations persist.
  * New/empty devices get factory starters in RAM without a flash write.
  * Everything uses existing template, generator, Composer and MIDI features. */
@@ -74,8 +74,8 @@ static int factory_preset_make(int slot)
                                (uint8_t)(slot == 3 ? 2 : slot == 4 ? 0 : 1), 1};
     p.ratchet_pct = slot == 3 ? 5 : 0;
 
-    /* Derive valid original voice configurations from each built-in template,
-     * keeping legacy bass, drone, pad and heartbeat voices intact unless edited. */
+    /* Derive valid original voice configurations from the built-in template.
+     * The prior presets simply inherited Berlinan's notably low registers. */
     proj_eng.seed = p.seed;
     proj_eng.key.root = p.key_root;
     bl_scale_preset(p.key_mode, &proj_eng.key.scale);
@@ -85,6 +85,14 @@ static int factory_preset_make(int slot)
         p.delay[i] = bl_delay_config((bl_delay_t){0});
         p.voice_configured[i] = 1;
         p.voice_config[i] = proj_st.v[i].config;
+        /* All pitched voices of the four factory starters sound an octave
+         * higher. Preserve the register width and all actual GM drum pitches:
+         * heartbeat bypasses the melodic register in harmony.c. */
+        if (p.voice_config[i].gen.kind != BL_GEN_HEARTBEAT) {
+            if (p.voice_config[i].reg_high > 115) return -1;
+            p.voice_config[i].reg_low += 12;
+            p.voice_config[i].reg_high += 12;
+        }
     }
     for (int i = proj_eng.nvoices; i < BL_MAX_VOICES; i++)
         p.delay[i] = bl_delay_config((bl_delay_t){0});
