@@ -119,10 +119,22 @@ int proj_form(void)
     return FORM_OTHER;
 }
 
+/* Keep the upstream Berlinan engine templates unchanged. PLUCK 1's old
+ * upper bound (79) folds A4/MIDI 81 onto A3/MIDI 69. Extend just its
+ * default ceiling to 84 so the generator's octave accents fit. All
+ * other voices, reference pitches and explicit user ranges are untouched. */
+static void tangram_template(int t, bl_project_t *out)
+{
+    bl_template(t, out);
+    for (int i = 0; i < out->nvoices; i++)
+        if (out->voice[i].role == BL_ROLE_BED1)
+            out->voice[i].reg_high = 84;
+}
+
 static void from_template(int t, uint64_t seed)   /* AppServices.applyTemplate: the template, as it is, on seed */
 {
     int i;
-    bl_template(t, &proj_eng);
+    tangram_template(t, &proj_eng);
     proj.tpl = (uint8_t)t;
     proj.key_root = (uint8_t)proj_eng.key.root;
     proj.key_mode = proj_eng.key.scale.mode;
@@ -379,7 +391,7 @@ int proj_mixer_set(int voice, int control, int value)
 void proj_to_engine(bl_project_t *out)
 {
     int i;
-    bl_template(proj.tpl, out);
+    tangram_template(proj.tpl, out);
     out->seed = proj.seed;
     out->key.root = proj.key_root;
     bl_scale_preset(proj.key_mode, &out->key.scale);
@@ -683,7 +695,7 @@ int proj_set_ratchet(int pct)
 
 void proj_set_channel(int voice, int ch)
 {
-    bl_template(proj.tpl, &proj_eng);
+    tangram_template(proj.tpl, &proj_eng);
     if (voice < 0 || voice >= proj_eng.nvoices || ch < 0 || ch > 15)
         return;
     proj.channel[voice] = (uint8_t)ch;
@@ -698,7 +710,7 @@ void proj_set_channel(int voice, int ch)
 int proj_get_delay(int voice, bl_delay_t *out)
 {
     if (!out || rt_loading()) return -1;
-    bl_template(proj.tpl, &proj_eng);
+    tangram_template(proj.tpl, &proj_eng);
     if (voice < 0 || voice >= proj_eng.nvoices) return -1;
     if (rt_playing()) return rt_get_delay(bl_vid(proj_eng.voice[voice].id), out);
     *out = proj.delay[voice];
@@ -708,7 +720,7 @@ int proj_get_delay(int voice, bl_delay_t *out)
 int proj_set_delay(int voice, const bl_delay_t *settings)
 {
     if (!settings || !bl_delay_valid(*settings) || rt_loading()) return -1;
-    bl_template(proj.tpl, &proj_eng);
+    tangram_template(proj.tpl, &proj_eng);
     if (voice < 0 || voice >= proj_eng.nvoices) return -1;
     if (rt_playing() && rt_set_delay(bl_vid(proj_eng.voice[voice].id), settings)) return -1;
     proj.delay[voice] = *settings;
