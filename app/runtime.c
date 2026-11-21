@@ -881,6 +881,16 @@ bl_tick_t rt_play_tick(void)             /* the tick sounding now in the running
     return t < 0 ? 0 : t;
 }
 
+/* Last ORIGINAL Note-On submitted to the MIDI output, not the preview. */
+static int rt_last_pitch(int vid)
+{
+    if (vid < 0 || vid >= BL_NVIDS) return -1;
+    uint32_t f = plat_lock();
+    int pitch = rt.playing && rt.source[vid].serial ? rt.source[vid].pitch : -1;
+    plat_unlock(f);
+    return pitch;
+}
+
 uint32_t rt_source_onset(int vid)
 {
     if (vid < 0 || vid >= BL_NVIDS) return 0;
