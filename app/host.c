@@ -1186,8 +1186,8 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         memcpy(previous, performance_bank, sizeof previous);
         previous[4] = performance_v2_head[4];
         if (plat_store_save(OBJ_PERFORMANCE_PRESETS, previous, sizeof previous))
-            printf("FAIL v2bank: cannot write test fixture\\n");
-        else printf("  ok simulated existing TGPB-v2 bank\\n");
+            printf("FAIL v2bank: cannot write test fixture\n");
+        else printf("  ok simulated existing TGPB-v2 bank\n");
     }
     else if (!strcmp(cmd, "legacybank")) {
         /* Host-only fixture: genuine v1 bank bytes and format-8 project
