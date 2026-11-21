@@ -1,0 +1,54 @@
+# Tangram 1.0 factory Performance Presets: focused host-only smoke.
+# New bank must show four starters without writing flash at boot.
+expect ux_bank_bytes 3748
+expect ux_bank_slot1 1
+expect ux_bank_slot3 1
+expect ux_bank_flash_bytes -1
+expect ux_perf_last_saved_slot 1
+
+# Each starter is a normal editable, reproducible project, not a new engine.
+perfload 1
+expect tpl 0
+expect root 9
+expect mode 0
+expect bpm_proj 110
+expect form 2
+expect density_pct 85
+
+perfload 2
+expect tpl 2
+expect root 2
+expect mode 1
+expect bpm_proj 72
+expect form 3
+expect density_pct 62
+
+perfload 3
+expect tpl 1
+expect root 4
+expect mode 0
+expect bpm_proj 115
+expect form 1
+expect density_pct 80
+expect chan5 9
+
+perfload 4
+expect tpl 0
+expect root 0
+expect mode 9
+expect bpm_proj 112
+expect form 1
+expect density_pct 90
+
+# A user SAVE wins against the supplied starter, survives reboot and
+# persists the other available factory presets in the existing TGPB bank.
+proj template full 0xABCDEF12
+perfstore 1
+expect ux_bank_flash_bytes 3748
+reboot
+expect ux_bank_slot1 1
+expect ux_bank_slot3 1
+expect ux_bank_flash_bytes 3748
+perfload 1
+expect tpl 1
+expect bpm_proj 96
