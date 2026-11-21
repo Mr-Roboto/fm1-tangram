@@ -13,6 +13,17 @@ The four names and original stylistic directions were agreed during the Tangram 
 | 03 | MINIMAL PULS | FULL ENSEMBLE | 115 BPM / E natural minor | CLASSIC ARC / ON, MOVING | 80% |
 | 04 | PHASE GLASS | STRING TRIO | 112 BPM / C major | Composer OFF, Arranger OFF (free phasing) | 90% |
 
+**Tangram octave retuning (21 November candidate):** Factory presets store melodic
+voice registers twelve semitones above the original Berlinan defaults. At
+Tangram's project-to-engine boundary, the matching melodic reference-C and
+template fold bounds are also shifted by +12, making the resulting MIDI
+notes a **true octave higher**. This app-only tuning applies to the three
+ordinary starting templates as well; the immutable Berlinan engine templates
+and all fixed GM/HEARTBEAT percussion notes remain unchanged. The existing
+TGPB-3 device bank is deliberately replaced once with retuned TGPB-4
+factory presets. After a user SAVE to v4 no further automatic replacement
+occurs.
+
 Each starter uses a fixed, distinct seed to enable reproducible material. Slots 05–10 remain available to the user. Midi channel assignments follow the templates; devices and their sound programs must be selected externally.
 
 ### 01 BERLIN SEQ
