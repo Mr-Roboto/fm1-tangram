@@ -49,7 +49,7 @@ static int factory_preset_make(int slot)
     n = slot - 1;
 
     memset(&p, 0, sizeof p);
-    bl_template(templates[n], &proj_eng); /* existing global scratch; restored by app_init/proj_apply */
+    tangram_template(templates[n], &proj_eng); /* existing global scratch; restored by app_init/proj_apply */
     p.magic = PROJ_MAGIC;
     p.format = PROJ_FORMAT;
     p.tpl = templates[n];
