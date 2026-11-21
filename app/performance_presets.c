@@ -3,11 +3,11 @@
  * of each voice's 10-byte format-9 LFO/CC extension. This is necessary:
  * 10 * (1+12+382) + 8 = 3958 > PLAT_STORE_MAX (3840).
  *
- * TGPB v3 retains the v2 layout: occupied u8, 12 printable ASCII name bytes,
+ * TGPB v4 retains the v2/v3 layout: occupied u8, 12 printable ASCII name bytes,
  * the first 312 bytes of a format-9 project record, plus 7*7 compact bytes.
  * 8 + 10 * (1+12+312+49) = 3748, within the existing flash allocation.
  * Project SAVE still uses full, uncompressed 382-byte project format 9.
- * Reads TGPB v1/v2 and upgrades once to v3, replacing all old presets.
+ * Reads TGPB v1/v2/v3 and upgrades once to v4, replacing all old presets.
  * An upgrade is committed once so subsequent user saves survive reboot.
  * Empty entries are all zero. */
 enum {
@@ -20,7 +20,9 @@ enum {
 };
 typedef char performance_bank_must_fit[PERFORMANCE_BANK_BYTES <= PLAT_STORE_MAX ? 1 : -1];
 typedef char performance_bank_is_3748[PERFORMANCE_BANK_BYTES == 3748 ? 1 : -1];
-static const uint8_t performance_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 3,
+static const uint8_t performance_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 4,
+    PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
+static const uint8_t performance_v3_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 3,
     PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
 static const uint8_t performance_v2_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 2,
     PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
@@ -101,10 +103,10 @@ static int performance_project_read(const uint8_t *compact, proj_t *out)
     return project_record_read(full, sizeof full, out, NULL);
 }
 
-#include "factory_presets.c"  /* four factory starters, one-time v1/v2 upgrade */
+#include "factory_presets.c"  /* four tuned factory starters, one-time v1/v2/v3 upgrade */
 
 /* Factory installation deliberately clears the previous bank ONCE, then
- * installs four starters in slots 1-4; slots 5-10 are empty. The v3 A/B
+ * installs four starters in slots 1-4; slots 5-10 are empty. The v4 A/B
  * flash commit marks this as completed, so future explicit user SAVE edits
  * are retained on later boots. A failed commit does not mark it complete. */
 static int performance_factory_upgrade(void)
@@ -154,13 +156,16 @@ int performance_presets_init(void)
         }
         return performance_factory_upgrade();
     }
-    /* Both versions have precisely the same entry layout and flash size.
-     * Accept v2 only for its one-time factory replacement/migration. */
+    /* v2/v3/v4 have identical entry layout and flash size. Versions 2 and 3
+     * are intentionally reset once, to install the retuned factory starters. */
     int bank_v2 = bytes == PERFORMANCE_BANK_BYTES &&
         !memcmp(proj_buf, performance_v2_head, PERFORMANCE_BANK_HEAD - 1);
     int bank_v3 = bytes == PERFORMANCE_BANK_BYTES &&
+        !memcmp(proj_buf, performance_v3_head, PERFORMANCE_BANK_HEAD - 1);
+    int bank_v4 = bytes == PERFORMANCE_BANK_BYTES &&
         !memcmp(proj_buf, performance_head, PERFORMANCE_BANK_HEAD - 1);
-    if ((!bank_v2 && !bank_v3) || proj_buf[7] > PERFORMANCE_PRESET_SLOTS) return -1;
+    if ((!bank_v2 && !bank_v3 && !bank_v4) ||
+        proj_buf[7] > PERFORMANCE_PRESET_SLOTS) return -1;
     for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
         const uint8_t *entry = proj_buf + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_ENTRY_BYTES;
         if (!entry[0]) {
@@ -171,7 +176,7 @@ int performance_presets_init(void)
             performance_project_read(entry + 1 + PERFORMANCE_PRESET_NAME_BYTES, &decoded)) return -1;
     }
     memcpy(performance_bank, proj_buf, sizeof performance_bank);
-    if (bank_v2) return performance_factory_upgrade();
+    if (bank_v2 || bank_v3) return performance_factory_upgrade();
     performance_bank_ready = 1;
     return 0;
 }
