@@ -2,8 +2,9 @@
 /* Tangram 1.0 musical factory starters. Included by performance_presets.c.
  *
  * These are ordinary format-9 Performance Presets, not special playback modes.
- * Upgrading a stored TGPB-1/2 bank replaces slots 1-4 exactly once,
- * then commits TGPB-3 so later user SAVE and RENAME operations persist.
+ * Upgrading a stored TGPB-1/2 bank discards all ten old slots exactly once,
+ * installs the four factory starters and commits TGPB-3 so later user
+ * SAVE and RENAME operations persist.
  * New/empty devices get factory starters in RAM without a flash write.
  * Everything uses existing template, generator, Composer and MIDI features. */
 
