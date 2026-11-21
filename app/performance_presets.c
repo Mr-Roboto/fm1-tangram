@@ -1,36 +1,21 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* The named Performance bank uses a compact, LOSSLESS 7-byte representation
- * of each voice's 10-byte format-9 LFO/CC extension. This is necessary:
- * 10 * (1+12+382) + 8 = 3958 > PLAT_STORE_MAX (3840).
- *
- * TGPB v3 retains the v2 layout: occupied u8, 12 printable ASCII name bytes,
- * the first 312 bytes of a format-9 project record, plus 7*7 compact bytes.
- * 8 + 10 * (1+12+312+49) = 3748, within the existing flash allocation.
- * Project SAVE still uses full, uncompressed 382-byte project format 9.
- * Reads TGPB v1/v2 and upgrades once to v3, replacing all old presets.
- * An upgrade is committed once so subsequent user saves survive reboot.
- * Empty entries are all zero. */
+/* Tangram 1.0 Performance Preset bank, format 1.
+ * Ten named entries; 3748 bytes total, stored in the existing flash object.
+ * Each compact record preserves the entire format-9 project losslessly.
+ * Development-format banks are discarded, never migrated. */
 enum {
     PERFORMANCE_BANK_HEAD = 8,
     PERFORMANCE_COMPACT_RECORD_BYTES = PROJECT_RECORD8_BYTES + 7 * BL_MAX_VOICES,
     PERFORMANCE_ENTRY_BYTES = 1 + PERFORMANCE_PRESET_NAME_BYTES + PERFORMANCE_COMPACT_RECORD_BYTES,
-    PERFORMANCE_BANK_BYTES = PERFORMANCE_BANK_HEAD + PERFORMANCE_PRESET_SLOTS * PERFORMANCE_ENTRY_BYTES,
-    PERFORMANCE_V1_ENTRY_BYTES = 1 + PERFORMANCE_PRESET_NAME_BYTES + PROJECT_RECORD8_BYTES,
-    PERFORMANCE_V1_BANK_BYTES = PERFORMANCE_BANK_HEAD + PERFORMANCE_PRESET_SLOTS * PERFORMANCE_V1_ENTRY_BYTES
+    PERFORMANCE_BANK_BYTES = PERFORMANCE_BANK_HEAD + PERFORMANCE_PRESET_SLOTS * PERFORMANCE_ENTRY_BYTES
 };
 typedef char performance_bank_must_fit[PERFORMANCE_BANK_BYTES <= PLAT_STORE_MAX ? 1 : -1];
 typedef char performance_bank_is_3748[PERFORMANCE_BANK_BYTES == 3748 ? 1 : -1];
-static const uint8_t performance_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 3,
-    PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
-static const uint8_t performance_v2_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 2,
-    PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
-static const uint8_t performance_legacy_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 1,
+static const uint8_t performance_head[PERFORMANCE_BANK_HEAD] = {'T', 'G', 'P', 'B', 1,
     PERFORMANCE_PRESET_SLOTS, PERFORMANCE_PRESET_NAME_BYTES, 0};
 static uint8_t performance_bank[PERFORMANCE_BANK_BYTES] PLAT_POOL;
 static int performance_bank_ready;
-/* v2 header byte 7 was reserved as zero. It now records the last explicitly
- * saved slot (1..10). A zero header from older development builds stays valid.
- * V1 migration starts with 0, and browsing alone never writes flash. */
+/* Byte 7 selects the last saved slot; zero means slot 01. */
 int performance_preset_last_slot(void)
 {
     int slot = performance_bank_ready ? performance_bank[7] : 0;
@@ -101,77 +86,42 @@ static int performance_project_read(const uint8_t *compact, proj_t *out)
     return project_record_read(full, sizeof full, out, NULL);
 }
 
-#include "factory_presets.c"  /* four factory starters, one-time v1/v2 upgrade */
+#include "factory_presets.c"
 
-/* Factory installation deliberately clears the previous bank ONCE, then
- * installs four starters in slots 1-4; slots 5-10 are empty. The v3 A/B
- * flash commit marks this as completed, so future explicit user SAVE edits
- * are retained on later boots. A failed commit does not mark it complete. */
-static int performance_factory_upgrade(void)
+/* Discard an incompatible development bank. No legacy decoder, migration,
+ * or version-specific compatibility path is needed before release 1.0. */
+static int performance_factory_reset(int persist)
 {
     memset(performance_bank, 0, sizeof performance_bank);
     memcpy(performance_bank, performance_head, sizeof performance_head);
     if (factory_presets_install()) return -1;
-    if (plat_store_save(OBJ_PERFORMANCE_PRESETS, performance_bank, PERFORMANCE_BANK_BYTES))
-        return -1;
+    if (persist && plat_store_save(OBJ_PERFORMANCE_PRESETS, performance_bank,
+                                  PERFORMANCE_BANK_BYTES)) return -1;
     performance_bank_ready = 1;
-    return 0;
+    return 1;
 }
 
 int performance_presets_init(void)
 {
     proj_t decoded;
     performance_bank_ready = 0;
-    memset(performance_bank, 0, sizeof performance_bank);
-    memcpy(performance_bank, performance_head, sizeof performance_head);
-    /* Full scratch capacity also detects oversized/truncated bank records. */
     int bytes = plat_store_load(OBJ_PERFORMANCE_PRESETS, proj_buf, sizeof proj_buf);
-    if (bytes < 0) {
-        if (factory_presets_install()) return -1;
-        performance_bank_ready = 1;
-        return 1;
-    }
-    if (bytes == PERFORMANCE_V1_BANK_BYTES &&
-        !memcmp(proj_buf, performance_legacy_head, PERFORMANCE_BANK_HEAD)) {
-        /* Validate the complete historical v1 bank before the intentional
-         * replacement. Invalid data must not trigger an automatic rewrite. */
-        for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
-            const uint8_t *old = proj_buf + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_V1_ENTRY_BYTES;
-            uint8_t *dst = performance_bank + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_ENTRY_BYTES;
-            if (!old[0]) {
-                for (int j = 1; j < PERFORMANCE_V1_ENTRY_BYTES; j++) if (old[j]) return -1;
-                continue;
-            }
-            if (old[0] != 1 ||
-                !performance_name_valid((const char *)old + 1, PERFORMANCE_PRESET_NAME_BYTES) ||
-                project_record_read(old + 1 + PERFORMANCE_PRESET_NAME_BYTES,
-                                    PROJECT_RECORD8_BYTES, &decoded, NULL)) return -1;
-            uint8_t full[PROJECT_RECORD_BYTES];
-            if (project_record_write(&decoded, full, sizeof full) != PROJECT_RECORD_BYTES) return -1;
-            dst[0] = 1;
-            memcpy(dst + 1, old + 1, PERFORMANCE_PRESET_NAME_BYTES);
-            performance_pack(full, dst + 1 + PERFORMANCE_PRESET_NAME_BYTES);
-        }
-        return performance_factory_upgrade();
-    }
-    /* Both versions have precisely the same entry layout and flash size.
-     * Accept v2 only for its one-time factory replacement/migration. */
-    int bank_v2 = bytes == PERFORMANCE_BANK_BYTES &&
-        !memcmp(proj_buf, performance_v2_head, PERFORMANCE_BANK_HEAD - 1);
-    int bank_v3 = bytes == PERFORMANCE_BANK_BYTES &&
-        !memcmp(proj_buf, performance_head, PERFORMANCE_BANK_HEAD - 1);
-    if ((!bank_v2 && !bank_v3) || proj_buf[7] > PERFORMANCE_PRESET_SLOTS) return -1;
+    if (bytes < 0) return performance_factory_reset(0);
+    if (bytes != PERFORMANCE_BANK_BYTES ||
+        memcmp(proj_buf, performance_head, PERFORMANCE_BANK_HEAD - 1) ||
+        proj_buf[7] > PERFORMANCE_PRESET_SLOTS)
+        return performance_factory_reset(1);
     for (int i = 0; i < PERFORMANCE_PRESET_SLOTS; i++) {
         const uint8_t *entry = proj_buf + PERFORMANCE_BANK_HEAD + i * PERFORMANCE_ENTRY_BYTES;
         if (!entry[0]) {
             for (int j = 1; j < PERFORMANCE_ENTRY_BYTES; j++)
-                if (entry[j]) return -1;
+                if (entry[j]) return performance_factory_reset(1);
         } else if (entry[0] != 1 ||
             !performance_name_valid((const char *)entry + 1, PERFORMANCE_PRESET_NAME_BYTES) ||
-            performance_project_read(entry + 1 + PERFORMANCE_PRESET_NAME_BYTES, &decoded)) return -1;
+            performance_project_read(entry + 1 + PERFORMANCE_PRESET_NAME_BYTES, &decoded))
+            return performance_factory_reset(1);
     }
     memcpy(performance_bank, proj_buf, sizeof performance_bank);
-    if (bank_v2) return performance_factory_upgrade();
     performance_bank_ready = 1;
     return 0;
 }
