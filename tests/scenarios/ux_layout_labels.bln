@@ -17,11 +17,13 @@ expect ux_env_is_voice 0
 tap ENV
 expect ux_env_is_voice 1
 expect ux_register_k2_available 1
-expect ux_register_low 55
-expect ux_register_high 79
-turn K2 1
+# Tangram's melodic templates were retuned +12 at project->engine boundary.
+# The editable display starts at 67..91; K2 still shifts exactly 12.
 expect ux_register_low 67
 expect ux_register_high 91
+turn K2 1
+expect ux_register_low 79
+expect ux_register_high 103
 turn K2 -1
-expect ux_register_low 55
-expect ux_register_high 79
+expect ux_register_low 67
+expect ux_register_high 91
