@@ -1,6 +1,6 @@
 # Tangram 1.0 — four musical factory starter presets (candidate)
 
-**Status:** isolated 1.0 factory-preset candidate. Initial factory-preset host smoke, existing MIDI/Composer/UX regression suites and AC79 build passed on 21 November 2026. The new one-time populated-bank migration is not yet tested or flashed. No release/tag is implied.
+**Status:** Recovery candidate. Host tests, AC79 build and hardware acceptance pending.
 
 The four names and original stylistic directions were agreed during the Tangram 2 sessions. Specific parameters not already fixed are new musical defaults proposed for 1.0. External synthesizer patches remain outside Tangram's saved Performance Preset records.
 
