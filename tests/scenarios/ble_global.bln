@@ -39,9 +39,13 @@ expect ext_ports 7
 expect midi_out 3
 expect clock_out 2
 
-# CLOCK OUT OFF: intentional silence on realtime USB/BLE, without muting notes.
+# CLOCK OUT OFF: use the actual GLO MIDI K1 control from USB -> OFF.
+# Outgoing realtime traffic must stop, while musical notes continue.
 rt midiout USB
-rt clockout off
+rt clockout USB
+tap GLO
+tap GLO
+turn K1 -1
 expect midi_out 1
 expect clock_out 0
 wait 350
